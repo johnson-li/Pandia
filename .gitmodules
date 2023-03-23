@@ -1,4 +1,4 @@
 [submodule "AlphaRTC-gym"]
-    path = AlphaRTC
+    path = AlphaRTC-gym
     url = https://github.com/johnson-li/AlphaRTC-gym.git
     branch = master
