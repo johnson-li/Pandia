@@ -76,6 +76,7 @@
         "fstream": "cpp",
         "numeric": "cpp",
         "ratio": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "iomanip": "cpp"
     }
 }
