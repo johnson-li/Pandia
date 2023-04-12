@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 class PacketContext(object):
     def __init__(self, rtp_id, payload_type, payload_size, size, sent_at) -> None:
         self.sent_at = sent_at
-        self.received_at = -1
+        self.acked_at = -1
         self.rtp_id = rtp_id
         self.payload_type = payload_type
         self.payload_size = payload_size
@@ -39,7 +39,9 @@ class FrameContext(object):
 class StreamingContext(object):
     def __init__(self) -> None:
         self.frames: dict[int, FrameContext] = {}
+        self.packets = {}
         self.frame_ts_map: dict[int, int] = {}
+        self.packet_id_map = {}
         self.last_frame_id = -1
 
     def feed(self, data):
@@ -58,6 +60,7 @@ class StreamingContext(object):
             packet = PacketContext(
                 data['rtp_id'], data['payload_type'], data['payload_size'], data['size'], data['ts'])
             if packet.payload_type == 125:
+                self.packets[packet.rtp_id] = packet
                 frame_id = self.frame_ts_map[data['frame_ts']]
                 frame = self.frames[frame_id]
                 frame.rtp_packets[packet.rtp_id] = packet
@@ -78,6 +81,13 @@ class StreamingContext(object):
                     if not frame.received_at:
                         frame.received_at = data['ts']
                         break
+        elif data['type'] == 'packet_acked':
+            rtp_id = self.packet_id_map[data['rtp_id']]
+            if rtp_id in self.packets:
+                packet: PacketContext = self.packets[rtp_id]
+                packet.acked_at = data['ts']
+        elif data['type'] == 'packet_id_map':
+            self.packet_id_map[data['packet_id']] = data['sequence_id']
 
 
 def parse_line(line) -> dict:
@@ -136,10 +146,16 @@ def parse_line(line) -> dict:
             data['type'] = 'frame_decoded'
             data['ts'] = int(m[1])
             data['frame_id'] = int(m[2])
+    elif line.startswith('(rtp_sender_egress.cc:') and 'SendPacket,' in line:
+        m = re.match(re.compile(
+            '.*SendPacket, packet id: (\\d+), sequence id: (\\d+).*'), line)
+        data['type'] = 'packet_id_map'
+        data['packet_id'] = int(m[1])
+        data['sequence_id'] = int(m[2])
     return data
 
 
-def analyze_stream(context: StreamingContext) -> None:
+def analyze_frame(context: StreamingContext) -> None:
     frame_id_list = list(sorted(context.frames.keys()))
     data_frame_delay = []
     data_packet_delay = []
@@ -162,7 +178,28 @@ def analyze_stream(context: StreamingContext) -> None:
     plt.ylabel('Delay (ms)')
     plt.ylim([0, 300])
     output_dir = os.path.expanduser('~/Workspace/Pandia/results')
-    plt.savefig(os.path.join(output_dir, 'delay.pdf'))
+    plt.savefig(os.path.join(output_dir, 'delay-frame.pdf'))
+
+
+def analyze_packet(context: StreamingContext) -> None:
+    data = []
+    for pkt in sorted(context.packets.values(), key=lambda x: x.sent_at):
+        pkt: PacketContext = pkt
+        data.append((pkt.sent_at, pkt.acked_at -
+                    pkt.sent_at if pkt.acked_at > 0 else 0))
+    plt.close()
+    start_ts = min([d[0] for d in data])
+    plt.plot([(d[0] - start_ts)/1000 for d in data], [d[1] for d in data], 'x')
+    plt.xlabel('Timestamp (ms)')
+    plt.ylabel('RTT (s)')
+    # plt.xlim([0, 10])
+    output_dir = os.path.expanduser('~/Workspace/Pandia/results')
+    plt.savefig(os.path.join(output_dir, 'delay-packet.pdf'))
+
+
+def analyze_stream(context: StreamingContext) -> None:
+    analyze_frame(context)
+    analyze_packet(context)
 
 
 def main() -> None:
