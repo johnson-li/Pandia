@@ -1,6 +1,7 @@
 import os
 import re
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 class PacketContext(object):
@@ -173,7 +174,7 @@ def analyze_frame(context: StreamingContext) -> None:
              [d[2] for d in data_frame_delay])
     plt.plot([d[0] for d in data_frame_delay],
              [d[1] for d in data_frame_delay],)
-    plt.legend(['Encoding', 'Transmission', 'Decoding'])
+    plt.legend(['Decoding', 'Transmission', 'Encoding'])
     plt.xlabel('Frame ID')
     plt.ylabel('Delay (ms)')
     plt.ylim([0, 300])
@@ -195,6 +196,15 @@ def analyze_packet(context: StreamingContext) -> None:
     # plt.xlim([0, 10])
     output_dir = os.path.expanduser('~/Workspace/Pandia/results')
     plt.savefig(os.path.join(output_dir, 'delay-packet.pdf'))
+    cdf_x = list(sorted([d[1] for d in data]))
+    cdf_y = np.arange(len(cdf_x)) / len(cdf_x)
+    plt.close()
+    plt.plot(cdf_x, cdf_y)
+    plt.xlabel('Packet ACK delay (ms)')
+    plt.ylabel('CDF')
+    plt.ylim([0, 1])
+    plt.xlim([0, max(cdf_x)])
+    plt.savefig(os.path.join(output_dir, 'delay-cdf-packet.pdf'))
 
 
 def analyze_stream(context: StreamingContext) -> None:
