@@ -4,25 +4,25 @@ import time
 import timeit
 import os
 
-from PIL import Image
 
-cam = webcam.FakeWebcam('/dev/video1', 1280, 720)
+def main():
+    cam = webcam.FakeWebcam('/dev/video1', 3840, 2160)
+    path = os.path.expanduser("~/Downloads/drive.yuv")
+    data = np.fromfile(open(path, 'br'), dtype=np.uint8)
+    data = data.reshape((-1, 3840 * 3 // 2, 2160))
+    print(data.shape)
+    count = 0
+    ts = time.time()
+    fps = 60
+    while True:
+        i = count % data.shape[0]
+        t1 = timeit.default_timer()
+        cam.schedule_frame(data[i], count)
+        t2 = timeit.default_timer()
+        print('write time:{}'.format(t2-t1))
+        count += 1
+        time.sleep(ts - time.time() + count / fps)
 
-cam.print_capabilities()
 
-im0 = np.array(Image.open(os.path.expanduser("~/Downloads/doge1.jpg")))
-im1 = np.zeros((720, 1280, 3), dtype=np.uint8)
-
-while True:
-    t1 = timeit.default_timer()
-    cam.schedule_frame(im0)
-    t2 = timeit.default_timer()
-    print('[1] write time:{}'.format(t2-t1))
-
-    time.sleep(1/60)
-
-    t1 = timeit.default_timer()
-    cam.schedule_frame(im1)
-    t2 = timeit.default_timer()
-    print('[2] write time:{}'.format(t2-t1))
-    time.sleep(1/60)
+if __name__ == "__main__":
+    main()

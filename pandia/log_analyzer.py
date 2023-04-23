@@ -3,6 +3,7 @@ import re
 import matplotlib.pyplot as plt
 import numpy as np
 
+CODEC_NAMES = ['Generic', 'VP8', 'VP9', 'AV1', 'H264', 'Multiplex']
 
 class PacketContext(object):
     def __init__(self, rtp_id, payload_type, size, sent_at) -> None:
@@ -23,7 +24,7 @@ class FrameContext(object):
         self.encoded_at = 0
         self.assembled_at = 0
         self.decoded_at = 0
-        self.codec = 0
+        self.codec = None
         self.encoded_size = 0
         self.encoded_shape = None
         self.rtp_packets: dict = {}
@@ -42,7 +43,7 @@ class FrameContext(object):
 
     def __str__(self) -> str:
         rtp_size = sum([p.size for p in self.rtp_packets.values() if p])
-        return f'Frame id: {self.frame_id}' \
+        return f'[{self.codec}] Frame id: {self.frame_id}' \
             f', encoded/transmitted size: {self.encoded_size}/{rtp_size}'\
             f', RTP range: {self.rtp_id_range} ({self.rtp_packets_num})' \
             f', encode: {self.encoded_at - self.captured_at if self.encoded_at else -1} ms' \
@@ -79,7 +80,7 @@ def parse_line(line, context: StreamingContext) -> dict:
             '.*\\[(\\d+)\\] Frame encoded, id: (\\d+), codec: (\\d+), size: (\\d+), width: (\\d+), height: (\\d+), .*'), line)
         ts = int(m[1])
         frame_id = int(m[2])
-        codec = int(m[3])
+        codec = CODEC_NAMES[int(m[3])]
         encoded_size = int(m[4])
         width = int(m[5])
         height = int(m[6])
