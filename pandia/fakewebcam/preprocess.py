@@ -8,7 +8,7 @@ def main():
     path = os.path.expanduser("~/Downloads/drive.mp4")
     target_path = path.replace('.mp4', '.yuv')
     cap = cv2.VideoCapture(path)
-    frames = 100
+    frames = 360
     count = 0
     with open(target_path, 'bw+') as f:
         while cap.isOpened():

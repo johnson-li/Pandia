@@ -15,7 +15,10 @@ def main():
     ts = time.time()
     fps = 60
     while True:
-        i = count % data.shape[0]
+        limit = data.shape[0]
+        i = count % limit
+        if (count // limit) % 2 == 1:
+            i = limit - i - 1
         t1 = timeit.default_timer()
         cam.schedule_frame(data[i], count)
         t2 = timeit.default_timer()

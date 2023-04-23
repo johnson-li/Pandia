@@ -32,12 +32,12 @@ class FrameContext(object):
         self.rtp_packets_num = 0
 
     def last_rtp_send_ts(self):
-        if self.rtp_packets:
+        if list(filter(lambda x: x, self.rtp_packets.values())):
             return max([p.sent_at for p in self.rtp_packets.values()if p])
         return None
 
     def last_rtp_recv_ts(self):
-        if self.rtp_packets:
+        if list(filter(lambda x: x, self.rtp_packets.values())):
             return max([p.acked_at for p in self.rtp_packets.values() if p])
         return None
 
@@ -176,12 +176,11 @@ def analyze_frame(context: StreamingContext) -> None:
         print(frame)
 
     plt.close()
-    plt.plot([d[0] for d in data_frame_delay],
-             [d[3] for d in data_frame_delay])
-    plt.plot([d[0] for d in data_frame_delay],
-             [d[2] for d in data_frame_delay])
-    plt.plot([d[0] for d in data_frame_delay],
-             [d[1] for d in data_frame_delay],)
+    for i in [3, 2, 1]:
+        x = np.array([d[0] for d in data_frame_delay])
+        y = np.array([d[i] for d in data_frame_delay])
+        indexes = (y > 0).nonzero()
+        plt.plot(x[indexes], y[indexes])
     plt.legend(['Decoding', 'Transmission', 'Encoding'])
     plt.xlabel('Frame ID')
     plt.ylabel('Delay (ms)')
