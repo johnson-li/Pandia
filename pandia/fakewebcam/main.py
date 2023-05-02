@@ -24,7 +24,7 @@ def main():
         t2 = timeit.default_timer()
         print('write time:{}'.format(t2-t1))
         count += 1
-        time.sleep(ts - time.time() + count / fps)
+        time.sleep(max(0, ts - time.time() + count / fps))
 
 
 if __name__ == "__main__":

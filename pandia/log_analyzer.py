@@ -43,7 +43,7 @@ class FrameContext(object):
 
     def __str__(self) -> str:
         rtp_size = sum([p.size for p in self.rtp_packets.values() if p])
-        return f'[{self.codec}] Frame id: {self.frame_id}' \
+        return f'[{self.codec}] Frame id: {self.frame_id} {self.encoded_shape}' \
             f', encoded/transmitted size: {self.encoded_size}/{rtp_size}'\
             f', RTP range: {self.rtp_id_range} ({self.rtp_packets_num})' \
             f', encode: {self.encoded_at - self.captured_at if self.encoded_at else -1} ms' \

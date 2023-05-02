@@ -10,7 +10,7 @@ rm /tmp/dump/* 2> /dev/null
 session=pandia
 tmux kill-session -t $session 2> /dev/null
 tmux new-session -d -s $session
-for i in `seq 1 5`
+for i in `seq 1 3`
 do
   tmux new-window -t ${session}:$i
 done
@@ -21,12 +21,6 @@ sleep .1
 tmux send-key -t $session:2 '~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --name receiver --receiving_only true 2> ~/Workspace/Pandia/results/receiver.log' Enter
 echo 'Receiver started'
 sleep 3
-tmux send-key -t $session:3 '~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --name sender --autocall true 2> ~/Workspace/Pandia/results/sender.log' Enter
+tmux send-key -t $session:3 'gdb ~/Workspace/webrtc/src/out/Default/peerconnection_client_headless' Enter
 echo 'Sender started'
-tmux send-key -t $session:4 'nload lo' Enter
-tmux send-key -t $session:5 '' Enter
 
-t=30
-echo Wait $t seconds...
-sleep $t
-~/Workspace/Pandia/stop.sh
