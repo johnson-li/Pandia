@@ -14,7 +14,7 @@ for i in `seq 1 5`
 do
   tmux new-window -t ${session}:$i
 done
-tmux send-key -t $session:0 'cd ~/Workspace/Pandia; python -m pandia.fakewebcam.main' Enter
+tmux send-key -t $session:0 'cd ~/Workspace/Pandia; python -m pandia.fakewebcam.main > ~/Workspace/Pandia/results/fakewebcam.log' Enter
 tmux send-key -t $session:1 '~/Workspace/webrtc/src/out/Default/peerconnection_server' Enter
 echo 'Server started'
 sleep .1

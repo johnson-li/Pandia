@@ -6,11 +6,15 @@ import os
 
 
 def main():
-    cam = webcam.FakeWebcam('/dev/video1', 3840, 2160)
-    path = os.path.expanduser("~/Downloads/drive.yuv")
+    resolution = 'fhd'
+    shape = (3840, 2160)
+    if resolution == 'fhd':
+        shape = (shape[0] // 2, shape[1] // 2)
+    path = os.path.expanduser(f"~/Downloads/drive_{resolution}.yuv")
+    cam = webcam.FakeWebcam('/dev/video1', shape[0], shape[1])
     data = np.fromfile(open(path, 'br'), dtype=np.uint8)
-    data = data.reshape((-1, 3840 * 3 // 2, 2160))
-    print(data.shape)
+    data = data.reshape((-1, shape[0] * 3 // 2, shape[1]))
+    print('YUV shape: ', data.shape)
     count = 0
     ts = time.time()
     fps = 60

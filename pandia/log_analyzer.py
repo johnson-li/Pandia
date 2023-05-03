@@ -5,6 +5,7 @@ import numpy as np
 
 CODEC_NAMES = ['Generic', 'VP8', 'VP9', 'AV1', 'H264', 'Multiplex']
 
+
 class PacketContext(object):
     def __init__(self, rtp_id, payload_type, size, sent_at) -> None:
         self.sent_at = sent_at
@@ -60,6 +61,12 @@ class StreamingContext(object):
         self.frame_ts_map: dict[int, int] = {}
         self.packet_id_map = {}
         self.last_frame_id = -1
+        self.networking = NetworkContext()
+
+
+class NetworkContext(object):
+    def __init__(self) -> None:
+        self.pacing_rate_data = []
 
 
 def parse_line(line, context: StreamingContext) -> dict:
@@ -67,7 +74,7 @@ def parse_line(line, context: StreamingContext) -> dict:
     if line.startswith('(video_capture_impl.cc') and 'FrameCaptured' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] FrameCaptured, id: (\\d+), width: (\\d+), height: (\\d+), .*'), line)
-        ts = int(m[1]) 
+        ts = int(m[1])
         frame_id = int(m[2])
         width = int(m[3])
         height = int(m[4])
@@ -122,7 +129,7 @@ def parse_line(line, context: StreamingContext) -> dict:
                         frame.rtp_packets[rtp_id] = packet
     elif line.startswith('(transport_feedback_demuxer.cc:') and 'Packet acked' in line:
         m = re.match(re.compile(
-            '.*\\[(\\d+)\\] Packet acked, id: (\\d+), received: (\\d+), delta: (\\d+).*'), line)
+            '.*\\[(\\d+)\\] Packet acked, id: (\\d+), received: (\\d+), delta: (-?\\d+).*'), line)
         ts = int(m[1])
         rtp_id = int(m[2])
         received = int(m[3])
@@ -138,7 +145,8 @@ def parse_line(line, context: StreamingContext) -> dict:
         frame = context.frames[frame_id]
         frame.rtp_packets_num = rtp_packets
     elif line.startswith('(rtcp_receiver.cc') and 'Frame decoding acked' in line:
-        m = re.match(re.compile('.*\\[(\\d+)\\] Frame decoding acked, id: (\\d+).*'), line)
+        m = re.match(re.compile(
+            '.*\\[(\\d+)\\] Frame decoding acked, id: (\\d+).*'), line)
         ts = int(m[1])
         rtp_sequence = int(m[2])
         rtp_id = context.packet_id_map[rtp_sequence]
@@ -150,7 +158,8 @@ def parse_line(line, context: StreamingContext) -> dict:
             if frame.rtp_id_range[0] < rtp_id:
                 break
     elif line.startswith('(rtcp_receiver.cc') and 'Frame reception acked' in line:
-        m = re.match(re.compile('.*\\[(\\d+)\\] Frame reception acked, id: (\\d+).*'), line)
+        m = re.match(re.compile(
+            '.*\\[(\\d+)\\] Frame reception acked, id: (\\d+).*'), line)
         ts = int(m[1])
         rtp_sequence = int(m[2])
         rtp_id = context.packet_id_map[rtp_sequence]
@@ -161,6 +170,13 @@ def parse_line(line, context: StreamingContext) -> dict:
                 break
             if frame.rtp_id_range[0] < rtp_id:
                 break
+    elif line.startswith('(task_queue_paced_sender.cc') and 'SetPacingRates' in line:
+        m = re.match(re.compile(
+            '.*\\[(\\d+)\\] SetPacingRates, pacing rate: (\\d+) kbps, pading rate: (\\d+) kbps.*'), line)
+        ts = int(m[1])
+        pacing_rate = int(m[2])
+        padding_rate = int(m[3])
+        context.networking.pacing_rate_data.append([ts, pacing_rate, padding_rate])
     return data
 
 
@@ -184,7 +200,7 @@ def analyze_frame(context: StreamingContext) -> None:
     plt.legend(['Decoding', 'Transmission', 'Encoding'])
     plt.xlabel('Frame ID')
     plt.ylabel('Delay (ms)')
-    plt.ylim([0, 300])
+    # plt.ylim([0, 300])
     output_dir = os.path.expanduser('~/Workspace/Pandia/results')
     plt.savefig(os.path.join(output_dir, 'delay-frame.pdf'))
 
@@ -214,9 +230,25 @@ def analyze_packet(context: StreamingContext) -> None:
     plt.savefig(os.path.join(output_dir, 'delay-cdf-packet.pdf'))
 
 
+def analyze_network(context: StreamingContext) -> None:
+    data = context.networking.pacing_rate_data
+    x = [d[0] for d in data]
+    y = [d[1] for d in data]
+    yy = [d[2] for d in data]
+    plt.close()
+    plt.plot(x, y)
+    plt.plot(x, yy)
+    plt.xlabel("Timestamp (ms)")
+    plt.ylabel("Rate (Kbps)")
+    plt.legend(["Pacing rate", "Padding rate"])
+    output_dir = os.path.expanduser('~/Workspace/Pandia/results')
+    plt.savefig(os.path.join(output_dir, 'pacing-rate.pdf'))
+
+
 def analyze_stream(context: StreamingContext) -> None:
     analyze_frame(context)
     analyze_packet(context)
+    analyze_network(context)
 
 
 def main() -> None:
