@@ -184,23 +184,37 @@ def analyze_frame(context: StreamingContext) -> None:
     frame_id_list = list(sorted(context.frames.keys()))
     data_frame_delay = []
     data_packet_delay = []
+    lost_frames = []
+    started = False
+    last_frame_id = -1
     for frame_id in frame_id_list:
         frame: FrameContext = context.frames[frame_id]
-        data_frame_delay.append((frame_id, frame.encoded_at - frame.captured_at if frame.encoded_at > 0 else 0,
-                                 frame.assembled_at - frame.captured_at if frame.assembled_at > 0 else 0,
-                                 frame.decoded_at - frame.captured_at if frame.decoded_at > 0 else 0))
+        if frame.codec:
+            started = True
+            last_frame_id = frame_id
+            data_frame_delay.append({'id': frame_id, 
+                                     'encoded by': frame.encoded_at - frame.captured_at if frame.encoded_at > 0 else 0,
+                                     'assembled by': frame.assembled_at - frame.captured_at if frame.assembled_at > 0 else 0,
+                                     'decoded by': frame.decoded_at - frame.captured_at if frame.decoded_at > 0 else 0})
+        elif started:
+            lost_frames.append(frame_id)
         print(frame)
-
+    lost_frames = [f for f in lost_frames if f <= last_frame_id]
     plt.close()
-    for i in [3, 2, 1]:
-        x = np.array([d[0] for d in data_frame_delay])
+    ylim = 0
+    for i in ['decoded by', 'assembled by', 'encoded by']:
+        x = np.array([d['id'] for d in data_frame_delay])
         y = np.array([d[i] for d in data_frame_delay])
+        print(f'Median: {i} {np.median(y)} ms')
+        if not ylim:
+            ylim = np.percentile(y, 50)
         indexes = (y > 0).nonzero()
         plt.plot(x[indexes], y[indexes])
-    plt.legend(['Decoding', 'Transmission', 'Encoding'])
+    plt.plot(lost_frames, [10 for _ in lost_frames], 'x')
+    plt.legend(['Decoding', 'Transmission', 'Encoding', 'Lost'])
     plt.xlabel('Frame ID')
     plt.ylabel('Delay (ms)')
-    # plt.ylim([0, 300])
+    plt.ylim([0, ylim * 1.8])
     output_dir = os.path.expanduser('~/Workspace/Pandia/results')
     plt.savefig(os.path.join(output_dir, 'delay-frame.pdf'))
 
@@ -243,9 +257,31 @@ def analyze_network(context: StreamingContext) -> None:
     plt.legend(["Pacing rate", "Padding rate"])
     output_dir = os.path.expanduser('~/Workspace/Pandia/results')
     plt.savefig(os.path.join(output_dir, 'pacing-rate.pdf'))
+    ts_min = min([p.sent_at for p in context.packets.values()]) / 1000
+    ts_max = max([p.sent_at for p in context.packets.values()]) / 1000
+    ts_range = ts_max - ts_min
+    period = .1
+    buckets = np.zeros(int(ts_range / period + 1))
+    for p in context.packets.values():
+        ts = (p.sent_at / 1000 - ts_min)
+        buckets[int(ts / period)] += p.size
+    buckets = buckets / period  * 8 / 1024 ## kbps
+    plt.close()
+    plt.plot(np.arange(len(buckets)) * period / 1000, buckets)
+    plt.xlabel("Timestamp (s)")
+    plt.ylabel("RTP egress rate (Kbps)")
+    plt.savefig(os.path.join(output_dir, 'sending-rate.pdf'))
 
+
+def print_statistics(context: StreamingContext) -> None:
+    print("==========statistics==========")
+    frame_ids = list(sorted(filter(lambda k: context.frames[k].codec != None, context.frames.keys())))
+    frames_total = max(frame_ids) - min(frame_ids) + 1
+    frames_recvd = len(frame_ids)
+    print(f"Total frames: {frames_total}, loss rate: {(frames_total - frames_recvd) / frames_total:.2%}")
 
 def analyze_stream(context: StreamingContext) -> None:
+    print_statistics(context)
     analyze_frame(context)
     analyze_packet(context)
     analyze_network(context)
