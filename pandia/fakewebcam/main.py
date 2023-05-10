@@ -6,7 +6,7 @@ import os
 
 
 def main():
-    width = 1080
+    width = 1440
     shape = (3840, 2160)
     scale = width / shape[1]
     shape = int(shape[0] * scale), int(shape[1] * scale)
