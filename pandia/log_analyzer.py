@@ -3,8 +3,10 @@ import re
 import matplotlib.pyplot as plt
 import numpy as np
 
+from pandia import RESULTS_PATH, DIAGRAMS_PATH
+
 CODEC_NAMES = ['Generic', 'VP8', 'VP9', 'AV1', 'H264', 'Multiplex']
-OUTPUT_DIR = os.path.expanduser('~/Workspace/Pandia/results')
+OUTPUT_DIR = DIAGRAMS_PATH
 
 
 class PacketContext(object):
@@ -65,6 +67,9 @@ class StreamingContext(object):
         self.networking = NetworkContext()
         self.bitrate_data = []
         self.fps_data = []
+
+    def start_ts(self):
+        return min([f.captured_at for f in self.frames.values()])
 
 
 class NetworkContext(object):
@@ -179,7 +184,8 @@ def parse_line(line, context: StreamingContext) -> dict:
         ts = int(m[1])
         pacing_rate = int(m[2])
         padding_rate = int(m[3])
-        context.networking.pacing_rate_data.append([ts, pacing_rate, padding_rate])
+        context.networking.pacing_rate_data.append(
+            [ts, pacing_rate, padding_rate])
     elif line.startswith('(h264_encoder_impl.cc') and 'SetRates, ' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] SetRates, bitrate: (\\d+) kbps, framerate: (\\d+).*'), line)
@@ -203,7 +209,7 @@ def analyze_frame(context: StreamingContext) -> None:
         if frame.codec:
             started = True
             last_frame_id = frame_id
-            data_frame_delay.append({'id': frame_id, 
+            data_frame_delay.append({'id': frame_id,
                                      'encoded by': frame.encoded_at - frame.captured_at if frame.encoded_at > 0 else 0,
                                      'assembled by': frame.assembled_at - frame.captured_at if frame.assembled_at > 0 else 0,
                                      'decoded by': frame.decoded_at - frame.captured_at if frame.decoded_at > 0 else 0})
@@ -227,6 +233,19 @@ def analyze_frame(context: StreamingContext) -> None:
     plt.ylabel('Delay (ms)')
     plt.ylim([0, ylim * 1.8])
     plt.savefig(os.path.join(OUTPUT_DIR, 'delay-frame.pdf'))
+    plt.close()
+    x = []
+    y = []
+    for frame_id in frame_id_list:
+        frame: FrameContext = context.frames[frame_id]
+        if (frame.encoded_size):
+            x.append(frame_id)
+            y.append(frame.encoded_size / 1024)
+    plt.plot(x, y)
+    plt.plot(lost_frames, [10 for _ in lost_frames], 'x')
+    plt.xlabel('Frame ID')
+    plt.ylabel('Encoded size (KB)')
+    plt.savefig(os.path.join(OUTPUT_DIR, 'size-frame.pdf'))
 
 
 def analyze_packet(context: StreamingContext) -> None:
@@ -273,7 +292,7 @@ def analyze_network(context: StreamingContext) -> None:
     for p in context.packets.values():
         ts = (p.sent_at / 1000 - ts_min)
         buckets[int(ts / period)] += p.size
-    buckets = buckets / period  * 8 / 1024 ## kbps
+    buckets = buckets / period * 8 / 1024  # kbps
     plt.close()
     plt.plot(np.arange(len(buckets)) * period, buckets)
     plt.xlabel("Timestamp (s)")
@@ -283,10 +302,12 @@ def analyze_network(context: StreamingContext) -> None:
 
 def print_statistics(context: StreamingContext) -> None:
     print("==========statistics==========")
-    frame_ids = list(sorted(filter(lambda k: context.frames[k].codec != None, context.frames.keys())))
+    frame_ids = list(sorted(
+        filter(lambda k: context.frames[k].codec != None, context.frames.keys())))
     frames_total = max(frame_ids) - min(frame_ids) + 1
     frames_recvd = len(frame_ids)
-    print(f"Total frames: {frames_total}, loss rate: {(frames_total - frames_recvd) / frames_total:.2%}")
+    print(
+        f"Total frames: {frames_total}, loss rate: {(frames_total - frames_recvd) / frames_total:.2%}")
 
 
 def analyze_codec(context: StreamingContext) -> None:
@@ -295,12 +316,13 @@ def analyze_codec(context: StreamingContext) -> None:
     ax1.set_xlabel('Timestamp (s)')
     ax1.set_ylabel('Bitrate (Kbps)', color='b')
     bitrate_data = np.array(context.bitrate_data)
-    ax1.plot(bitrate_data[:, 0] / 1000, bitrate_data[:, 1], 'b')
+    ax1.plot((bitrate_data[:, 0] - context.start_ts()) /
+             1000, bitrate_data[:, 1], 'b')
     ax1.tick_params(axis='y', labelcolor='b')
     ax2 = ax1.twinx()
     ax2.set_ylabel('FPS', color='r')
     fps_data = np.array(context.fps_data)
-    ax2.plot(fps_data[:, 0] / 1000, fps_data[:, 1], 'r')
+    ax2.plot((fps_data[:, 0] - context.start_ts()) / 1000, fps_data[:, 1], 'r')
     ax2.tick_params(axis='y', labelcolor='r')
     plt.savefig(os.path.join(OUTPUT_DIR, 'codec-params.pdf'))
 
@@ -314,7 +336,7 @@ def analyze_stream(context: StreamingContext) -> None:
 
 
 def main() -> None:
-    log_dir = os.path.expanduser("~/Workspace/Pandia/results")
+    log_dir = RESULTS_PATH
     sender_log = os.path.join(log_dir, 'sender.log')
     receiver_log = os.path.join(log_dir, 'receiver.log')
     context = StreamingContext()

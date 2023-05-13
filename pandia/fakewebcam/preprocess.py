@@ -25,5 +25,5 @@ def main(width=1080):
 
 
 if __name__ == "__main__":
-    for w in [2160, 1440, 1080, 960, 480, 360]:
+    for w in [480]:
         main(w)
