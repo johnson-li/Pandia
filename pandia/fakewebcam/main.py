@@ -1,3 +1,4 @@
+import argparse
 import pandia.fakewebcam as webcam
 import numpy as np
 import time
@@ -5,8 +6,17 @@ import timeit
 import os
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Fake webcam feeder")
+    parser.add_argument('-w', '--width', type=int, default=2160, help='width of the video')
+    parser.add_argument('-f', '--fps', type=int, default=10, help='FPS of the video')
+    return parser.parse_args()
+
+
 def main():
-    width = 2160
+    args = parse_args()
+    width = args.width
+    fps = args.fps
     shape = (3840, 2160)
     scale = width / shape[1]
     shape = int(shape[0] * scale), int(shape[1] * scale)
@@ -17,7 +27,6 @@ def main():
     print('YUV shape: ', data.shape)
     count = 0
     ts = time.time()
-    fps = 10
     while True:
         limit = data.shape[0]
         i = count % limit
