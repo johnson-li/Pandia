@@ -11,6 +11,7 @@ from pandia.log_analyzer import StreamingContext, parse_line
 
 DEFAULT_HISTORY_SIZE = 3
 
+
 def monitor_log_file(context: StreamingContext, log_path: str, stop_event: threading.Event):
     def follow(f):
         f.seek(0, os.SEEK_END)
@@ -37,43 +38,55 @@ def monitor_log_file(context: StreamingContext, log_path: str, stop_event: threa
 
 
 class Observation(object):
-    def __init__(self, frame_history_size=DEFAULT_HISTORY_SIZE, 
-                 packet_history_size=DEFAULT_HISTORY_SIZE, 
+    def __init__(self, frame_history_size=DEFAULT_HISTORY_SIZE,
+                 packet_history_size=DEFAULT_HISTORY_SIZE,
                  codec_history_size=DEFAULT_HISTORY_SIZE) -> None:
         self.frame_history_size = frame_history_size
         self.packet_history_size = packet_history_size
         self.codec_history_size = codec_history_size
+        self.frame_statistics_duration = 1
+        self.packet_statistics_duration = 1
 
         self.frame_encoding_delay = np.zeros(self.frame_history_size)
         self.frame_transmission_delay = np.zeros(self.frame_history_size)
         self.frame_decoding_delay = np.zeros(self.frame_history_size)
-        self.frame_ack_completeness = np.zeros(self.frame_history_size)
-        self.frame_drop = np.zeros(self.frame_history_size)
         self.packet_egress_rate = np.zeros(self.packet_history_size)
         self.packet_ack_rate = np.zeros(self.packet_history_size)
         self.pacing_rate = np.zeros(self.packet_history_size)
+        self.pacing_burst_interval = np.zeros(self.packet_history_size)
         self.codec_bitrate = np.zeros(self.codec_history_size)
         self.codec_fps = np.zeros(self.codec_history_size)
 
-    def append(self, context: StreamingContext):
+    def roll(self):
         self.frame_encoding_delay = np.roll(self.frame_encoding_delay, 1)
-        self.frame_transmission_delay = np.roll(self.frame_transmission_delay, 1)
+        self.frame_transmission_delay =  \
+            np.roll(self.frame_transmission_delay, 1)
         self.frame_decoding_delay = np.roll(self.frame_decoding_delay, 1)
-        self.frame_ack_completeness = np.roll(self.frame_ack_completeness, 1)
-        self.frame_drop = np.roll(self.frame_drop, 1)
         self.packet_egress_rate = np.roll(self.packet_egress_rate, 1)
         self.packet_ack_rate = np.roll(self.packet_ack_rate, 1)
         self.pacing_rate = np.roll(self.pacing_rate, 1)
+        self.pacing_burst_interval = np.roll(self.pacing_burst_interval, 1)
         self.codec_bitrate = np.roll(self.codec_bitrate, 1)
         self.codec_fps = np.roll(self.codec_fps, 1)
-        self.frame_encoding_delay[0] = 0
-        self.frame_transmission_delay[0] = 0
-        self.frame_decoding_delay[0] = 0
-        self.frame_ack_completeness[0] = 0
-        self.frame_drop[0] = 0
-        self.packet_egress_rate[0] = 0
-        self.packet_ack_rate[0] = 0
-        self.pacing_rate[0] = 0
+
+    def calculate_statistics(self, data):
+        if not data:
+            return 0
+        return np.median(data)
+
+    def append(self, context: StreamingContext):
+        self.roll()
+        frames = context.latest_frames()
+        self.frame_encoding_delay[0] = self.calculate_statistics(
+            [frame.encoding_delay() for frame in frames if frame.encoding_delay() >= 0])
+        self.frame_transmission_delay[0] = self.calculate_statistics(
+            [frame.transmission_delay() for frame in frames if frame.transmission_delay() >= 0])
+        self.frame_decoding_delay[0] = self.calculate_statistics(
+            [frame.decoding_delay() for frame in frames if frame.decoding_delay() >= 0])
+        self.packet_egress_rate[0] = sum([p.size for p in context.latest_egress_packets()]) / self.packet_statistics_duration * 8
+        self.packet_ack_rate[0] = sum([p.size for p in context.latest_acked_packets()]) / self.packet_statistics_duration * 8
+        self.pacing_rate[0] = context.networking.pacing_rate_data[-1][1] if context.networking.pacing_rate_data else 0
+        self.pacing_burst_interval[0] = context.networking.pacing_burst_interval_data[-1][1] if context.networking.pacing_burst_interval_data else 0
         self.codec_bitrate[0] = context.bitrate_data[-1][1] if context.bitrate_data else 0
         self.codec_fps[0] = context.fps_data[-1][1] if context.fps_data else 0
 
@@ -82,11 +95,10 @@ class Observation(object):
             'frame_encoding_delay': self.frame_encoding_delay,
             'frame_transmission_delay': self.frame_transmission_delay,
             'frame_decoding_delay': self.frame_decoding_delay,
-            'frame_ack_completeness': self.frame_ack_completeness,
-            'frame_drop': self.frame_drop,
             'packet_egress_rate': self.packet_egress_rate,
             'packet_ack_rate': self.packet_ack_rate,
             'pacing_rate': self.pacing_rate,
+            'pacing_burst_interval': self.pacing_burst_interval,
             'codec_bitrate': self.codec_bitrate,
             'codec_fps': self.codec_fps,
         }
@@ -96,15 +108,13 @@ class Observation(object):
             'frame_encoding_delay': spaces.Box(low=-1, high=1, shape=(self.frame_history_size,), dtype=np.float32),
             'frame_transmission_delay': spaces.Box(low=-1, high=1, shape=(self.frame_history_size,), dtype=np.float32),
             'frame_decoding_delay': spaces.Box(low=-1, high=1, shape=(self.frame_history_size,), dtype=np.float32),
-            'frame_ack_completeness': spaces.Box(low=-1, high=1, shape=(self.frame_history_size,), dtype=np.float32),
-            'frame_drop': spaces.Discrete(self.frame_history_size),
             'packet_egress_rate': spaces.Box(low=-1, high=1, shape=(self.packet_history_size,), dtype=np.float32),
             'packet_ack_rate': spaces.Box(low=-1, high=1, shape=(self.packet_history_size,), dtype=np.float32),
             'pacing_rate': spaces.Box(low=-1, high=1, shape=(self.packet_history_size,), dtype=np.float32),
+            'pacing_burst_interval': spaces.Box(low=-1, high=1, shape=(self.packet_history_size,), dtype=np.float32),
             'codec_bitrate': spaces.Box(low=-1, high=1, shape=(self.codec_history_size,), dtype=np.float32),
             'codec_fps': spaces.Box(low=-1, high=1, shape=(self.codec_history_size,), dtype=np.float32),
         })
-
 
 
 class WebRTCEnv(gym.Env):
@@ -115,7 +125,7 @@ class WebRTCEnv(gym.Env):
         self.frame_history_size = 10
         self.packet_history_size = 10
         self.packet_history_duration = 10
-        self.step_duration = .1
+        self.step_duration = 1
         self.start_ts = time.time()
         self.step_count = 0
         self.monitor_thread: Thread = None
@@ -172,7 +182,8 @@ def main():
     for _ in range(1000):
         action = env.action_space.sample()
         observation, reward, done, info = env.step(action)
-        print(f'Step: {env.step_count}, Reward: {reward}, Observation: {observation}')
+        print(
+            f'Step: {env.step_count}, Reward: {reward}, Observation: {observation}')
         if done:
             break
 
