@@ -206,16 +206,17 @@ def parse_line(line, context: StreamingContext) -> dict:
             '.*\\[(\\d+)\\] Frame decoding acked, id: (\\d+).*'), line)
         ts = int(m[1]) / 1000
         rtp_sequence = int(m[2])
-        rtp_id = context.packet_id_map[rtp_sequence]
-        for i in range(context.last_captured_frame_id, 0, -1):
-            frame: FrameContext = context.frames[i]
-            if frame.rtp_id_range[0] == rtp_id:
-                frame.decoded_at = ts
-                context.last_decoded_frame_id = max(
-                    frame.frame_id, context.last_decoded_frame_id)
-                break
-            if frame.rtp_id_range[0] < rtp_id:
-                break
+        rtp_id = context.packet_id_map.get(rtp_sequence, None)
+        if rtp_id:
+            for i in range(context.last_captured_frame_id, 0, -1):
+                frame: FrameContext = context.frames[i]
+                if frame.rtp_id_range[0] == rtp_id:
+                    frame.decoded_at = ts
+                    context.last_decoded_frame_id = max(
+                        frame.frame_id, context.last_decoded_frame_id)
+                    break
+                if frame.rtp_id_range[0] < rtp_id:
+                    break
     elif line.startswith('(rtcp_receiver.cc') and 'Frame reception acked' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Frame reception acked, id: (\\d+).*'), line)
@@ -237,7 +238,7 @@ def parse_line(line, context: StreamingContext) -> dict:
         padding_rate = int(m[3])
         context.networking.pacing_rate_data.append(
             [ts, pacing_rate, padding_rate])
-    elif line.startswith('(h264_encoder_impl.cc') and 'SetRates, ' in line:
+    elif line.startswith('(video_stream_encoder.cc') and 'SetRates, ' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] SetRates, bitrate: (\\d+) kbps, framerate: (\\d+).*'), line)
         ts = int(m[1]) / 1000
@@ -262,15 +263,15 @@ def analyze_frame(context: StreamingContext) -> None:
             data_frame_delay.append({'id': frame_id,
                                      'ts': frame.captured_at,
                                      'encoded by': frame.encoded_at - frame.captured_at if frame.encoded_at > 0 else 0,
+                                     'paced by': frame.last_rtp_send_ts() - frame.captured_at if frame.last_rtp_send_ts() > 0 else 0,
                                      'assembled by': frame.assembled_at - frame.captured_at if frame.assembled_at > 0 else 0,
                                      'decoded by': frame.decoded_at - frame.captured_at if frame.decoded_at > 0 else 0})
         elif started:
             lost_frames.append(frame.captured_at)
-        # print(frame)
     lost_frames = [f for f in lost_frames if f <= last_frame_id]
     plt.close()
     ylim = 0
-    for i in ['decoded by', 'assembled by', 'encoded by']:
+    for i in ['decoded by', 'assembled by', 'paced by', 'encoded by']:
         x = np.array([d['ts'] - context.start_ts for d in data_frame_delay])
         y = np.array([d[i] for d in data_frame_delay]) * 1000
         print(f'Median: {i} {np.median(y)} ms')
@@ -279,7 +280,7 @@ def analyze_frame(context: StreamingContext) -> None:
         indexes = (y > 0).nonzero()
         plt.plot(x[indexes], y[indexes])
     plt.plot([i - context.start_ts for i in lost_frames], [10 for _ in lost_frames], 'x')
-    plt.legend(['Decoding', 'Transmission', 'Encoding', 'Lost'])
+    plt.legend(['Decoding', 'Transmission', 'Pacing', 'Encoding', 'Lost'])
     plt.xlabel('Timestamp (s)')
     plt.ylabel('Delay (ms)')
     plt.ylim([0, ylim * 1.8])
