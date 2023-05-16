@@ -128,7 +128,7 @@ class NetworkContext(object):
 
 def parse_line(line, context: StreamingContext) -> dict:
     data = {}
-    if line.startswith('(video_capture_impl.cc') and 'FrameCaptured' in line:
+    if (line.startswith('(video_capture_impl.cc') or line.startswith('(frame_generator_capturer')) and 'FrameCaptured' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] FrameCaptured, id: (\\d+), width: (\\d+), height: (\\d+), .*'), line)
         ts = int(m[1]) / 1000
