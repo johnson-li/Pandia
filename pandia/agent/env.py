@@ -6,6 +6,7 @@ import time
 import gym
 import numpy as np
 from gym import spaces
+from multiprocessing import shared_memory
 from pandia import RESULTS_PATH, SCRIPTS_PATH
 from pandia.log_analyzer import StreamingContext, parse_line
 
@@ -50,6 +51,7 @@ class Observation(object):
         self.frame_encoding_delay = np.zeros(self.frame_history_size)
         self.frame_transmission_delay = np.zeros(self.frame_history_size)
         self.frame_decoding_delay = np.zeros(self.frame_history_size)
+        self.frame_g2g_delay = np.zeros(self.frame_history_size)
         self.packet_egress_rate = np.zeros(self.packet_history_size)
         self.packet_ack_rate = np.zeros(self.packet_history_size)
         self.pacing_rate = np.zeros(self.packet_history_size)
@@ -62,6 +64,7 @@ class Observation(object):
         self.frame_transmission_delay =  \
             np.roll(self.frame_transmission_delay, 1)
         self.frame_decoding_delay = np.roll(self.frame_decoding_delay, 1)
+        self.frame_g2g_delay = np.roll(self.frame_g2g_delay, 1)
         self.packet_egress_rate = np.roll(self.packet_egress_rate, 1)
         self.packet_ack_rate = np.roll(self.packet_ack_rate, 1)
         self.pacing_rate = np.roll(self.pacing_rate, 1)
@@ -83,8 +86,12 @@ class Observation(object):
             [frame.transmission_delay() for frame in frames if frame.transmission_delay() >= 0])
         self.frame_decoding_delay[0] = self.calculate_statistics(
             [frame.decoding_delay() for frame in frames if frame.decoding_delay() >= 0])
-        self.packet_egress_rate[0] = sum([p.size for p in context.latest_egress_packets()]) / self.packet_statistics_duration * 8
-        self.packet_ack_rate[0] = sum([p.size for p in context.latest_acked_packets()]) / self.packet_statistics_duration * 8
+        self.frame_g2g_delay[0] = self.calculate_statistics(
+            [frame.g2g_delay() for frame in frames if frame.g2g_delay() >= 0])
+        self.packet_egress_rate[0] = sum(
+            [p.size for p in context.latest_egress_packets()]) / self.packet_statistics_duration * 8
+        self.packet_ack_rate[0] = sum(
+            [p.size for p in context.latest_acked_packets()]) / self.packet_statistics_duration * 8
         self.pacing_rate[0] = context.networking.pacing_rate_data[-1][1] if context.networking.pacing_rate_data else 0
         self.pacing_burst_interval[0] = context.networking.pacing_burst_interval_data[-1][1] if context.networking.pacing_burst_interval_data else 0
         self.codec_bitrate[0] = context.bitrate_data[-1][1] if context.bitrate_data else 0
@@ -95,6 +102,7 @@ class Observation(object):
             'frame_encoding_delay': self.frame_encoding_delay,
             'frame_transmission_delay': self.frame_transmission_delay,
             'frame_decoding_delay': self.frame_decoding_delay,
+            'frame_g2g_delay': self.frame_g2g_delay,
             'packet_egress_rate': self.packet_egress_rate,
             'packet_ack_rate': self.packet_ack_rate,
             'pacing_rate': self.pacing_rate,
@@ -108,6 +116,7 @@ class Observation(object):
             'frame_encoding_delay': spaces.Box(low=-1, high=1, shape=(self.frame_history_size,), dtype=np.float32),
             'frame_transmission_delay': spaces.Box(low=-1, high=1, shape=(self.frame_history_size,), dtype=np.float32),
             'frame_decoding_delay': spaces.Box(low=-1, high=1, shape=(self.frame_history_size,), dtype=np.float32),
+            'frame_g2g_delay': spaces.Box(low=-1, high=1, shape=(self.frame_history_size,), dtype=np.float32),
             'packet_egress_rate': spaces.Box(low=-1, high=1, shape=(self.packet_history_size,), dtype=np.float32),
             'packet_ack_rate': spaces.Box(low=-1, high=1, shape=(self.packet_history_size,), dtype=np.float32),
             'pacing_rate': spaces.Box(low=-1, high=1, shape=(self.packet_history_size,), dtype=np.float32),
@@ -115,6 +124,16 @@ class Observation(object):
             'codec_bitrate': spaces.Box(low=-1, high=1, shape=(self.codec_history_size,), dtype=np.float32),
             'codec_fps': spaces.Box(low=-1, high=1, shape=(self.codec_history_size,), dtype=np.float32),
         })
+
+
+class Action():
+    def __init__(self) -> None:
+        self.bitrate = 0
+        self.fps = 10
+        self.pacing_rate = 0
+
+    def shm_size():
+        return 10 * 4
 
 
 class WebRTCEnv(gym.Env):
@@ -126,6 +145,7 @@ class WebRTCEnv(gym.Env):
         self.packet_history_size = 10
         self.packet_history_duration = 10
         self.step_duration = 1
+        self.duration = 30
         self.start_ts = time.time()
         self.step_count = 0
         self.monitor_thread: Thread = None
@@ -151,7 +171,9 @@ class WebRTCEnv(gym.Env):
             os.remove(self.sender_log)
         start_script = os.path.join(SCRIPTS_PATH, 'start.sh')
         self.p = subprocess.Popen(
-            [start_script, '-d', '30', '-p', '8888', '-w', str(self.width)])
+            [start_script, '-d', str(self.duration), '-p', '8888', '-w', str(self.width)])
+        self.shm = shared_memory.SharedMemory(name='pandia', create=True, size=Action.shm_size())
+        print('Shared memory created: ', self.shm.name)
         if self.stop_event and not self.stop_event.is_set():
             self.stop_event.set()
         self.stop_event = Event()
@@ -160,7 +182,18 @@ class WebRTCEnv(gym.Env):
         self.monitor_thread.start()
         return None, None
 
+    def write_action(self, action: Action):
+        def write_int(value, offset):
+            bytes = value.to_bytes(4, byteorder='little')
+            self.shm.buf[offset * 4:offset * 4 + 4] = bytes
+        write_int(action.bitrate, 0)
+        write_int(action.pacing_rate, 1)
+
     def step(self, action):
+        action = Action()
+        action.bitrate = 5 * 1024
+        action.pacing_rate = 50 * 1024
+        self.write_action(action)
         self.step_count += 1
         end_ts = self.start_ts + self.step_duration * self.step_count
         sleep_duration = end_ts - time.time()
@@ -183,7 +216,7 @@ def main():
         action = env.action_space.sample()
         observation, reward, done, info = env.step(action)
         print(
-            f'Step: {env.step_count}, Reward: {reward}, Observation: {observation}')
+            f'Step: {env.step_count}, Reward: {reward}, Observation: {observation["frame_g2g_delay"]}')
         if done:
             break
 

@@ -62,6 +62,9 @@ class FrameContext(object):
     def decoding_delay(self):
         return self.decoded_at - self.assembled_at if self.decoded_at and self.assembled_at else -1
 
+    def g2g_delay(self):
+        return self.decoded_at - self.captured_at if self.decoded_at and self.captured_at else -1
+
     def received(self):
         return self.assembled_at >= 0
 
