@@ -14,10 +14,18 @@ class PacketContext(object):
     def __init__(self, rtp_id, payload_type, size, sent_at) -> None:
         self.sent_at = sent_at
         self.acked_at = -1
+        self.received_at = -1  # Remote ts
         self.rtp_id = rtp_id
         self.payload_type = payload_type
         self.size = size
         self.received = None
+    
+    def ack_delay(self):
+        return self.acked_at - self.sent_at if self.acked_at > 0 else -1
+    
+    def recv_delay(self):
+        return self.received_at - self.sent_at if self.received_at > 0 else -1
+
 
 class FecContext(object):
     def __init__(self) -> None:
@@ -33,6 +41,7 @@ class FrameContext(object):
         self.encoded_at = 0
         self.assembled_at = 0
         self.decoded_at = 0
+        self.bitrate = 0
         self.codec = None
         self.encoded_size = 0
         self.encoded_shape = None
@@ -90,6 +99,7 @@ class StreamingContext(object):
         self.fec = FecContext()
         self.bitrate_data = []
         self.fps_data = []
+        self.codec_initiated = False
         self.last_captured_frame_id = 0
         self.last_decoded_frame_id = 0
         self.last_egress_packet_id = 0
@@ -145,6 +155,12 @@ def parse_line(line, context: StreamingContext) -> dict:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Program started.*'), line)
         ts = int(m[1]) / 1000
+        # context.start_ts = ts
+    elif line.startswith('(video_codec_initializer.cc') and 'SetupCodec' in line:
+        m = re.match(re.compile(
+            '.*\\[(\\d+)\\] SetupCodec.*'), line)
+        ts = int(m[1]) / 1000
+        context.codec_initiated = True
         context.start_ts = ts
     elif line.startswith('(video_stream_encoder.cc') and 'Frame encoded' in line:
         m = re.match(re.compile(
@@ -170,6 +186,22 @@ def parse_line(line, context: StreamingContext) -> dict:
             frame.rtp_packets[rtp_id] = None
             frame.rtp_id_range[0] = min(frame.rtp_id_range[0], rtp_id)
             frame.rtp_id_range[1] = max(frame.rtp_id_range[1], rtp_id)
+    elif line.startswith('(h264_encoder_impl.cc') and 'Start encoding' in line:
+        m = re.match(re.compile(
+            '.*Start encoding, frame id: (\\d+), bitrate: (\\d+) kbps.*'), line)
+        frame_id = int(m[1])
+        bitrate = int(m[2])
+        if frame_id > 0:
+            frame: FrameContext = context.frames[frame_id]
+            frame.bitrate = bitrate
+    elif line.startswith('(libvpx_vp8_encoder.cc') and 'Start encoding' in line:
+        m = re.match(re.compile(
+            '.*Start encoding, frame id: (\\d+), bitrate: (\\d+) kbps.*'), line)
+        frame_id = int(m[1])
+        bitrate = int(m[2])
+        if frame_id > 0:
+            frame: FrameContext = context.frames[frame_id]
+            frame.bitrate = bitrate
     elif line.startswith('(h264_encoder_impl.cc') and 'Finish encoding' in line:
         m = re.match(re.compile(
             '.*Finish encoding, frame id: (\\d+), frame type: (\\d+), frame size: (\\d+), qp: (\\d+).*'), line)
@@ -205,15 +237,24 @@ def parse_line(line, context: StreamingContext) -> dict:
                         frame.rtp_packets[rtp_id] = packet
             context.last_egress_packet_id = max(
                 rtp_id, context.last_egress_packet_id)
+    elif line.startswith('(transport_feedback.cc:') and 'RTCP feedback' in line:
+        m = re.match(re.compile(
+            '.*\\[(\\d+)\\] RTCP feedback, packet acked: (\\d+) at (\\d+).*'), line)
+        ts = int(m[1]) / 1000
+        rtp_id = int(m[2])
+        received_at = int(m[3]) / 1000
+        packet: PacketContext = context.packets[rtp_id]
+        packet.received_at = received_at
     elif line.startswith('(transport_feedback_demuxer.cc:') and 'Packet acked' in line:
         m = re.match(re.compile(
-            '.*\\[(\\d+)\\] Packet acked, id: (\\d+), received: (\\d+), delta: (-?\\d+).*'), line)
+            '.*\\[(\\d+)\\] Packet acked, id: (\\d+), received: (\\d+), delta_sum: (-?\\d+).*'), line)
         ts = int(m[1]) / 1000
         rtp_id = int(m[2])
         received = int(m[3])
-        delta = int(m[4])
+        delta = int(m[4]) / 1000
+        # delta = 0
         packet: PacketContext = context.packets[rtp_id]
-        packet.acked_at = ts
+        packet.acked_at = ts - delta
         packet.received = received == 1
         context.last_acked_packet_id = max(
             rtp_id, context.last_acked_packet_id)
@@ -297,7 +338,7 @@ def analyze_frame(context: StreamingContext) -> None:
             data_frame_delay.append({'id': frame_id,
                                      'ts': frame.captured_at,
                                      'encoded by': frame.encoded_at - frame.captured_at if frame.encoded_at > 0 else 0,
-                                     'paced by': frame.last_rtp_send_ts() - frame.captured_at if frame.last_rtp_send_ts() > 0 else 0,
+                                     'paced by': frame.last_rtp_send_ts() - frame.captured_at if frame.last_rtp_send_ts() else 0,
                                      'assembled by': frame.assembled_at - frame.captured_at if frame.assembled_at > 0 else 0,
                                      'decoded by': frame.decoded_at - frame.captured_at if frame.decoded_at > 0 else 0})
         elif started:
@@ -320,20 +361,26 @@ def analyze_frame(context: StreamingContext) -> None:
     plt.savefig(os.path.join(OUTPUT_DIR, 'delay-frame.pdf'))
     x = []
     y = []
+    bitrates = []
     for frame_id in frame_id_list:
         frame: FrameContext = context.frames[frame_id]
         if (frame.encoded_size):
             x.append(frame.captured_at - context.start_ts)
             y.append(frame.encoded_size / 1024)
+            bitrates.append(frame.bitrate)
     qp_data = [(context.frames[frame_id].captured_at - context.start_ts, context.frames[frame_id].qp) 
                for frame_id in frame_id_list]
     plt.close()
-    plt.plot(x, y)
-    plt.plot(lost_frames, [10 for _ in lost_frames], 'x')
-    plt.plot([f[0] for f in key_frames], [f[1] for f in key_frames], 'o')
-    plt.xlabel('Timestamp (s)')
-    plt.ylabel('Encoded size (KB)')
-    plt.legend(['Encoded size', 'Lost frames', 'Key frames'])
+    fig, ax1 = plt.subplots()
+    ax1.plot(x, y)
+    ax1.plot(lost_frames, [10 for _ in lost_frames], 'x')
+    ax1.plot([f[0] for f in key_frames], [f[1] for f in key_frames], 'o')
+    ax1.set_xlabel('Timestamp (s)')
+    ax1.set_ylabel('Encoded size (KB)')
+    ax1.legend(['Encoded size', 'Lost frames', 'Key frames'])
+    ax2 = ax1.twinx()
+    ax2.plot(x, bitrates, 'r')
+    ax2.set_ylabel('Bitrate (Kbps)')
     plt.savefig(os.path.join(OUTPUT_DIR, 'size-frame.pdf'))
 
     plt.close()
@@ -344,19 +391,31 @@ def analyze_frame(context: StreamingContext) -> None:
 
 
 def analyze_packet(context: StreamingContext) -> None:
-    data = []
+    data_ack = []
+    data_recv = []
     for pkt in sorted(context.packets.values(), key=lambda x: x.sent_at):
         pkt: PacketContext = pkt
-        data.append((pkt.sent_at, pkt.acked_at -
-                    pkt.sent_at if pkt.acked_at > 0 else 0))
+        if pkt.ack_delay() > 0:
+            data_ack.append((pkt.sent_at, pkt.ack_delay()))
+        if pkt.recv_delay() > 0:
+            data_recv.append((pkt.sent_at, pkt.recv_delay()))
     plt.close()
-    plt.plot([(d[0] - context.start_ts)
-             for d in data], [d[1] * 1000 for d in data], 'x')
+    x = [(d[0] - context.start_ts) for d in data_recv]
+    y = [d[1] * 1000 for d in data_recv]
+    plt.plot(x, y, 'x')
     plt.xlabel('Timestamp (s)')
     plt.ylabel('RTT (ms)')
-    # plt.xlim([0, 10])
+    if y:
+        plt.ylim([min(y), max(y)])
+    plt.savefig(os.path.join(OUTPUT_DIR, 'delay-packet-biased.pdf'))
+    plt.close()
+    plt.plot([(d[0] - context.start_ts)
+             for d in data_ack], [d[1] * 1000 for d in data_ack], 'x')
+    plt.xlabel('Timestamp (s)')
+    plt.ylabel('RTT (ms)')
+    plt.ylim([0, 50])
     plt.savefig(os.path.join(OUTPUT_DIR, 'delay-packet.pdf'))
-    cdf_x = list(sorted([d[1] * 1000 for d in data]))
+    cdf_x = list(sorted([d[1] * 1000 for d in data_ack]))
     cdf_y = np.arange(len(cdf_x)) / len(cdf_x)
     plt.close()
     plt.plot(cdf_x, cdf_y)

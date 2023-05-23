@@ -128,9 +128,10 @@ class Observation(object):
 
 class Action():
     def __init__(self) -> None:
-        self.bitrate = 0
-        self.fps = 10
-        self.pacing_rate = 0
+        self.bitrate = 100
+        self.fps = 30
+        self.pacing_rate = 100
+        self.padding_rate = 100
 
     def shm_size():
         return 10 * 4
@@ -172,15 +173,24 @@ class WebRTCEnv(gym.Env):
         start_script = os.path.join(SCRIPTS_PATH, 'start.sh')
         self.p = subprocess.Popen(
             [start_script, '-d', str(self.duration), '-p', '8888', '-w', str(self.width)])
-        self.shm = shared_memory.SharedMemory(name='pandia', create=True, size=Action.shm_size())
-        print('Shared memory created: ', self.shm.name)
+        try:
+            self.shm = shared_memory.SharedMemory(name='pandia', create=True, size=Action.shm_size())
+            print('Shared memory created: ', self.shm.name)
+        except FileExistsError:
+            self.shm = shared_memory.SharedMemory(name='pandia', create=False, size=Action.shm_size())
+            print('Shared memory opened: ', self.shm.name)
+        self.write_action(Action())
         if self.stop_event and not self.stop_event.is_set():
             self.stop_event.set()
         self.stop_event = Event()
         self.monitor_thread = Thread(
             target=monitor_log_file, args=(self.context, self.sender_log, self.stop_event))
         self.monitor_thread.start()
-        return None, None
+        # Wait for WebRTC SDP negotiation and codec initialization
+        while not self.context.codec_initiated:
+            pass
+        self.start_ts = time.time()
+        return self.get_observation(), None
 
     def write_action(self, action: Action):
         def write_int(value, offset):
@@ -188,11 +198,14 @@ class WebRTCEnv(gym.Env):
             self.shm.buf[offset * 4:offset * 4 + 4] = bytes
         write_int(action.bitrate, 0)
         write_int(action.pacing_rate, 1)
+        write_int(action.fps, 2)
 
     def step(self, action):
         action = Action()
-        action.bitrate = 5 * 1024
-        action.pacing_rate = 50 * 1024
+        action.bitrate = 1 * 1024
+        action.pacing_rate = 500 * 1024
+        action.fps = 10
+        action.padding_rate = 0
         self.write_action(action)
         self.step_count += 1
         end_ts = self.start_ts + self.step_duration * self.step_count

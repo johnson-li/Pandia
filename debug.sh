@@ -3,8 +3,6 @@ gn gen out/Default --args='is_debug=true rtc_use_h264=true ffmpeg_branding="Chro
 ninja -C out/Default
 cd -
 
-sudo modprobe v4l2loopback devices=2
-sudo chown lix16:lix16 /dev/video1
 rm /tmp/dump/* 2> /dev/null
 
 session=pandia
@@ -14,7 +12,7 @@ for i in `seq 1 3`
 do
   tmux new-window -t ${session}:$i
 done
-tmux send-key -t $session:0 'cd ~/Workspace/Pandia; python -m pandia.fakewebcam.main' Enter
+tmux send-key -t $session:0 'cd ~/Workspace/Pandia; python -m pandia.agent.fake_env' Enter
 tmux send-key -t $session:1 '~/Workspace/webrtc/src/out/Default/peerconnection_server' Enter
 echo 'Server started'
 sleep .1
