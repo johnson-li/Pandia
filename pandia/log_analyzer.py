@@ -202,7 +202,7 @@ def parse_line(line, context: StreamingContext) -> dict:
         if frame_id > 0:
             frame: FrameContext = context.frames[frame_id]
             frame.bitrate = bitrate
-    elif line.startswith('(h264_encoder_impl.cc') and 'Finish encoding' in line:
+    elif (line.startswith('(h264_encoder_impl.cc') or line.startswith('(libvpx_vp8_encoder.cc')) and 'Finish encoding' in line:
         m = re.match(re.compile(
             '.*Finish encoding, frame id: (\\d+), frame type: (\\d+), frame size: (\\d+), qp: (\\d+).*'), line)
         frame_id = int(m[1])

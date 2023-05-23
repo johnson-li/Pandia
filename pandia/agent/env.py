@@ -52,6 +52,7 @@ class Observation(object):
         self.frame_transmission_delay = np.zeros(self.frame_history_size)
         self.frame_decoding_delay = np.zeros(self.frame_history_size)
         self.frame_g2g_delay = np.zeros(self.frame_history_size)
+        self.frame_size = np.zeros(self.frame_history_size)
         self.packet_egress_rate = np.zeros(self.packet_history_size)
         self.packet_ack_rate = np.zeros(self.packet_history_size)
         self.pacing_rate = np.zeros(self.packet_history_size)
@@ -65,6 +66,7 @@ class Observation(object):
             np.roll(self.frame_transmission_delay, 1)
         self.frame_decoding_delay = np.roll(self.frame_decoding_delay, 1)
         self.frame_g2g_delay = np.roll(self.frame_g2g_delay, 1)
+        self.frame_size = np.roll(self.frame_size, 1)
         self.packet_egress_rate = np.roll(self.packet_egress_rate, 1)
         self.packet_ack_rate = np.roll(self.packet_ack_rate, 1)
         self.pacing_rate = np.roll(self.pacing_rate, 1)
@@ -88,6 +90,8 @@ class Observation(object):
             [frame.decoding_delay() for frame in frames if frame.decoding_delay() >= 0])
         self.frame_g2g_delay[0] = self.calculate_statistics(
             [frame.g2g_delay() for frame in frames if frame.g2g_delay() >= 0])
+        self.frame_size[0] = self.calculate_statistics(
+            [frame.encoded_size for frame in frames if frame.encoded_size > 0])
         self.packet_egress_rate[0] = sum(
             [p.size for p in context.latest_egress_packets()]) / self.packet_statistics_duration * 8
         self.packet_ack_rate[0] = sum(
@@ -103,6 +107,7 @@ class Observation(object):
             'frame_transmission_delay': self.frame_transmission_delay,
             'frame_decoding_delay': self.frame_decoding_delay,
             'frame_g2g_delay': self.frame_g2g_delay,
+            'frame_size': self.frame_size,
             'packet_egress_rate': self.packet_egress_rate,
             'packet_ack_rate': self.packet_ack_rate,
             'pacing_rate': self.pacing_rate,
@@ -117,6 +122,7 @@ class Observation(object):
             'frame_transmission_delay': spaces.Box(low=-1, high=1, shape=(self.frame_history_size,), dtype=np.float32),
             'frame_decoding_delay': spaces.Box(low=-1, high=1, shape=(self.frame_history_size,), dtype=np.float32),
             'frame_g2g_delay': spaces.Box(low=-1, high=1, shape=(self.frame_history_size,), dtype=np.float32),
+            'frame_size': spaces.Box(low=-1, high=1, shape=(self.frame_history_size,), dtype=np.float32),
             'packet_egress_rate': spaces.Box(low=-1, high=1, shape=(self.packet_history_size,), dtype=np.float32),
             'packet_ack_rate': spaces.Box(low=-1, high=1, shape=(self.packet_history_size,), dtype=np.float32),
             'pacing_rate': spaces.Box(low=-1, high=1, shape=(self.packet_history_size,), dtype=np.float32),
@@ -132,6 +138,8 @@ class Action():
         self.fps = 30
         self.pacing_rate = 100
         self.padding_rate = 100
+        self.fec_rate_key = 0
+        self.fec_rate_delta = 0
 
     def shm_size():
         return 10 * 4
@@ -199,6 +207,8 @@ class WebRTCEnv(gym.Env):
         write_int(action.bitrate, 0)
         write_int(action.pacing_rate, 1)
         write_int(action.fps, 2)
+        write_int(action.fec_rate_key, 3)
+        write_int(action.fec_rate_delta, 4)
 
     def step(self, action):
         action = Action()
@@ -219,7 +229,10 @@ class WebRTCEnv(gym.Env):
         return self.get_observation(), self.reward(), done, None
 
     def reward(self):
-        return 0
+        sla = .1
+        factor = 1 if self.observation.frame_g2g_delay[0] <= sla else -1
+        quality_score = self.observation.frame_size[0] / 1000
+        return factor * quality_score
 
 
 def main():
