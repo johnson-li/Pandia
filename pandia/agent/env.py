@@ -229,6 +229,10 @@ class WebRTCEnv(Env):
         self.observation: Observation = None
         self.observation_space = Observation.observation_space()
         self.action_space = Action.action_space()
+        self.process_sender = None
+        self.process_receiver = None
+        self.process_server = None
+        self.stop_event = None
 
     @staticmethod
     def random_uuid():
@@ -254,25 +258,33 @@ class WebRTCEnv(Env):
             print('Shared memory opened: ', self.shm.name)
         self.stop_event = Event()
         self.process_server = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_server'), '--port', str(self.uuid)], 
-                                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=False)
         self.process_receiver = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'), 
                                                   '--port', str(self.uuid), '--name', 'receiver', 
                                                   '--receiving_only', 'true', 
                                                   '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/'], 
-                                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=False)
 
     def start_webrtc(self):
         self.process_sender = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'), 
                                                 '--port', str(self.uuid), '--name', 'sender',
                                                 '--width', str(self.width), '--fps', str(30), '--autocall', 'true',
                                                 '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/'], 
-                                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
         stdout = self.process_sender.stderr
         self.monitor_thread = Thread(
             target=monitor_webrtc_sender, args=(self.context, stdout, self.stop_event))
         self.monitor_thread.start()
 
     def reset(self, *, seed=None, options=None):
+        if self.process_sender:
+            self.process_sender.kill()
+        if self.process_receiver:
+            self.process_receiver.kill()
+        if self.process_server:
+            self.process_server.kill()
+        if self.stop_event and not self.stop_event.isSet():
+            self.stop_event.set()
         self.uuid = self.random_uuid()
         self.step_count = 0
         self.context = StreamingContext()
