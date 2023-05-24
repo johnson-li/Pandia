@@ -78,5 +78,6 @@
         "ratio": "cpp",
         "variant": "cpp",
         "iomanip": "cpp"
-    }
+    },
+    "python.analysis.typeCheckingMode": "basic"
 }
