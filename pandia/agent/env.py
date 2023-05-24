@@ -1,4 +1,5 @@
 import os
+import random
 import subprocess
 import threading
 from threading import Event, Thread
@@ -6,35 +7,32 @@ import time
 import numpy as np
 from gymnasium import Env, spaces
 from multiprocessing import shared_memory
-from pandia import RESULTS_PATH, SCRIPTS_PATH
+from pandia import RESULTS_PATH, SCRIPTS_PATH, BIN_PATH
 from pandia.log_analyzer import StreamingContext, parse_line
 
 DEFAULT_HISTORY_SIZE = 3
+NORMALIZATION_RANGE = (-1, 1)
 
 
-def monitor_log_file(context: StreamingContext, log_path: str, stop_event: threading.Event):
-    def follow(f):
-        f.seek(0, os.SEEK_END)
-
-        while not stop_event.is_set():
-            line = f.readline()
-            if not line:
-                time.sleep(0.1)
-                continue
-            yield line
-
-    f = None
-    while not f:
-        if not f:
-            try:
-                f = open(log_path)
-            except FileNotFoundError:
-                time.sleep(0.1)
-
-    for line in follow(f):
-        line = line.strip()
+def monitor_webrtc_sender(context: StreamingContext, stdout: str, stop_event: threading.Event):
+    while not stop_event.is_set():
+        line = stdout.readline().decode().strip()
         if line:
             parse_line(line, context)
+
+
+def normalize(value, value_range, normalized_range=NORMALIZATION_RANGE):
+    if type(value) == np.ndarray:
+        value = np.array(value, dtype=np.float32)
+    return (value - value_range[0]) / (value_range[1] - value_range[0]) * \
+        (normalized_range[1] - normalized_range[0]) + normalized_range[0]
+
+
+def denormalize(value, value_range, normalized_range=NORMALIZATION_RANGE):
+    res = normalize(value, normalized_range, value_range)
+    if type(res) == np.ndarray:
+        res = np.array(res, dtype=np.int32)
+    return res
 
 
 class Observation(object):
@@ -112,7 +110,7 @@ class Observation(object):
     def array(self):
         boundary = Observation.boundary()
         keys = sorted(boundary.keys())
-        return np.concatenate([getattr(self, k) for k in keys])
+        return np.concatenate([normalize(getattr(self, k), boundary[k]) for k in keys])
 
     @staticmethod
     def from_array(array):
@@ -120,8 +118,9 @@ class Observation(object):
         boundary = Observation.boundary()
         keys = sorted(boundary.keys())
         for i, k in enumerate(keys):
-            setattr(
-                observation, k, array[i * DEFAULT_HISTORY_SIZE:(i + 1) * DEFAULT_HISTORY_SIZE])
+            setattr(observation, k, 
+                    denormalize(array[i * DEFAULT_HISTORY_SIZE:(i + 1) * DEFAULT_HISTORY_SIZE],    
+                                boundary[k]))
         return observation
 
     @staticmethod
@@ -144,10 +143,8 @@ class Observation(object):
     def observation_space():
         boundary = Observation.boundary()
         keys = sorted(boundary.keys())
-        low = np.repeat(np.array(
-            [boundary[k][0] for k in keys], dtype=np.int32), DEFAULT_HISTORY_SIZE, axis=0)
-        high = np.repeat(np.array(
-            [boundary[k][1] for k in keys], dtype=np.int32), DEFAULT_HISTORY_SIZE, axis=0)
+        low = np.ones(len(keys) * DEFAULT_HISTORY_SIZE) * NORMALIZATION_RANGE[0]
+        high = np.ones(len(keys) * DEFAULT_HISTORY_SIZE) * NORMALIZATION_RANGE[1]
         return spaces.Box(low=low, high=high, dtype=np.int32)
 
 
@@ -176,7 +173,7 @@ class Action():
     def array(self):
         boundary = Action.boundary()
         keys = sorted(boundary.keys())
-        return np.array([(getattr(self, k) - boundary[k][0]) / (boundary[k][1] - boundary[k][0]) for k in keys])
+        return np.array([normalize(getattr(self, k), boundary[k]) for k in keys])
 
     @staticmethod
     def from_array(array):
@@ -184,7 +181,7 @@ class Action():
         boundary = Action.boundary()
         keys = sorted(boundary.keys())
         for i, k in enumerate(keys):
-            setattr(action, k, int(float(array[i]) * (boundary[k][1] - boundary[k][0]) + boundary[k][0]))
+            setattr(action, k, int(denormalize(array[i], boundary[k])))
         if action.bitrate > action.pacing_rate:
             action.pacing_rate = action.bitrate
         return action
@@ -204,8 +201,8 @@ class Action():
     def action_space():
         boundary = Action.boundary()
         keys = sorted(boundary.keys())
-        low = np.zeros(len(keys))
-        high = np.ones(len(keys)) 
+        low = np.ones(len(keys)) * NORMALIZATION_RANGE[0]
+        high = np.ones(len(keys)) * NORMALIZATION_RANGE[1]
         return spaces.Box(low=low, high=high, dtype=np.float32)
 
     @staticmethod
@@ -217,6 +214,7 @@ class WebRTCEnv(Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self, config):
+        self.uuid = 0
         self.sender_log = os.path.join(RESULTS_PATH, 'sender.log')
         self.frame_history_size = 10
         self.packet_history_size = 10
@@ -232,16 +230,20 @@ class WebRTCEnv(Env):
         self.observation_space = Observation.observation_space()
         self.action_space = Action.action_space()
 
+    @staticmethod
+    def random_uuid():
+        while True:
+            res = random.randint(9_000, 9_999)
+            if os.path.exists(f'/tmp/webrtc_{res}'):
+                continue
+            with open(f'/tmp/webrtc_{res}', 'w+') as f:
+                f.write('')
+            return res
+
     def get_observation(self):
         return self.observation.array()
 
-    def reset(self, *, seed=None, options=None):
-        self.step_count = 0
-        self.context = StreamingContext()
-        self.observation = Observation()
-        self.width = 720
-        if os.path.isfile(self.sender_log):
-            os.remove(self.sender_log)
+    def init_webrtc(self):
         try:
             self.shm = shared_memory.SharedMemory(
                 name='pandia', create=True, size=Action.shm_size())
@@ -250,27 +252,44 @@ class WebRTCEnv(Env):
             self.shm = shared_memory.SharedMemory(
                 name='pandia', create=False, size=Action.shm_size())
             print('Shared memory opened: ', self.shm.name)
-        if self.stop_event and not self.stop_event.is_set():
-            self.stop_event.set()
         self.stop_event = Event()
-        self.monitor_thread = Thread(
-            target=monitor_log_file, args=(self.context, self.sender_log, self.stop_event))
-        self.monitor_thread.start()
-        return self.get_observation(), {}
+        self.process_server = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_server'), '--port', str(self.uuid)], 
+                                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.process_receiver = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'), 
+                                                  '--port', str(self.uuid), '--name', 'receiver', 
+                                                  '--receiving_only', 'true', 
+                                                  '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/'], 
+                                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+    def start_webrtc(self):
+        self.process_sender = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'), 
+                                                '--port', str(self.uuid), '--name', 'sender',
+                                                '--width', str(self.width), '--fps', str(30), '--autocall', 'true',
+                                                '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/'], 
+                                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout = self.process_sender.stderr
+        self.monitor_thread = Thread(
+            target=monitor_webrtc_sender, args=(self.context, stdout, self.stop_event))
+        self.monitor_thread.start()
+
+    def reset(self, *, seed=None, options=None):
+        self.uuid = self.random_uuid()
+        self.step_count = 0
+        self.context = StreamingContext()
+        self.observation = Observation()
+        self.width = 720
+        self.init_webrtc()
+        return self.get_observation(), {}
+    
     def step(self, action):
-        print(action)
         action = Action.from_array(action)
         print(f'#{self.step_count} Take action, bitrate: {action.bitrate} kbps, '
               f'pacing rate: {action.pacing_rate} kbps')
         action.write(self.shm)
         if not self.context.codec_initiated:
             assert self.step_count == 0
-            start_script = os.path.join(SCRIPTS_PATH, 'start.sh')
-            self.p = subprocess.Popen(
-                [start_script, '-d', str(self.duration), '-p', '8888', '-w', str(self.width)])
-            # Wait for WebRTC SDP negotiation and codec initialization
-            print('Waiting for WebRTC...')
+            self.start_webrtc()
+            print('Waiting for WebRTC ready...')
             while not self.context.codec_initiated:
                 pass
             print('WebRTC is running.')
@@ -280,16 +299,19 @@ class WebRTCEnv(Env):
         if sleep_duration > 0:
             time.sleep(sleep_duration)
         self.observation.append(self.context)
-        done = self.p.poll() is not None
-        if done:
-            self.stop_event.set()
+        done = self.process_sender.poll() is not None or self.process_receiver.poll() is not None
         self.step_count += 1
         reward = self.reward()
         print(f'#{self.step_count} Reward: {reward}')
-        return self.get_observation(), reward, True, done, {}
+        return self.get_observation(), reward, False, done, {}
 
     def close(self):
-        pass
+        self.stop_event.set()
+        self.process_sender.kill()
+        self.process_receiver.kill()
+        self.process_server.kill()
+        self.shm.close()
+        self.shm.unlink()
 
     def reward(self):
         sla = 100

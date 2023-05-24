@@ -1,6 +1,5 @@
 import os
 import re
-import threading
 import matplotlib.pyplot as plt
 import numpy as np
 
