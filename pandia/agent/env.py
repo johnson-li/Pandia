@@ -3,9 +3,8 @@ import subprocess
 import threading
 from threading import Event, Thread
 import time
-import gym
 import numpy as np
-from gym import spaces
+from gymnasium import Env, spaces
 from multiprocessing import shared_memory
 from pandia import RESULTS_PATH, SCRIPTS_PATH
 from pandia.log_analyzer import StreamingContext, parse_line
@@ -207,17 +206,17 @@ class Action():
         keys = sorted(boundary.keys())
         low = np.zeros(len(keys))
         high = np.ones(len(keys)) 
-        return spaces.Box(low=low, high=high)
+        return spaces.Box(low=low, high=high, dtype=np.float32)
 
     @staticmethod
     def shm_size():
         return 10 * 4
 
 
-class WebRTCEnv(gym.Env):
+class WebRTCEnv(Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self):
+    def __init__(self, config):
         self.sender_log = os.path.join(RESULTS_PATH, 'sender.log')
         self.frame_history_size = 10
         self.packet_history_size = 10
@@ -257,7 +256,7 @@ class WebRTCEnv(gym.Env):
         self.monitor_thread = Thread(
             target=monitor_log_file, args=(self.context, self.sender_log, self.stop_event))
         self.monitor_thread.start()
-        return self.get_observation()
+        return self.get_observation(), {}
 
     def step(self, action):
         print(action)
@@ -287,7 +286,10 @@ class WebRTCEnv(gym.Env):
         self.step_count += 1
         reward = self.reward()
         print(f'#{self.step_count} Reward: {reward}')
-        return self.get_observation(), reward, done, {}
+        return self.get_observation(), reward, True, done, {}
+
+    def close(self):
+        pass
 
     def reward(self):
         sla = 100
@@ -296,7 +298,7 @@ class WebRTCEnv(gym.Env):
         return factor * quality_score
 
 
-gym.envs.register(
-    id='WebRTCEnv-v0',
-    entry_point='pandia.agent.env:WebRTCEnv',
-)
+# gym.envs.register(
+#     id='WebRTCEnv-v0',
+#     entry_point='pandia.agent.env:WebRTCEnv',
+# )
