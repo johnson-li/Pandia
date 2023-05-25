@@ -13,7 +13,7 @@ from pandia.log_analyzer import CODEC_NAMES, FrameContext, StreamingContext, par
 
 DEFAULT_HISTORY_SIZE = 3
 NORMALIZATION_RANGE = (-1, 1)
-RESOLUTION_LIST = [360, 480, 720, 960, 1080, 1440, 2160]
+RESOLUTION_LIST = [240, 360, 480, 720, 960, 1080, 1440, 2160]
 
 
 def monitor_webrtc_sender(context: StreamingContext, stdout: str, stop_event: threading.Event, sender_log=None):
@@ -28,15 +28,20 @@ def monitor_webrtc_sender(context: StreamingContext, stdout: str, stop_event: th
         f.close()
 
 
-def normalize(value, value_range, normalized_range=NORMALIZATION_RANGE):
+def normalize(name, value, value_range, normalized_range=NORMALIZATION_RANGE):
+    if name == 'resolution':
+        return RESOLUTION_LIST.index(min(RESOLUTION_LIST, key=lambda x:abs(x - value))) \
+            / len(RESOLUTION_LIST)
     if type(value) == np.ndarray:
         value = np.array(value, dtype=np.float32)
     return (value - value_range[0]) / (value_range[1] - value_range[0]) * \
         (normalized_range[1] - normalized_range[0]) + normalized_range[0]
 
 
-def denormalize(value, value_range, normalized_range=NORMALIZATION_RANGE):
-    res = normalize(value, normalized_range, value_range)
+def denormalize(name, value, value_range, normalized_range=NORMALIZATION_RANGE):
+    if name == 'resolution':
+        return RESOLUTION_LIST[int(value * len(RESOLUTION_LIST))]
+    res = normalize(name, value, normalized_range, value_range)
     if type(res) == np.ndarray:
         res = np.array(res, dtype=np.int32)
     return res
@@ -63,8 +68,8 @@ class Observation(object):
         self.frame_g2g_delay: np.ndarray = np.zeros(
             self.frame_history_size, dtype=np.int32)
         self.frame_size: np.ndarray = np.zeros(self.frame_history_size, dtype=np.int32)
-        self.frame_width: np.ndarray = np.zeros(self.frame_history_size, dtype=np.int32)
-        self.frame_encoded_width: np.ndarray = \
+        self.frame_height: np.ndarray = np.zeros(self.frame_history_size, dtype=np.int32)
+        self.frame_encoded_height: np.ndarray = \
                 np.zeros(self.frame_history_size, dtype=np.int32)
         self.frame_bitrate: np.ndarray = np.zeros(self.frame_history_size, dtype=np.int32)
         self.frame_qp: np.ndarray = np.zeros(self.frame_history_size, dtype=np.int32)
@@ -87,8 +92,8 @@ class Observation(object):
         self.frame_assemble_delay = np.roll(self.frame_assemble_delay, 1)
         self.frame_g2g_delay = np.roll(self.frame_g2g_delay, 1)
         self.frame_size = np.roll(self.frame_size, 1)
-        self.frame_width = np.roll(self.frame_width, 1)
-        self.frame_encoded_width = np.roll(self.frame_encoded_width, 1)
+        self.frame_height = np.roll(self.frame_height, 1)
+        self.frame_encoded_height = np.roll(self.frame_encoded_height, 1)
         self.frame_bitrate = np.roll(self.frame_bitrate, 1)
         self.frame_qp = np.roll(self.frame_qp, 1)
         self.codec = np.roll(self.codec, 1)
@@ -120,10 +125,10 @@ class Observation(object):
             [frame.g2g_delay() * 1000 for frame in frames if frame.g2g_delay() >= 0])
         self.frame_size[0] = self.calculate_statistics(
             [frame.encoded_size for frame in frames if frame.encoded_size > 0])
-        self.frame_width[0] = self.calculate_statistics(
-            [frame.width for frame in frames if frame.width > 0])
-        self.frame_encoded_width[0] = self.calculate_statistics(
-            [frame.encoded_shape[0] for frame in frames if frame.encoded_shape])
+        self.frame_height[0] = self.calculate_statistics(
+            [frame.height for frame in frames if frame.height > 0])
+        self.frame_encoded_height[0] = self.calculate_statistics(
+            [frame.encoded_shape[1] for frame in frames if frame.encoded_shape])
         self.frame_bitrate[0] = self.calculate_statistics(
             [frame.bitrate for frame in frames if frame.bitrate > 0])
         self.frame_qp[0] = self.calculate_statistics(
@@ -144,7 +149,7 @@ class Observation(object):
     def array(self):
         boundary = Observation.boundary()
         keys = sorted(boundary.keys())
-        return np.concatenate([normalize(getattr(self, k), boundary[k]) for k in keys])
+        return np.concatenate([normalize(k, getattr(self, k), boundary[k]) for k in keys])
 
     @staticmethod
     def from_array(array):
@@ -153,7 +158,7 @@ class Observation(object):
         keys = sorted(boundary.keys())
         for i, k in enumerate(keys):
             setattr(observation, k, 
-                    denormalize(array[i * DEFAULT_HISTORY_SIZE:(i + 1) * DEFAULT_HISTORY_SIZE],    
+                    denormalize(k, array[i * DEFAULT_HISTORY_SIZE:(i + 1) * DEFAULT_HISTORY_SIZE],    
                                 boundary[k]))
         return observation
 
@@ -166,8 +171,8 @@ class Observation(object):
             'frame_assemble_delay': [0, 1000],
             'frame_g2g_delay': [0, 1000],
             'frame_size': [0, 1000_000],
-            'frame_width': [0, 3840],
-            'frame_encoded_width': [0, 3840],
+            'frame_height': [0, 2160],
+            'frame_encoded_height': [0, 2160],
             'frame_bitrate': [0, 100_000],
             'frame_qp': [0, 255],
             'codec': [0, 4],
@@ -192,12 +197,31 @@ class Observation(object):
 class Action():
     def __init__(self) -> None:
         self.bitrate = 100
-        self.fps = 30
         self.pacing_rate = 100
-        self.padding_rate = 100
+        self.resolution = 720
+
+        self.fps = 30
+        self.padding_rate = 0
         self.fec_rate_key = 0
         self.fec_rate_delta = 0
-        self.resolution = 720
+    
+    @staticmethod
+    def boundary():
+        return {
+            'bitrate': [10, 10 * 1024],
+            # 'fps': [1, 60],
+            'pacing_rate': [10, 500 * 1024],
+            # 'padding_rate': [0, 500 * 1024],
+            # 'fec_rate_key': [0, 255],
+            # 'fec_rate_delta': [0, 255],
+            'resolution': [240, 1080],
+        }
+
+    def __str__(self) -> str:
+        return f'{self.resolution}p, ' \
+               f'sending: {self.pacing_rate} / {self.padding_rate} kbps, ' \
+               f'{self.bitrate} @ {self.fps} fps, ' \
+               f'fec: {self.fec_rate_key} / {self.fec_rate_delta}'
 
     def write(self, shm):
         def write_int(value, offset):
@@ -215,7 +239,7 @@ class Action():
     def array(self):
         boundary = Action.boundary()
         keys = sorted(boundary.keys())
-        return np.array([normalize(getattr(self, k), boundary[k]) for k in keys])
+        return np.array([normalize(k, getattr(self, k), boundary[k]) for k in keys])
 
     @staticmethod
     def from_array(array):
@@ -223,25 +247,13 @@ class Action():
         boundary = Action.boundary()
         keys = sorted(boundary.keys())
         for i, k in enumerate(keys):
-            setattr(action, k, int(denormalize(array[i], boundary[k])))
+            setattr(action, k, int(denormalize(k, array[i], boundary[k])))
 
         # Post process to avoid invalid action settings
         if action.bitrate > action.pacing_rate:
             action.pacing_rate = action.bitrate
         action.resolution = min(RESOLUTION_LIST, key=lambda x:abs(x - action.resolution))
         return action
-
-    @staticmethod
-    def boundary():
-        return {
-            'bitrate': [10, 10 * 1024],
-            # 'fps': [1, 60],
-            'pacing_rate': [10, 500 * 1024],
-            # 'padding_rate': [0, 500 * 1024],
-            # 'fec_rate_key': [0, 255],
-            # 'fec_rate_delta': [0, 255],
-            'resolution': [360, 1080],
-        }
 
     @staticmethod
     def action_space():
@@ -338,14 +350,13 @@ class WebRTCEnv(Env):
         self.step_count = 0
         self.context = StreamingContext()
         self.observation = Observation()
-        self.width = 720
+        self.width = 2160
         self.init_webrtc()
         return self.get_observation(), {}
     
     def step(self, action):
         action = Action.from_array(action)
-        print(f'#{self.step_count} Take action, bitrate: {action.bitrate} kbps, '
-              f'pacing rate: {action.pacing_rate} kbps')
+        # print(f'#{self.step_count} Take action: {action}')
         action.write(self.shm)
         if not self.context.codec_initiated:
             assert self.step_count == 0
@@ -375,7 +386,8 @@ class WebRTCEnv(Env):
         self.shm.unlink()
 
     def reward(self):
-        sla = 100
+        if self.observation.fps[0] == 0:
+            return -10
         delay_score = self.observation.frame_g2g_delay[0] / 100
         quality_score = self.observation.frame_bitrate[0] / 1000
         return quality_score - delay_score
