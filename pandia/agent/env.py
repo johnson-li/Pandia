@@ -247,14 +247,17 @@ class WebRTCEnv(Env):
     def get_observation(self):
         return self.observation.array()
 
+    def shm_name(self):
+        return f'pandia_{self.uuid}'
+
     def init_webrtc(self):
         try:
             self.shm = shared_memory.SharedMemory(
-                name='pandia', create=True, size=Action.shm_size())
+                name=self.shm_name(), create=True, size=Action.shm_size())
             print('Shared memory created: ', self.shm.name)
         except FileExistsError:
             self.shm = shared_memory.SharedMemory(
-                name='pandia', create=False, size=Action.shm_size())
+                name=self.shm_name(), create=False, size=Action.shm_size())
             print('Shared memory opened: ', self.shm.name)
         self.stop_event = Event()
         self.process_server = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_server'), '--port', str(self.uuid)], 
