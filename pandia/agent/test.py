@@ -1,22 +1,30 @@
 from pandia.agent.env import Action, WebRTCEnv, Observation
+from pandia.log_analyzer import CODEC_NAMES
 
 
 def main():
     env = WebRTCEnv({})
     obs, info = env.reset()
-    obs, info = env.reset()
-    obs, info = env.reset()
     action = Action()
     action.fps = 10
     action.resolution = 720
-    action.bitrate = 1024
+    action.bitrate = 800
     action.pacing_rate = 500 * 1024
     for _ in range(30):
         obs, reward, done, truncated, info = env.step(action.array())
         observation = Observation.from_array(obs)
-        print(f'Step: {env.step_count}, Reward: {reward}, '
-              f'G2G delay: {observation.frame_g2g_delay}, '
-              f'bitrate: {observation.codec_bitrate}')
+        delays = (observation.frame_encoding_delay[0], 
+                  observation.frame_pacing_delay[0], 
+                  observation.frame_assemble_delay[0], 
+                  observation.frame_g2g_delay[0])
+        print(f'Step: {env.step_count}, Reward: {reward:.02f}, '
+              f'Delays: {delays}, '
+              f'Width: {observation.frame_width[0]}/{observation.frame_encoded_width[0]}, '
+              f'FPS: {observation.fps[0]}, '
+              f'Codec: {CODEC_NAMES[observation.codec[0]]}, '
+              f'size: {observation.frame_size[0]}, '
+              f'Bitrate: {observation.codec_bitrate[0]}, '
+              f'QP: {observation.frame_qp[0]}, ')
         if done or truncated:
             break
     env.close()

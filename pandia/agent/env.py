@@ -4,14 +4,16 @@ import subprocess
 import threading
 from threading import Event, Thread
 import time
+from typing import List
 import numpy as np
 from gymnasium import Env, spaces
 from multiprocessing import shared_memory
 from pandia import RESULTS_PATH, SCRIPTS_PATH, BIN_PATH
-from pandia.log_analyzer import StreamingContext, parse_line
+from pandia.log_analyzer import CODEC_NAMES, FrameContext, StreamingContext, parse_line
 
 DEFAULT_HISTORY_SIZE = 3
 NORMALIZATION_RANGE = (-1, 1)
+RESOLUTION_LIST = [360, 480, 720, 960, 1080, 1440, 2160]
 
 
 def monitor_webrtc_sender(context: StreamingContext, stdout: str, stop_event: threading.Event):
@@ -47,13 +49,22 @@ class Observation(object):
 
         self.frame_encoding_delay: np.ndarray = np.zeros(
             self.frame_history_size, dtype=np.int32)
-        self.frame_transmission_delay: np.ndarray = np.zeros(
+        self.frame_pacing_delay: np.ndarray = np.zeros(
             self.frame_history_size, dtype=np.int32)
         self.frame_decoding_delay: np.ndarray = np.zeros(
+            self.frame_history_size, dtype=np.int32)
+        self.frame_assemble_delay: np.ndarray = np.zeros(
             self.frame_history_size, dtype=np.int32)
         self.frame_g2g_delay: np.ndarray = np.zeros(
             self.frame_history_size, dtype=np.int32)
         self.frame_size: np.ndarray = np.zeros(self.frame_history_size, dtype=np.int32)
+        self.frame_width: np.ndarray = np.zeros(self.frame_history_size, dtype=np.int32)
+        self.frame_encoded_width: np.ndarray = \
+                np.zeros(self.frame_history_size, dtype=np.int32)
+        self.frame_bitrate: np.ndarray = np.zeros(self.frame_history_size, dtype=np.int32)
+        self.frame_qp: np.ndarray = np.zeros(self.frame_history_size, dtype=np.int32)
+        self.codec: np.ndarray = np.zeros(self.frame_history_size, dtype=np.int32)
+        self.fps: np.ndarray = np.zeros(self.frame_history_size, dtype=np.int32)
         self.packet_egress_rate: np.ndarray = np.zeros(
             self.packet_history_size, dtype=np.int32)
         self.packet_ack_rate: np.ndarray = np.zeros(
@@ -66,11 +77,17 @@ class Observation(object):
 
     def roll(self):
         self.frame_encoding_delay = np.roll(self.frame_encoding_delay, 1)
-        self.frame_transmission_delay =  \
-            np.roll(self.frame_transmission_delay, 1)
+        self.frame_pacing_delay = np.roll(self.frame_pacing_delay, 1)
         self.frame_decoding_delay = np.roll(self.frame_decoding_delay, 1)
+        self.frame_assemble_delay = np.roll(self.frame_assemble_delay, 1)
         self.frame_g2g_delay = np.roll(self.frame_g2g_delay, 1)
         self.frame_size = np.roll(self.frame_size, 1)
+        self.frame_width = np.roll(self.frame_width, 1)
+        self.frame_encoded_width = np.roll(self.frame_encoded_width, 1)
+        self.frame_bitrate = np.roll(self.frame_bitrate, 1)
+        self.frame_qp = np.roll(self.frame_qp, 1)
+        self.codec = np.roll(self.codec, 1)
+        self.fps = np.roll(self.fps, 1)
         self.packet_egress_rate = np.roll(self.packet_egress_rate, 1)
         self.packet_ack_rate = np.roll(self.packet_ack_rate, 1)
         self.pacing_rate = np.roll(self.pacing_rate, 1)
@@ -85,17 +102,29 @@ class Observation(object):
 
     def append(self, context: StreamingContext):
         self.roll()
-        frames = context.latest_frames()
+        frames: List[FrameContext] = context.latest_frames()
         self.frame_encoding_delay[0] = self.calculate_statistics(
             [frame.encoding_delay() * 1000 for frame in frames if frame.encoding_delay() >= 0])
-        self.frame_transmission_delay[0] = self.calculate_statistics(
-            [frame.transmission_delay() * 1000 for frame in frames if frame.transmission_delay() >= 0])
+        self.frame_pacing_delay[0] = self.calculate_statistics(
+            [frame.pacing_delay() * 1000 for frame in frames if frame.pacing_delay() >= 0])
         self.frame_decoding_delay[0] = self.calculate_statistics(
             [frame.decoding_delay() * 1000 for frame in frames if frame.decoding_delay() >= 0])
+        self.frame_assemble_delay[0] = self.calculate_statistics(
+            [frame.assemble_delay() * 1000 for frame in frames if frame.assemble_delay() >= 0])
         self.frame_g2g_delay[0] = self.calculate_statistics(
             [frame.g2g_delay() * 1000 for frame in frames if frame.g2g_delay() >= 0])
         self.frame_size[0] = self.calculate_statistics(
             [frame.encoded_size for frame in frames if frame.encoded_size > 0])
+        self.frame_width[0] = self.calculate_statistics(
+            [frame.width for frame in frames if frame.width > 0])
+        self.frame_encoded_width[0] = self.calculate_statistics(
+            [frame.encoded_shape[0] for frame in frames if frame.encoded_shape])
+        self.frame_bitrate[0] = self.calculate_statistics(
+            [frame.bitrate for frame in frames if frame.bitrate > 0])
+        self.frame_qp[0] = self.calculate_statistics(
+            [frame.qp for frame in frames if frame.qp > 0])
+        self.codec[0] = context.codec() 
+        self.fps[0] = context.fps()
         self.packet_egress_rate[0] = sum([p.size for p in context.latest_egress_packets()])  \
                 / self.packet_statistics_duration * 8 / 1024
         self.packet_ack_rate[0] = sum([p.size for p in context.latest_acked_packets()]) \
@@ -127,10 +156,17 @@ class Observation(object):
     def boundary():
         return {
             'frame_encoding_delay': [0, 1000],
-            'frame_transmission_delay': [0, 1000],
+            'frame_pacing_delay': [0, 1000],
             'frame_decoding_delay': [0, 1000],
+            'frame_assemble_delay': [0, 1000],
             'frame_g2g_delay': [0, 1000],
             'frame_size': [0, 1000_000],
+            'frame_width': [0, 3840],
+            'frame_encoded_width': [0, 3840],
+            'frame_bitrate': [0, 100_000],
+            'frame_qp': [0, 255],
+            'codec': [0, 4],
+            'fps': [0, 60],
             'packet_egress_rate': [0, 500 * 1024 * 1024],
             'packet_ack_rate': [0, 500 * 1024 * 1024],
             'pacing_rate': [0, 500 * 1024 * 1024],
@@ -169,6 +205,7 @@ class Action():
         write_int(self.fec_rate_key, 3)
         write_int(self.fec_rate_delta, 4)
         write_int(self.padding_rate, 5)
+        write_int(self.resolution, 6)
 
     def array(self):
         boundary = Action.boundary()
@@ -182,8 +219,11 @@ class Action():
         keys = sorted(boundary.keys())
         for i, k in enumerate(keys):
             setattr(action, k, int(denormalize(array[i], boundary[k])))
+
+        # Post process to avoid invalid action settings
         if action.bitrate > action.pacing_rate:
             action.pacing_rate = action.bitrate
+        action.resolution = min(RESOLUTION_LIST, key=lambda x:abs(x - action.resolution))
         return action
 
     @staticmethod
@@ -195,6 +235,7 @@ class Action():
             # 'padding_rate': [0, 500 * 1024],
             # 'fec_rate_key': [0, 255],
             # 'fec_rate_delta': [0, 255],
+            'resolution': [360, 1080],
         }
 
     @staticmethod
@@ -317,7 +358,7 @@ class WebRTCEnv(Env):
         done = self.process_sender.poll() is not None or self.process_receiver.poll() is not None
         self.step_count += 1
         reward = self.reward()
-        print(f'#{self.step_count} Reward: {reward}')
+        # print(f'#{self.step_count} Reward: {reward}')
         return self.get_observation(), reward, False, done, {}
 
     def close(self):
@@ -330,9 +371,9 @@ class WebRTCEnv(Env):
 
     def reward(self):
         sla = 100
-        factor = 1 if self.observation.frame_g2g_delay[0] <= sla else -1
-        quality_score = self.observation.frame_size[0] / 1000
-        return factor * quality_score
+        delay_score = self.observation.frame_g2g_delay[0] / 100
+        quality_score = self.observation.frame_bitrate[0] / 1000
+        return quality_score - delay_score
 
 
 # gym.envs.register(

@@ -32,11 +32,11 @@ class FecContext(object):
         self.fec_delta_data = []
 
 class FrameContext(object):
-    def __init__(self, frame_id, captured_at, width, height) -> None:
+    def __init__(self, frame_id, captured_at) -> None:
         self.frame_id = frame_id
         self.captured_at = captured_at
-        self.width = width
-        self.height = height
+        self.width = 0
+        self.height = 0
         self.encoded_at = 0
         self.assembled_at = 0
         self.decoded_at = 0
@@ -54,38 +54,30 @@ class FrameContext(object):
     def last_rtp_send_ts(self):
         if list(filter(lambda x: x, self.rtp_packets.values())):
             return max([p.sent_at for p in self.rtp_packets.values()if p])
-        return None
+        return -1
 
     def last_rtp_recv_ts(self):
         if list(filter(lambda x: x, self.rtp_packets.values())):
             return max([p.acked_at for p in self.rtp_packets.values() if p])
-        return None
+        return -1 
 
     def encoding_delay(self):
-        return self.encoded_at - self.captured_at if self.encoded_at and self.captured_at else -1
+        return self.encoded_at - self.captured_at if self.encoded_at > 0 else -1
 
-    def transmission_delay(self):
-        return self.assembled_at - self.encoded_at if self.assembled_at and self.encoded_at else -1
+    def assemble_delay(self):
+        return self.assembled_at - self.captured_at if self.assembled_at > 0 else -1
+    
+    def pacing_delay(self):
+        return self.last_rtp_send_ts() - self.captured_at if self.last_rtp_send_ts() else -1
 
     def decoding_delay(self):
-        return self.decoded_at - self.assembled_at if self.decoded_at and self.assembled_at else -1
+        return self.decoded_at - self.captured_at if self.decoded_at > 0 else -1
 
     def g2g_delay(self):
-        return self.decoded_at - self.captured_at if self.decoded_at and self.captured_at else -1
+        return self.decoding_delay()
 
     def received(self):
         return self.assembled_at >= 0
-
-    def __str__(self) -> str:
-        rtp_size = sum([p.size for p in self.rtp_packets.values() if p])
-        return f'[{self.codec}] Frame id: {self.frame_id} {self.encoded_shape}' \
-            f', encoded/transmitted size: {self.encoded_size}/{rtp_size}'\
-            f', RTP range: {self.rtp_id_range} ({self.rtp_packets_num})' \
-            f', encode: {self.encoded_at - self.captured_at if self.encoded_at else -1} ms' \
-            f', send: {self.last_rtp_send_ts() - self.captured_at if self.last_rtp_send_ts() else -1} ms' \
-            f', recv: {self.last_rtp_recv_ts() - self.captured_at if self.last_rtp_recv_ts() else -1} ms' \
-            f', assembly: {self.assembled_at - self.captured_at if self.assembled_at else -1} ms' \
-            f', decode: {self.decoded_at - self.captured_at if self.decoded_at else -1} ms'
 
 
 class StreamingContext(object):
@@ -103,6 +95,25 @@ class StreamingContext(object):
         self.last_decoded_frame_id = 0
         self.last_egress_packet_id = 0
         self.last_acked_packet_id = 0
+
+    def codec(self) -> int:
+        for f in self.frames.values():
+            if f.codec:
+                return CODEC_NAMES.index(f.codec)
+        return 0
+
+    def fps(self):
+        res = 0
+        for i in range(self.last_captured_frame_id, -1, -1):
+            diff = self.frames[self.last_captured_frame_id].captured_at - \
+                self.frames[i].captured_at
+            if diff <= 1:
+                if self.frames[i].encoded_at > 0:
+                    res += 1
+            else:
+                break
+        return res
+
 
     def latest_frames(self, duration=1):
         res = []
@@ -147,7 +158,7 @@ def parse_line(line, context: StreamingContext) -> dict:
         frame_id = int(m[2])
         width = int(m[3])
         height = int(m[4])
-        frame = FrameContext(frame_id, ts, width, height)
+        frame = FrameContext(frame_id, ts)
         context.last_captured_frame_id = frame_id
         context.frames[frame_id] = frame
     elif line.startswith('(main.cc') and 'Program started' in line:
@@ -185,15 +196,17 @@ def parse_line(line, context: StreamingContext) -> dict:
             frame.rtp_packets[rtp_id] = None
             frame.rtp_id_range[0] = min(frame.rtp_id_range[0], rtp_id)
             frame.rtp_id_range[1] = max(frame.rtp_id_range[1], rtp_id)
-    elif line.startswith('(h264_encoder_impl.cc') and 'Start encoding' in line:
+    elif line.startswith('(video_stream_encoder.cc') and 'Start encoding' in line:
         m = re.match(re.compile(
-            '.*Start encoding, frame id: (\\d+), bitrate: (\\d+) kbps.*'), line)
+            '.*Start encoding, id: (\\d+), frame shape: (\\d+)x(\\d+).*'), line)
         frame_id = int(m[1])
-        bitrate = int(m[2])
+        width = int(m[2])
+        height = int(m[3])
         if frame_id > 0:
             frame: FrameContext = context.frames[frame_id]
-            frame.bitrate = bitrate
-    elif line.startswith('(libvpx_vp8_encoder.cc') and 'Start encoding' in line:
+            frame.width = width
+            frame.height = height
+    elif (line.startswith('(h264_encoder_impl.cc') or line.startswith('(libvpx_vp8_encoder.cc')) and 'Start encoding' in line:
         m = re.match(re.compile(
             '.*Start encoding, frame id: (\\d+), bitrate: (\\d+) kbps.*'), line)
         frame_id = int(m[1])
@@ -336,10 +349,10 @@ def analyze_frame(context: StreamingContext) -> None:
             last_frame_id = frame_id
             data_frame_delay.append({'id': frame_id,
                                      'ts': frame.captured_at,
-                                     'encoded by': frame.encoded_at - frame.captured_at if frame.encoded_at > 0 else 0,
-                                     'paced by': frame.last_rtp_send_ts() - frame.captured_at if frame.last_rtp_send_ts() else 0,
-                                     'assembled by': frame.assembled_at - frame.captured_at if frame.assembled_at > 0 else 0,
-                                     'decoded by': frame.decoded_at - frame.captured_at if frame.decoded_at > 0 else 0})
+                                     'encoded by': frame.encoding_delay(),
+                                     'paced by': frame.pacing_delay(),
+                                     'assembled by': frame.assemble_delay(),
+                                     'decoded by': frame.decoding_delay(),})
         elif started:
             lost_frames.append(frame.captured_at - context.start_ts)
     plt.close()
@@ -368,7 +381,7 @@ def analyze_frame(context: StreamingContext) -> None:
             y.append(frame.encoded_size / 1024)
             bitrates.append(frame.bitrate)
     qp_data = [(context.frames[frame_id].captured_at - context.start_ts, context.frames[frame_id].qp) 
-               for frame_id in frame_id_list]
+               for frame_id in frame_id_list if context.frames[frame_id].encoded_size > 0]
     plt.close()
     fig, ax1 = plt.subplots()
     ax1.plot(x, y)
