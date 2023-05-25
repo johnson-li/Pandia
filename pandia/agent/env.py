@@ -16,11 +16,16 @@ NORMALIZATION_RANGE = (-1, 1)
 RESOLUTION_LIST = [360, 480, 720, 960, 1080, 1440, 2160]
 
 
-def monitor_webrtc_sender(context: StreamingContext, stdout: str, stop_event: threading.Event):
+def monitor_webrtc_sender(context: StreamingContext, stdout: str, stop_event: threading.Event, sender_log=None):
+    f = open(sender_log, 'w+') if sender_log else None 
     while not stop_event.is_set():
         line = stdout.readline().decode().strip()
+        if f:
+            f.write(line + '\n')
         if line:
             parse_line(line, context)
+    if f:
+        f.close()
 
 
 def normalize(value, value_range, normalized_range=NORMALIZATION_RANGE):
@@ -256,7 +261,7 @@ class WebRTCEnv(Env):
 
     def __init__(self, config):
         self.uuid = 0
-        self.sender_log = os.path.join(RESULTS_PATH, 'sender.log')
+        self.sender_log = config.get('sender_log', None)
         self.frame_history_size = 10
         self.packet_history_size = 10
         self.packet_history_duration = 10
@@ -317,7 +322,7 @@ class WebRTCEnv(Env):
                                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
         stdout = self.process_sender.stderr
         self.monitor_thread = Thread(
-            target=monitor_webrtc_sender, args=(self.context, stdout, self.stop_event))
+            target=monitor_webrtc_sender, args=(self.context, stdout, self.stop_event, self.sender_log))
         self.monitor_thread.start()
 
     def reset(self, *, seed=None, options=None):

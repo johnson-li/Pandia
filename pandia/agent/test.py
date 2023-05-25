@@ -3,14 +3,16 @@ from pandia.log_analyzer import CODEC_NAMES
 
 
 def main():
-    env = WebRTCEnv({})
+    env = WebRTCEnv(config={'sender_log': '/tmp/pandia-sender.log',})
     obs, info = env.reset()
     action = Action()
     action.fps = 10
     action.resolution = 720
     action.bitrate = 800
     action.pacing_rate = 500 * 1024
-    for _ in range(30):
+    for i in range(30):
+        if i == 15:
+            action.resolution = 400 
         obs, reward, done, truncated, info = env.step(action.array())
         observation = Observation.from_array(obs)
         delays = (observation.frame_encoding_delay[0], 

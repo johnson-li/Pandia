@@ -513,9 +513,7 @@ def analyze_stream(context: StreamingContext) -> None:
 
 
 def main() -> None:
-    log_dir = RESULTS_PATH
-    sender_log = os.path.join(log_dir, 'sender.log')
-    receiver_log = os.path.join(log_dir, 'receiver.log')
+    sender_log = '/tmp/pandia-sender.log'
     context = StreamingContext()
     for line in open(sender_log).readlines():
         parse_line(line, context)
