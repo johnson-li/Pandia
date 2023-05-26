@@ -6,26 +6,19 @@ def main():
     env = WebRTCEnv(config={'sender_log': '/tmp/pandia-sender.log',})
     obs, info = env.reset()
     action = Action()
-    action.fps = 10
-    action.resolution = 720
-    action.bitrate = 800
-    action.pacing_rate = 500 * 1024
+    action.fps[0] = 10
+    action.resolution[0] = 720
+    action.bitrate[0] = 1024
+    action.pacing_rate[0] = 500 * 1024
+    print(action.array()) 
+    print(Action.from_array(action.array()))
     for i in range(30):
-        print(f'#{i} Act.: {action}')
+        if i == 10:
+            action.resolution[0] = 2160
+        elif i == 20:
+            action.resolution[0] = 240
         obs, reward, done, truncated, info = env.step(action.array())
         observation = Observation.from_array(obs)
-        delays = (observation.frame_encoding_delay[0], 
-                  observation.frame_pacing_delay[0], 
-                  observation.frame_assemble_delay[0], 
-                  observation.frame_g2g_delay[0])
-        print(f'#{i}, Reward: {reward:.02f}, '
-              f'Dly.: {delays}, '
-              f'{observation.frame_height[0]}p/{observation.frame_encoded_height[0]}p, '
-              f'FPS: {observation.fps[0]}, '
-              f'Codec: {CODEC_NAMES[observation.codec[0]]}, '
-              f'size: {observation.frame_size[0]}, '
-              f'B.r.: {observation.codec_bitrate[0]}, '
-              f'QP: {observation.frame_qp[0]}, ')
         if done or truncated:
             break
     env.close()

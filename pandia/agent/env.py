@@ -6,17 +6,20 @@ from threading import Event, Thread
 import time
 from typing import List
 import numpy as np
+import gymnasium as gym
 from gymnasium import Env, spaces
 from multiprocessing import shared_memory
 from pandia import RESULTS_PATH, SCRIPTS_PATH, BIN_PATH
 from pandia.log_analyzer import CODEC_NAMES, FrameContext, StreamingContext, parse_line
+from pandia.agent.normalization import nml, dnml, NORMALIZATION_RANGE
+
 
 DEFAULT_HISTORY_SIZE = 3
-NORMALIZATION_RANGE = (-1, 1)
-RESOLUTION_LIST = [240, 360, 480, 720, 960, 1080, 1440, 2160]
 
 
 def monitor_webrtc_sender(context: StreamingContext, stdout: str, stop_event: threading.Event, sender_log=None):
+    if sender_log and os.path.exists(sender_log):
+        os.remove(sender_log)
     f = open(sender_log, 'w+') if sender_log else None 
     while not stop_event.is_set():
         line = stdout.readline().decode().strip()
@@ -26,25 +29,6 @@ def monitor_webrtc_sender(context: StreamingContext, stdout: str, stop_event: th
             parse_line(line, context)
     if f:
         f.close()
-
-
-def normalize(name, value, value_range, normalized_range=NORMALIZATION_RANGE):
-    if name == 'resolution':
-        return RESOLUTION_LIST.index(min(RESOLUTION_LIST, key=lambda x:abs(x - value))) \
-            / len(RESOLUTION_LIST)
-    if type(value) == np.ndarray:
-        value = np.array(value, dtype=np.float32)
-    return (value - value_range[0]) / (value_range[1] - value_range[0]) * \
-        (normalized_range[1] - normalized_range[0]) + normalized_range[0]
-
-
-def denormalize(name, value, value_range, normalized_range=NORMALIZATION_RANGE):
-    if name == 'resolution':
-        return RESOLUTION_LIST[int(value * len(RESOLUTION_LIST))]
-    res = normalize(name, value, normalized_range, value_range)
-    if type(res) == np.ndarray:
-        res = np.array(res, dtype=np.int32)
-    return res
 
 
 class Observation(object):
@@ -104,7 +88,19 @@ class Observation(object):
         self.pacing_burst_interval = np.roll(self.pacing_burst_interval, 1)
         self.codec_bitrate = np.roll(self.codec_bitrate, 1)
         self.codec_fps = np.roll(self.codec_fps, 1)
-
+    
+    def __str__(self) -> str:
+        delays = (self.frame_encoding_delay[0], 
+                  self.frame_pacing_delay[0], 
+                  self.frame_assemble_delay[0], 
+                  self.frame_g2g_delay[0])
+        return f'Dly.: {delays}, ' \
+               f'{self.frame_height[0]}p/{self.frame_encoded_height[0]}p, ' \
+               f'FPS: {self.fps[0]}, ' \
+               f'Codec: {CODEC_NAMES[self.codec[0]]}, ' \
+               f'size: {self.frame_size[0]}, ' \
+               f'B.r.: {self.codec_bitrate[0]}, ' \
+               f'QP: {self.frame_qp[0]}, '
     def calculate_statistics(self, data):
         if not data:
             return 0
@@ -149,7 +145,7 @@ class Observation(object):
     def array(self):
         boundary = Observation.boundary()
         keys = sorted(boundary.keys())
-        return np.concatenate([normalize(k, getattr(self, k), boundary[k]) for k in keys])
+        return np.concatenate([nml(k, getattr(self, k), boundary[k]) for k in keys])
 
     @staticmethod
     def from_array(array):
@@ -158,7 +154,7 @@ class Observation(object):
         keys = sorted(boundary.keys())
         for i, k in enumerate(keys):
             setattr(observation, k, 
-                    denormalize(k, array[i * DEFAULT_HISTORY_SIZE:(i + 1) * DEFAULT_HISTORY_SIZE],    
+                    dnml(k, array[i * DEFAULT_HISTORY_SIZE:(i + 1) * DEFAULT_HISTORY_SIZE],    
                                 boundary[k]))
         return observation
 
@@ -189,21 +185,23 @@ class Observation(object):
     def observation_space():
         boundary = Observation.boundary()
         keys = sorted(boundary.keys())
-        low = np.ones(len(keys) * DEFAULT_HISTORY_SIZE) * NORMALIZATION_RANGE[0]
-        high = np.ones(len(keys) * DEFAULT_HISTORY_SIZE) * NORMALIZATION_RANGE[1]
-        return spaces.Box(low=low, high=high, dtype=np.int32)
+        low = np.ones(len(keys) * DEFAULT_HISTORY_SIZE, dtype=np.float32) \
+            * NORMALIZATION_RANGE[0]
+        high = np.ones(len(keys) * DEFAULT_HISTORY_SIZE, dtype=np.float32) \
+            * NORMALIZATION_RANGE[1]
+        return spaces.Box(low=low, high=high, dtype=np.float32)
 
 
 class Action():
     def __init__(self) -> None:
-        self.bitrate = 100
-        self.pacing_rate = 100
-        self.resolution = 720
+        self.bitrate = np.array([100, ], dtype=np.int32)
+        self.pacing_rate = np.array([100, ], dtype=np.int32)
+        self.resolution = np.array([720, ], dtype=np.int32)
 
-        self.fps = 30
-        self.padding_rate = 0
-        self.fec_rate_key = 0
-        self.fec_rate_delta = 0
+        self.fps = np.array([30, ], dtype=np.int32)
+        self.padding_rate = np.array([0, ], dtype=np.int32)
+        self.fec_rate_key = np.array([0, ], dtype=np.int32)
+        self.fec_rate_delta = np.array([0, ], dtype=np.int32)
     
     @staticmethod
     def boundary():
@@ -218,13 +216,15 @@ class Action():
         }
 
     def __str__(self) -> str:
-        return f'{self.resolution}p, ' \
-               f'sending: {self.pacing_rate} / {self.padding_rate} kbps, ' \
-               f'{self.bitrate} @ {self.fps} fps, ' \
-               f'fec: {self.fec_rate_key} / {self.fec_rate_delta}'
+        return f'{self.resolution[0]}p, ' \
+               f'Net.: {self.pacing_rate[0] / 1024:.02f}/{self.padding_rate[0] / 1024:.02f} mbps, ' \
+               f'Codec: {self.bitrate[0] / 1024:.02f} mbps @ {self.fps[0]} fps, ' \
+               f'FEC: {self.fec_rate_key[0]}/{self.fec_rate_delta[0]}'
 
     def write(self, shm):
         def write_int(value, offset):
+            if isinstance(value, np.ndarray):
+                value = value[0]
             value = int(value)
             bytes = value.to_bytes(4, byteorder='little')
             shm.buf[offset * 4:offset * 4 + 4] = bytes
@@ -239,7 +239,7 @@ class Action():
     def array(self):
         boundary = Action.boundary()
         keys = sorted(boundary.keys())
-        return np.array([normalize(k, getattr(self, k), boundary[k]) for k in keys])
+        return np.concatenate([nml(k, getattr(self, k), boundary[k]) for k in keys])
 
     @staticmethod
     def from_array(array):
@@ -247,20 +247,19 @@ class Action():
         boundary = Action.boundary()
         keys = sorted(boundary.keys())
         for i, k in enumerate(keys):
-            setattr(action, k, int(denormalize(k, array[i], boundary[k])))
+            setattr(action, k, dnml(k, array[i:i+1], boundary[k]))
 
         # Post process to avoid invalid action settings
-        if action.bitrate > action.pacing_rate:
-            action.pacing_rate = action.bitrate
-        action.resolution = min(RESOLUTION_LIST, key=lambda x:abs(x - action.resolution))
+        if action.bitrate[0] > action.pacing_rate[0]:
+            action.pacing_rate[0] = action.bitrate[0]
         return action
 
     @staticmethod
     def action_space():
         boundary = Action.boundary()
         keys = sorted(boundary.keys())
-        low = np.ones(len(keys)) * NORMALIZATION_RANGE[0]
-        high = np.ones(len(keys)) * NORMALIZATION_RANGE[1]
+        low = np.ones(len(keys), dtype=np.float32) * NORMALIZATION_RANGE[0]
+        high = np.ones(len(keys), dtype=np.float32) * NORMALIZATION_RANGE[1]
         return spaces.Box(low=low, high=high, dtype=np.float32)
 
     @staticmethod
@@ -269,11 +268,12 @@ class Action():
 
 
 class WebRTCEnv(Env):
-    metadata = {'render.modes': ['human']}
+    metadata = {}
 
-    def __init__(self, config):
+    def __init__(self, config={}):
         self.uuid = 0
         self.sender_log = config.get('sender_log', None)
+        self.init_timeout = 5
         self.frame_history_size = 10
         self.packet_history_size = 10
         self.packet_history_duration = 10
@@ -356,15 +356,19 @@ class WebRTCEnv(Env):
     
     def step(self, action):
         action = Action.from_array(action)
-        # print(f'#{self.step_count} Take action: {action}')
         action.write(self.shm)
         if not self.context.codec_initiated:
             assert self.step_count == 0
             self.start_webrtc()
-            print('Waiting for WebRTC ready...')
-            while not self.context.codec_initiated:
+            # print('Waiting for WebRTC ready...')
+            ts = time.time()
+            while not self.context.codec_initiated and \
+                time.time() - ts < self.init_timeout:
                 pass
-            print('WebRTC is running.')
+            if time.time() - ts >= self.init_timeout:
+                print(f'Warning: WebRTC init timeout.')
+                return self.get_observation(), 0, True, True, {}
+            # print('WebRTC is running.')
             self.start_ts = time.time()
         end_ts = self.start_ts + self.step_duration * self.step_count
         sleep_duration = end_ts - time.time()
@@ -374,7 +378,7 @@ class WebRTCEnv(Env):
         done = self.process_sender.poll() is not None or self.process_receiver.poll() is not None
         self.step_count += 1
         reward = self.reward()
-        # print(f'#{self.step_count} Reward: {reward}')
+        print(f'#{self.step_count} R.w.: {reward:.02f}, Act.: {action}, Obs.: {self.observation}')
         return self.get_observation(), reward, False, done, {}
 
     def close(self):
@@ -393,7 +397,8 @@ class WebRTCEnv(Env):
         return quality_score - delay_score
 
 
-# gym.envs.register(
-#     id='WebRTCEnv-v0',
-#     entry_point='pandia.agent.env:WebRTCEnv',
-# )
+gym.register(
+    id='WebRTCEnv-v0',
+    entry_point=WebRTCEnv,
+    max_episode_steps=300,
+)

@@ -161,11 +161,6 @@ def parse_line(line, context: StreamingContext) -> dict:
         frame = FrameContext(frame_id, ts)
         context.last_captured_frame_id = frame_id
         context.frames[frame_id] = frame
-    elif line.startswith('(main.cc') and 'Program started' in line:
-        m = re.match(re.compile(
-            '.*\\[(\\d+)\\] Program started.*'), line)
-        ts = int(m[1]) / 1000
-        # context.start_ts = ts
     elif line.startswith('(video_codec_initializer.cc') and 'SetupCodec' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] SetupCodec.*'), line)
@@ -191,8 +186,8 @@ def parse_line(line, context: StreamingContext) -> dict:
             '.*Assign RTP id, id: (\\d+), frame id: (\\d+).*'), line)
         rtp_id = int(m[1])
         frame_id = int(m[2])
-        if frame_id > 0:
-            frame: FrameContext = context.frames[frame_id]
+        frame: FrameContext = context.frames.get(frame_id, None)
+        if frame:
             frame.rtp_packets[rtp_id] = None
             frame.rtp_id_range[0] = min(frame.rtp_id_range[0], rtp_id)
             frame.rtp_id_range[1] = max(frame.rtp_id_range[1], rtp_id)
@@ -202,8 +197,8 @@ def parse_line(line, context: StreamingContext) -> dict:
         frame_id = int(m[1])
         width = int(m[2])
         height = int(m[3])
-        if frame_id > 0:
-            frame: FrameContext = context.frames[frame_id]
+        frame: FrameContext = context.frames.get(frame_id, None)
+        if frame:
             frame.width = width
             frame.height = height
     elif (line.startswith('(h264_encoder_impl.cc') or line.startswith('(libvpx_vp8_encoder.cc')) and 'Start encoding' in line:
@@ -211,7 +206,8 @@ def parse_line(line, context: StreamingContext) -> dict:
             '.*Start encoding, frame id: (\\d+), bitrate: (\\d+) kbps.*'), line)
         frame_id = int(m[1])
         bitrate = int(m[2])
-        if frame_id > 0:
+        frame: FrameContext = context.frames.get(frame_id, None)
+        if frame:
             frame: FrameContext = context.frames[frame_id]
             frame.bitrate = bitrate
     elif (line.startswith('(h264_encoder_impl.cc') or line.startswith('(libvpx_vp8_encoder.cc')) and 'Finish encoding' in line:
@@ -221,7 +217,8 @@ def parse_line(line, context: StreamingContext) -> dict:
         frame_type = int(m[2])
         frame_size = int(m[3])
         qp = int(m[4])
-        if frame_id > 0:
+        frame: FrameContext = context.frames.get(frame_id, None)
+        if frame:
             frame: FrameContext = context.frames[frame_id]
             frame.is_key_frame = frame_type == 3
             frame.dropped_by_encoder = frame_size == 0
@@ -255,8 +252,9 @@ def parse_line(line, context: StreamingContext) -> dict:
         ts = int(m[1]) / 1000
         rtp_id = int(m[2])
         received_at = int(m[3]) / 1000
-        packet: PacketContext = context.packets[rtp_id]
-        packet.received_at = received_at
+        packet = context.packets.get(rtp_id, None)
+        if packet:
+            packet.received_at = received_at
     elif line.startswith('(transport_feedback_demuxer.cc:') and 'Packet acked' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Packet acked, id: (\\d+), received: (\\d+), delta_sum: (-?\\d+).*'), line)
@@ -264,12 +262,12 @@ def parse_line(line, context: StreamingContext) -> dict:
         rtp_id = int(m[2])
         received = int(m[3])
         delta = int(m[4]) / 1000
-        # delta = 0
-        packet: PacketContext = context.packets[rtp_id]
-        packet.acked_at = ts - delta
-        packet.received = received == 1
-        context.last_acked_packet_id = max(
-            rtp_id, context.last_acked_packet_id)
+        packet: PacketContext = context.packets.get(rtp_id, None)
+        if packet:
+            packet.acked_at = ts - delta
+            packet.received = received == 1
+            context.last_acked_packet_id = max(
+                rtp_id, context.last_acked_packet_id)
     elif line.startswith('(ulpfec_generator.cc:') and 'SetProtectionParameters' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] SetProtectionParameters, delta: (\\d+), key: (\\d+).*'), line)
@@ -283,8 +281,9 @@ def parse_line(line, context: StreamingContext) -> dict:
             '.*SendVideo, frame id: (\\d+), number of RTP packets: (\\d+).*'), line)
         frame_id = int(m[1])
         rtp_packets = int(m[2])
-        frame = context.frames[frame_id]
-        frame.rtp_packets_num = rtp_packets
+        frame = context.frames.get(frame_id, None)
+        if frame:
+            frame.rtp_packets_num = rtp_packets
     elif line.startswith('(rtcp_receiver.cc') and 'Frame decoding acked' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Frame decoding acked, id: (\\d+).*'), line)
@@ -293,14 +292,15 @@ def parse_line(line, context: StreamingContext) -> dict:
         rtp_id = context.packet_id_map.get(rtp_sequence, None)
         if rtp_id:
             for i in range(context.last_captured_frame_id, 0, -1):
-                frame: FrameContext = context.frames[i]
-                if frame.rtp_id_range[0] == rtp_id:
-                    frame.decoded_at = ts
-                    context.last_decoded_frame_id = max(
-                        frame.frame_id, context.last_decoded_frame_id)
-                    break
-                if frame.rtp_id_range[0] < rtp_id:
-                    break
+                frame: FrameContext = context.frames.get(i, None)
+                if frame:
+                    if frame.rtp_id_range[0] == rtp_id:
+                        frame.decoded_at = ts
+                        context.last_decoded_frame_id = max(
+                            frame.frame_id, context.last_decoded_frame_id)
+                        break
+                    if frame.rtp_id_range[0] < rtp_id:
+                        break
     elif line.startswith('(rtcp_receiver.cc') and 'Frame reception acked' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Frame reception acked, id: (\\d+).*'), line)
@@ -308,12 +308,13 @@ def parse_line(line, context: StreamingContext) -> dict:
         rtp_sequence = int(m[2])
         rtp_id = context.packet_id_map[rtp_sequence]
         for i in range(context.last_captured_frame_id, 0, -1):
-            frame: FrameContext = context.frames[i]
-            if frame.rtp_id_range[0] == rtp_id:
-                frame.assembled_at = ts
-                break
-            if frame.rtp_id_range[0] < rtp_id:
-                break
+            frame: FrameContext = context.frames.get(i, None)
+            if frame:
+                if frame.rtp_id_range[0] == rtp_id:
+                    frame.assembled_at = ts
+                    break
+                if frame.rtp_id_range[0] < rtp_id:
+                    break
     elif line.startswith('(task_queue_paced_sender.cc') and 'SetPacingRates' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] SetPacingRates, pacing rate: (\\d+) kbps, pading rate: (\\d+) kbps.*'), line)

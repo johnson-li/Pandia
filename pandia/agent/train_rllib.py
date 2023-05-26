@@ -1,12 +1,15 @@
+import gymnasium as gym
 import ray
 from ray.rllib.algorithms.ppo import PPOConfig
+from ray.rllib.algorithms.sac import SACConfig
 from ray.tune.logger import pretty_print
 from pandia.agent.env import WebRTCEnv
 
 
 def main():
-    ray.init()
-    config = PPOConfig().environment(env=WebRTCEnv)
+    # WebRTCEnv.spec = gym.spec("WebRTCEnv-v0")
+    # WebRTCEnv.spec.max_episode_steps = 300
+    config = SACConfig().environment(env="WebRTCEnv-v0")
     config.log_level = "DEBUG"
     algo = config.build()
 
