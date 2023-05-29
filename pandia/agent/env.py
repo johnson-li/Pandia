@@ -195,7 +195,7 @@ class Observation(object):
 class Action():
     def __init__(self) -> None:
         self.bitrate = np.array([100, ], dtype=np.int32)
-        self.pacing_rate = np.array([100, ], dtype=np.int32)
+        self.pacing_rate = np.array([100 * 1024, ], dtype=np.int32)
         self.resolution = np.array([720, ], dtype=np.int32)
 
         self.fps = np.array([30, ], dtype=np.int32)
@@ -208,11 +208,11 @@ class Action():
         return {
             'bitrate': [10, 10 * 1024],
             # 'fps': [1, 60],
-            'pacing_rate': [10, 500 * 1024],
+            # 'pacing_rate': [10, 500 * 1024],
             # 'padding_rate': [0, 500 * 1024],
             # 'fec_rate_key': [0, 255],
             # 'fec_rate_delta': [0, 255],
-            'resolution': [240, 1080],
+            # 'resolution': [240, 1080],
         }
 
     def __str__(self) -> str:
@@ -376,6 +376,8 @@ class WebRTCEnv(Env):
             time.sleep(sleep_duration)
         self.observation.append(self.context)
         done = self.process_sender.poll() is not None or self.process_receiver.poll() is not None
+        if time.time() - self.start_ts > self.duration:
+            done = True
         self.step_count += 1
         reward = self.reward()
         print(f'#{self.step_count} R.w.: {reward:.02f}, Act.: {action}, Obs.: {self.observation}')

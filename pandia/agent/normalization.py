@@ -1,7 +1,7 @@
 import numpy as np
 
 NORMALIZATION_RANGE = [-1, 1]
-RESOLUTION_LIST = [240, 360, 480, 720, 960, 1080, 1440, 2160]
+RESOLUTION_LIST = [240, 360, 480, 720, 960, 1080]
 
 
 def nml(name, value: np.ndarray, value_range, normalized_range=NORMALIZATION_RANGE) -> np.ndarray:
@@ -10,6 +10,7 @@ def nml(name, value: np.ndarray, value_range, normalized_range=NORMALIZATION_RAN
             / len(RESOLUTION_LIST) for v in value]
         value = np.array(v, dtype=np.float32)
         value_range = [0, len(RESOLUTION_LIST)]
+    value = np.clip(value, value_range[0], value_range[1])
     res = (value - value_range[0]) / (value_range[1] - value_range[0]) * \
         (normalized_range[1] - normalized_range[0]) + normalized_range[0]
     return res.astype(np.float32)
