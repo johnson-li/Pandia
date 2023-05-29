@@ -273,6 +273,7 @@ class WebRTCEnv(Env):
     def __init__(self, config={}):
         self.uuid = 0
         self.sender_log = config.get('sender_log', None)
+        self.enable_shm = config.get('enable_shm', True)
         self.init_timeout = 5
         self.frame_history_size = 10
         self.packet_history_size = 10
@@ -306,7 +307,10 @@ class WebRTCEnv(Env):
         return self.observation.array()
 
     def shm_name(self):
-        return f'pandia_{self.uuid}'
+        if self.enable_shm:
+            return f'pandia_{self.uuid}'
+        else:
+            return f'pandia_disabled'
 
     def init_webrtc(self):
         try:
