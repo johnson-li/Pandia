@@ -302,7 +302,7 @@ class WebRTCEnv(Env):
             with open(f'/tmp/webrtc_{res}', 'w+') as f:
                 f.write('')
             return res
-
+    
     def get_observation(self):
         return self.observation.array()
 
@@ -342,6 +342,8 @@ class WebRTCEnv(Env):
         self.monitor_thread.start()
 
     def reset(self, *, seed=None, options=None):
+        if os.path.exists(f'/tmp/webrtc_{self.uuid}'):
+            os.remove(f'/tmp/webrtc_{self.uuid}')
         if self.process_sender:
             self.process_sender.kill()
         if self.process_receiver:
@@ -394,6 +396,8 @@ class WebRTCEnv(Env):
         self.process_server.kill()
         self.shm.close()
         self.shm.unlink()
+        if os.path.exists(f'/tmp/webrtc_{self.uuid}'):
+            os.remove(f'/tmp/webrtc_{self.uuid}')
 
     def reward(self):
         if self.observation.fps[0] == 0:
