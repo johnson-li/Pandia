@@ -97,9 +97,10 @@ class StreamingContext(object):
         self.last_acked_packet_id = 0
 
     def codec(self) -> int:
-        for f in self.frames.values():
-            if f.codec:
-                return CODEC_NAMES.index(f.codec)
+        for i in range(self.last_captured_frame_id, -1, -1):
+            frame = self.frames[i]
+            if frame.codec:
+                return CODEC_NAMES.index(frame.codec)
         return 0
 
     def fps(self):

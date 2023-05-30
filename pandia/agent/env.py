@@ -274,6 +274,7 @@ class WebRTCEnv(Env):
         self.uuid = 0
         self.sender_log = config.get('sender_log', None)
         self.enable_shm = config.get('enable_shm', True)
+        self.width = config.get('width', 2160)
         self.init_timeout = 5
         self.frame_history_size = 10
         self.packet_history_size = 10
@@ -356,7 +357,6 @@ class WebRTCEnv(Env):
         self.step_count = 0
         self.context = StreamingContext()
         self.observation = Observation()
-        self.width = 2160
         self.init_webrtc()
         return self.get_observation(), {}
     
