@@ -10,7 +10,7 @@ from pandia.agent.env import WebRTCEnv
 def main():
     config = SACConfig()\
         .environment(env=WebRTCEnv)\
-            .rollouts(num_rollout_workers=1)
+            .rollouts(num_rollout_workers=3)
     algo = config.build()
 
     for i in range(1000):

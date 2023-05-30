@@ -18,10 +18,10 @@ class PacketContext(object):
         self.payload_type = payload_type
         self.size = size
         self.received = None
-    
+
     def ack_delay(self):
         return self.acked_at - self.sent_at if self.acked_at > 0 else -1
-    
+
     def recv_delay(self):
         return self.received_at - self.sent_at if self.received_at > 0 else -1
 
@@ -59,14 +59,14 @@ class FrameContext(object):
     def last_rtp_recv_ts(self):
         if list(filter(lambda x: x, self.rtp_packets.values())):
             return max([p.acked_at for p in self.rtp_packets.values() if p])
-        return -1 
+        return -1
 
     def encoding_delay(self):
         return self.encoded_at - self.captured_at if self.encoded_at > 0 else -1
 
     def assemble_delay(self):
         return self.assembled_at - self.captured_at if self.assembled_at > 0 else -1
-    
+
     def pacing_delay(self):
         return self.last_rtp_send_ts() - self.captured_at if self.last_rtp_send_ts() else -1
 
@@ -98,8 +98,8 @@ class StreamingContext(object):
 
     def codec(self) -> int:
         for i in range(self.last_captured_frame_id, -1, -1):
-            frame = self.frames[i]
-            if frame.codec:
+            frame = self.frames.get(i, None)
+            if frame and frame.codec:
                 return CODEC_NAMES.index(frame.codec)
         return 0
 
@@ -382,7 +382,7 @@ def analyze_frame(context: StreamingContext) -> None:
             x.append(frame.captured_at - context.start_ts)
             y.append(frame.encoded_size / 1024)
             bitrates.append(frame.bitrate)
-    qp_data = [(context.frames[frame_id].captured_at - context.start_ts, context.frames[frame_id].qp) 
+    qp_data = [(context.frames[frame_id].captured_at - context.start_ts, context.frames[frame_id].qp)
                for frame_id in frame_id_list if context.frames[frame_id].encoded_size > 0]
     plt.close()
     fig, ax1 = plt.subplots()
@@ -495,9 +495,9 @@ def analyze_codec(context: StreamingContext) -> None:
 
 def analyze_fec(context: StreamingContext) -> None:
     plt.close()
-    plt.plot([d[0] - context.start_ts for d in context.fec.fec_key_data], 
+    plt.plot([d[0] - context.start_ts for d in context.fec.fec_key_data],
              [d[1] for d in context.fec.fec_key_data], '--')
-    plt.plot([d[0] - context.start_ts for d in context.fec.fec_delta_data], 
+    plt.plot([d[0] - context.start_ts for d in context.fec.fec_delta_data],
              [d[1] for d in context.fec.fec_delta_data], '-.')
     plt.xlabel('Timestamp (s)')
     plt.ylabel('FEC Ratio')
