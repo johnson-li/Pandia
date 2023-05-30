@@ -1,0 +1,5 @@
+gymnasium
+ray[rllib]
+tensorflow
+matplotlib
+torch
