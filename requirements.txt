@@ -3,3 +3,4 @@ ray[rllib]
 tensorflow
 matplotlib
 torch
+stable_baselines3

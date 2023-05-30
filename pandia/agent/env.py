@@ -6,12 +6,14 @@ from threading import Event, Thread
 import time
 from typing import List
 import numpy as np
-import gymnasium as gym
+import gymnasium
 from gymnasium import Env, spaces
 from multiprocessing import shared_memory
 from pandia import RESULTS_PATH, SCRIPTS_PATH, BIN_PATH
 from pandia.log_analyzer import CODEC_NAMES, FrameContext, StreamingContext, parse_line
 from pandia.agent.normalization import nml, dnml, NORMALIZATION_RANGE
+from gym.spaces.box import Box
+import gym
 
 
 DEFAULT_HISTORY_SIZE = 3
@@ -182,14 +184,17 @@ class Observation(object):
         }
 
     @staticmethod
-    def observation_space():
+    def observation_space(legacy_api=False):
         boundary = Observation.boundary()
         keys = sorted(boundary.keys())
         low = np.ones(len(keys) * DEFAULT_HISTORY_SIZE, dtype=np.float32) \
             * NORMALIZATION_RANGE[0]
         high = np.ones(len(keys) * DEFAULT_HISTORY_SIZE, dtype=np.float32) \
             * NORMALIZATION_RANGE[1]
-        return spaces.Box(low=low, high=high, dtype=np.float32)
+        if legacy_api:
+            return Box(low=low, high=high, dtype=np.float32)
+        else:
+            return spaces.Box(low=low, high=high, dtype=np.float32)
 
 
 class Action():
@@ -255,12 +260,15 @@ class Action():
         return action
 
     @staticmethod
-    def action_space():
+    def action_space(legacy_api=False):
         boundary = Action.boundary()
         keys = sorted(boundary.keys())
         low = np.ones(len(keys), dtype=np.float32) * NORMALIZATION_RANGE[0]
         high = np.ones(len(keys), dtype=np.float32) * NORMALIZATION_RANGE[1]
-        return spaces.Box(low=low, high=high, dtype=np.float32)
+        if legacy_api:
+            return Box(low=low, high=high, dtype=np.float32)
+        else:
+            return spaces.Box(low=low, high=high, dtype=np.float32)
 
     @staticmethod
     def shm_size():
@@ -270,10 +278,11 @@ class Action():
 class WebRTCEnv(Env):
     metadata = {}
 
-    def __init__(self, config={}):
+    def __init__(self, config={}, **kwargs) -> None:
         self.uuid = 0
         self.sender_log = config.get('sender_log', None)
         self.enable_shm = config.get('enable_shm', True)
+        self.legacy_api = config.get('legacy_api', False)
         self.width = config.get('width', 2160)
         self.init_timeout = 5
         self.frame_history_size = 10
@@ -287,8 +296,8 @@ class WebRTCEnv(Env):
         self.stop_event: Event = None
         self.context: StreamingContext = None
         self.observation: Observation = None
-        self.observation_space = Observation.observation_space()
-        self.action_space = Action.action_space()
+        self.observation_space = Observation.observation_space(self.legacy_api)
+        self.action_space = Action.action_space(self.legacy_api)
         self.process_sender = None
         self.process_receiver = None
         self.process_server = None
@@ -358,7 +367,10 @@ class WebRTCEnv(Env):
         self.context = StreamingContext()
         self.observation = Observation()
         self.init_webrtc()
-        return self.get_observation(), {}
+        if self.legacy_api:
+            return self.get_observation()
+        else:
+            return self.get_observation(), {}
     
     def step(self, action):
         action = Action.from_array(action)
@@ -387,7 +399,10 @@ class WebRTCEnv(Env):
         self.step_count += 1
         reward = self.reward()
         print(f'#{self.step_count} R.w.: {reward:.02f}, Act.: {action}, Obs.: {self.observation}')
-        return self.get_observation(), reward, False, done, {}
+        if self.legacy_api:
+            return self.get_observation(), reward, done, {}
+        else:
+            return self.get_observation(), reward, False, done, {}
 
     def close(self):
         self.stop_event.set()
@@ -407,8 +422,13 @@ class WebRTCEnv(Env):
         return quality_score - delay_score
 
 
+gymnasium.register(
+    id='WebRTCEnv-v0',
+    entry_point=WebRTCEnv,
+    max_episode_steps=30,
+)
 gym.register(
     id='WebRTCEnv-v0',
     entry_point=WebRTCEnv,
-    max_episode_steps=300,
+    max_episode_steps=30,
 )
