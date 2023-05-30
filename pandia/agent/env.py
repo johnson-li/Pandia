@@ -282,7 +282,7 @@ class WebRTCEnv(Env):
         self.uuid = 0
         self.sender_log = config.get('sender_log', None)
         self.enable_shm = config.get('enable_shm', True)
-        self.legacy_api = config.get('legacy_api', False)
+        self.legacy_api = config.get('legacy_api', True)
         self.width = config.get('width', 2160)
         self.init_timeout = 5
         self.frame_history_size = 10
@@ -302,6 +302,9 @@ class WebRTCEnv(Env):
         self.process_receiver = None
         self.process_server = None
         self.stop_event = None
+
+    def seed(self, s):
+        pass
 
     @staticmethod
     def random_uuid():
