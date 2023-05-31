@@ -52,14 +52,20 @@ class FrameContext(object):
         self.qp = 0
 
     def last_rtp_send_ts(self):
-        if list(filter(lambda x: x, self.rtp_packets.values())):
-            return max([p.sent_at for p in self.rtp_packets.values()if p])
-        return -1
+        last_ts = -1
+        for i in range(self.rtp_id_range[1], self.rtp_id_range[0] - 1, -1):
+            pkt = self.rtp_packets.get(i, None)
+            if pkt and pkt.sent_at > 0:
+                last_ts = pkt.sent_at
+        return last_ts
 
     def last_rtp_recv_ts(self):
-        if list(filter(lambda x: x, self.rtp_packets.values())):
-            return max([p.acked_at for p in self.rtp_packets.values() if p])
-        return -1
+        last_ts = -1
+        for i in range(self.rtp_id_range[1], self.rtp_id_range[0] - 1, -1):
+            pkt = self.rtp_packets.get(i, None)
+            if pkt and pkt.acked_at > 0:
+                return pkt.acked_at
+        return last_ts
 
     def encoding_delay(self):
         return self.encoded_at - self.captured_at if self.encoded_at > 0 else -1

@@ -3,15 +3,16 @@ from pandia.log_analyzer import CODEC_NAMES
 
 
 def main():
-    env = WebRTCEnv(config={'sender_log': '/tmp/pandia-sender.log',})
+    env = WebRTCEnv(config={
+        'sender_log': '/tmp/pandia-sender.log',
+        'legacy_api': False,
+    })
     obs, info = env.reset()
     action = Action()
     action.fps[0] = 10
     action.resolution[0] = 720
     action.bitrate[0] = 1024
     action.pacing_rate[0] = 500 * 1024
-    print(action.array()) 
-    print(Action.from_array(action.array()))
     for i in range(30):
         if i == 10:
             action.resolution[0] = 2160
