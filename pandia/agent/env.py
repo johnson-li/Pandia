@@ -22,7 +22,7 @@ DEFAULT_HISTORY_SIZE = 3
 def monitor_webrtc_sender(context: StreamingContext, stdout: str, stop_event: threading.Event, sender_log=None):
     if sender_log and os.path.exists(sender_log):
         os.remove(sender_log)
-    f = open(sender_log, 'w+') if sender_log else None 
+    f = open(sender_log, 'w+') if sender_log else None
     while not stop_event.is_set():
         line = stdout.readline().decode().strip()
         if f:
@@ -90,11 +90,11 @@ class Observation(object):
         self.pacing_burst_interval = np.roll(self.pacing_burst_interval, 1)
         self.codec_bitrate = np.roll(self.codec_bitrate, 1)
         self.codec_fps = np.roll(self.codec_fps, 1)
-    
+
     def __str__(self) -> str:
-        delays = (self.frame_encoding_delay[0], 
-                  self.frame_pacing_delay[0], 
-                  self.frame_assemble_delay[0], 
+        delays = (self.frame_encoding_delay[0],
+                  self.frame_pacing_delay[0],
+                  self.frame_assemble_delay[0],
                   self.frame_g2g_delay[0])
         return f'Dly.: {delays}, ' \
                f'{self.frame_height[0]}p/{self.frame_encoded_height[0]}p, ' \
@@ -131,7 +131,7 @@ class Observation(object):
             [frame.bitrate for frame in frames if frame.bitrate > 0])
         self.frame_qp[0] = self.calculate_statistics(
             [frame.qp for frame in frames if frame.qp > 0])
-        self.codec[0] = context.codec() 
+        self.codec[0] = context.codec()
         self.fps[0] = context.fps()
         self.packet_egress_rate[0] = sum([p.size for p in context.latest_egress_packets()])  \
                 / self.packet_statistics_duration * 8 / 1024
@@ -155,8 +155,8 @@ class Observation(object):
         boundary = Observation.boundary()
         keys = sorted(boundary.keys())
         for i, k in enumerate(keys):
-            setattr(observation, k, 
-                    dnml(k, array[i * DEFAULT_HISTORY_SIZE:(i + 1) * DEFAULT_HISTORY_SIZE],    
+            setattr(observation, k,
+                    dnml(k, array[i * DEFAULT_HISTORY_SIZE:(i + 1) * DEFAULT_HISTORY_SIZE],
                                 boundary[k]))
         return observation
 
@@ -207,13 +207,13 @@ class Action():
         self.padding_rate = np.array([0, ], dtype=np.int32)
         self.fec_rate_key = np.array([0, ], dtype=np.int32)
         self.fec_rate_delta = np.array([0, ], dtype=np.int32)
-    
+
     @staticmethod
     def boundary():
         return {
             'bitrate': [10, 10 * 1024],
             # 'fps': [1, 60],
-            # 'pacing_rate': [10, 500 * 1024],
+            'pacing_rate': [10, 500 * 1024],
             # 'padding_rate': [0, 500 * 1024],
             # 'fec_rate_key': [0, 255],
             # 'fec_rate_delta': [0, 255],
@@ -228,13 +228,13 @@ class Action():
         elif 'pacing_rate' in boundary.keys():
             res += f'P.r.: {self.pacing_rate[0] / 1024:.02f} mbps, '
         elif 'bitrate' in boundary.keys():
-            res += f'B.r.: {self.bitrate[0] / 1024:.02f} mbps, ' 
+            res += f'B.r.: {self.bitrate[0] / 1024:.02f} mbps, '
         elif 'fps' in boundary.keys():
             res += f'FPS: {self.fps[0]}, '
         elif 'fec_rate_key' in boundary.keys():
             res += f'FEC: {self.fec_rate_key[0]}/{self.fec_rate_delta[0]}'
         return res
-               
+
 
     def write(self, shm):
         def write_int(value, offset):
@@ -325,7 +325,7 @@ class WebRTCEnv(Env):
             with open(f'/tmp/webrtc_{res}', 'w+') as f:
                 f.write('')
             return res
-    
+
     def get_observation(self):
         return self.observation.array()
 
@@ -345,19 +345,19 @@ class WebRTCEnv(Env):
                 name=self.shm_name(), create=False, size=Action.shm_size())
             print('Shared memory opened: ', self.shm.name)
         self.stop_event = Event()
-        self.process_server = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_server'), '--port', str(self.uuid)], 
+        self.process_server = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_server'), '--port', str(self.uuid)],
                                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=False)
-        self.process_receiver = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'), 
-                                                  '--port', str(self.uuid), '--name', 'receiver', 
-                                                  '--receiving_only', 'true', 
-                                                  '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/'], 
+        self.process_receiver = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'),
+                                                  '--port', str(self.uuid), '--name', 'receiver',
+                                                  '--receiving_only', 'true',
+                                                  '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/'],
                                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=False)
 
     def start_webrtc(self):
-        self.process_sender = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'), 
+        self.process_sender = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'),
                                                 '--port', str(self.uuid), '--name', 'sender',
                                                 '--width', str(self.width), '--fps', str(30), '--autocall', 'true',
-                                                '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/'], 
+                                                '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/'],
                                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
         stdout = self.process_sender.stderr
         self.monitor_thread = Thread(
@@ -384,10 +384,10 @@ class WebRTCEnv(Env):
             return self.get_observation()
         else:
             return self.get_observation(), {}
-    
+
     def get_action(self):
         action = Action()
-        for k in Action.boundary(): 
+        for k in Action.boundary():
             if k == 'bitrate':
                 action.bitrate[0] = self.context.action_context.bitrate
             elif k == 'pacing_rate':
@@ -395,7 +395,7 @@ class WebRTCEnv(Env):
             elif k == 'resolution':
                 action.resolution[0] = self.context.action_context.resolution
         return action
-    
+
     def step(self, action):
         self.context.reset_action_context()
         action = Action.from_array(action)
@@ -424,7 +424,7 @@ class WebRTCEnv(Env):
         self.step_count += 1
         reward = self.reward()
         print(f'#{self.step_count} R.w.: {reward:.02f}, Act.: {action}, Obs.: {self.observation}')
-        if self.legacy_api:
+        if True:
             return self.get_observation(), reward, done, {}
         else:
             return self.get_observation(), reward, False, done, {}
