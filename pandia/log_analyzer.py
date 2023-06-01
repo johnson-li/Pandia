@@ -86,6 +86,14 @@ class FrameContext(object):
         return self.assembled_at >= 0
 
 
+class ActionContext(object):
+    def __init__(self) -> None:
+        self.bitrate = -1
+        self.fps = -1
+        self.resolution = -1
+        self.pacing_rate = -1
+
+
 class StreamingContext(object):
     def __init__(self) -> None:
         self.start_ts = 0
@@ -101,6 +109,10 @@ class StreamingContext(object):
         self.last_decoded_frame_id = 0
         self.last_egress_packet_id = 0
         self.last_acked_packet_id = 0
+        self.action_context = ActionContext()
+
+    def reset_action_context(self):
+        self.action_context = ActionContext()
 
     def codec(self) -> int:
         for i in range(self.last_captured_frame_id, -1, -1):
@@ -120,7 +132,6 @@ class StreamingContext(object):
             else:
                 break
         return res
-
 
     def latest_frames(self, duration=1):
         res = []
@@ -204,6 +215,7 @@ def parse_line(line, context: StreamingContext) -> dict:
         frame_id = int(m[1])
         width = int(m[2])
         height = int(m[3])
+        context.action_context.resolution = width
         frame: FrameContext = context.frames.get(frame_id, None)
         if frame:
             frame.width = width
@@ -213,6 +225,8 @@ def parse_line(line, context: StreamingContext) -> dict:
             '.*Start encoding, frame id: (\\d+), bitrate: (\\d+) kbps.*'), line)
         frame_id = int(m[1])
         bitrate = int(m[2])
+        if context.action_context.bitrate <= 0:
+            context.action_context.bitrate = bitrate
         frame: FrameContext = context.frames.get(frame_id, None)
         if frame:
             frame: FrameContext = context.frames[frame_id]

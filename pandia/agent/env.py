@@ -10,7 +10,7 @@ import gymnasium
 from gymnasium import Env, spaces
 from multiprocessing import shared_memory
 from pandia import RESULTS_PATH, SCRIPTS_PATH, BIN_PATH
-from pandia.log_analyzer import CODEC_NAMES, FrameContext, StreamingContext, parse_line
+from pandia.log_analyzer import CODEC_NAMES, ActionContext, FrameContext, StreamingContext, parse_line
 from pandia.agent.normalization import nml, dnml, NORMALIZATION_RANGE
 from gym.spaces.box import Box
 import gym
@@ -221,10 +221,20 @@ class Action():
         }
 
     def __str__(self) -> str:
-        return f'{self.resolution[0]}p, ' \
-               f'Net.: {self.pacing_rate[0] / 1024:.02f}/{self.padding_rate[0] / 1024:.02f} mbps, ' \
-               f'Codec: {self.bitrate[0] / 1024:.02f} mbps @ {self.fps[0]} fps, ' \
-               f'FEC: {self.fec_rate_key[0]}/{self.fec_rate_delta[0]}'
+        res = ''
+        boundary = Action.boundary()
+        if 'resolution' in boundary.keys():
+            res += f'Res.: {self.resolution[0]}p, '
+        elif 'pacing_rate' in boundary.keys():
+            res += f'P.r.: {self.pacing_rate[0] / 1024:.02f} mbps, '
+        elif 'bitrate' in boundary.keys():
+            res += f'B.r.: {self.bitrate[0] / 1024:.02f} mbps, ' 
+        elif 'fps' in boundary.keys():
+            res += f'FPS: {self.fps[0]}, '
+        elif 'fec_rate_key' in boundary.keys():
+            res += f'FEC: {self.fec_rate_key[0]}/{self.fec_rate_delta[0]}'
+        return res
+               
 
     def write(self, shm):
         def write_int(value, offset):
@@ -375,7 +385,19 @@ class WebRTCEnv(Env):
         else:
             return self.get_observation(), {}
     
+    def get_action(self):
+        action = Action()
+        for k in Action.boundary(): 
+            if k == 'bitrate':
+                action.bitrate[0] = self.context.action_context.bitrate
+            elif k == 'pacing_rate':
+                action.bitrate[0] = self.context.action_context.pacing_rate
+            elif k == 'resolution':
+                action.resolution[0] = self.context.action_context.resolution
+        return action
+    
     def step(self, action):
+        self.context.reset_action_context()
         action = Action.from_array(action)
         action.write(self.shm)
         if not self.context.codec_initiated:
