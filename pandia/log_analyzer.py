@@ -127,7 +127,7 @@ class StreamingContext(object):
             diff = self.frames[self.last_captured_frame_id].captured_at - \
                 self.frames[i].captured_at
             if diff <= 1:
-                if self.frames[i].encoded_at > 0:
+                if self.frames[i].encoded_at > 0 and self.frames[i].encoded_size > 0:
                     res += 1
             else:
                 break
@@ -267,7 +267,7 @@ def parse_line(line, context: StreamingContext) -> dict:
                         frame.rtp_packets[rtp_id] = packet
             context.last_egress_packet_id = max(
                 rtp_id, context.last_egress_packet_id)
-    elif line.startswith('(transport_feedback.cc:') and 'RTCP feedback' in line:
+    elif line.startswith('(transport_feedback.cc:') and 'RTCP feedback, packet acked' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] RTCP feedback, packet acked: (\\d+) at (\\d+).*'), line)
         ts = int(m[1]) / 1000

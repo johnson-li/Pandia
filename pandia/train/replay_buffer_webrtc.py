@@ -12,11 +12,18 @@ def save_replay_buffer(replay_buffer, path):
         print(f"Replay buffer saved to {path}")
 
 
-def main():
+def run(bw_limit=1024, name=str(uuid.uuid4())):
+    os.system('sudo tc qdisc del dev lo root 2> /dev/null')
+    if bw_limit > 0:
+        # os.system('sudo tc qdisc add dev lo root netem delay 50ms')
+        os.system(f'sudo tc qdisc add dev lo root handle 1: htb default 10')
+        os.system(f'sudo tc class add dev lo parent 1: classid 1:1 htb rate {bw_limit}kbit')
+        os.system(f'sudo tc filter add dev lo parent 1: protocol ip prio 1 u32 match ip src 0.0.0.0/0 flowid 1:1')
     env = WebRTCEnv(config={
         'legacy_api': True,
         'enable_shm': False,
-        'width': 720,
+        'width': 144,
+        'sender_log': 'sender_log.log',
         })
     done = False
     action = Action()
@@ -34,8 +41,14 @@ def main():
     rb_dir = os.path.expanduser("~/Workspace/Pandia/resources/replay_buffer")
     if not os.path.exists(rb_dir):
         os.makedirs(rb_dir)
-    name = f"replay_buffer_gcc_{uuid.uuid4()}.pkl"
+    name = f"replay_buffer_gcc_{name}.pkl"
     save_replay_buffer(replay_buffer, os.path.join(rb_dir, name))
+    os.system('sudo tc qdisc del dev lo root 2> /dev/null')
+
+
+def main():
+    for i in range(100, 200, 100):
+        run(bw_limit=i, name=str(i))
 
 
 if __name__ == "__main__":

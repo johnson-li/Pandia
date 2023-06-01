@@ -103,9 +103,10 @@ class Observation(object):
                f'size: {self.frame_size[0]} bytes, ' \
                f'B.r.: {self.frame_bitrate[0]} kbps, ' \
                f'QP: {self.frame_qp[0]}, '
+
     def calculate_statistics(self, data):
         if not data:
-            return 0
+            return -1
         return np.median(data)
 
     def append(self, context: StreamingContext):
@@ -113,14 +114,24 @@ class Observation(object):
         frames: List[FrameContext] = context.latest_frames()
         self.frame_encoding_delay[0] = self.calculate_statistics(
             [frame.encoding_delay() * 1000 for frame in frames if frame.encoding_delay() >= 0])
+        if self.frame_encoding_delay[0] < 0 and 'frame_encoding_delay' in self.boundary():
+            self.frame_encoding_delay[0] = self.boundary()['frame_encoding_delay'][1]
         self.frame_pacing_delay[0] = self.calculate_statistics(
             [frame.pacing_delay() * 1000 for frame in frames if frame.pacing_delay() >= 0])
+        if self.frame_pacing_delay[0] < 0 and 'frame_pacing_delay' in self.boundary():
+            self.frame_pacing_delay[0] = self.boundary()['frame_pacing_delay'][1]
         self.frame_decoding_delay[0] = self.calculate_statistics(
             [frame.decoding_delay() * 1000 for frame in frames if frame.decoding_delay() >= 0])
+        if self.frame_decoding_delay[0] < 0 and 'frame_decoding_delay' in self.boundary():
+            self.frame_decoding_delay[0] = self.boundary()['frame_decoding_delay'][1]
         self.frame_assemble_delay[0] = self.calculate_statistics(
             [frame.assemble_delay() * 1000 for frame in frames if frame.assemble_delay() >= 0])
+        if self.frame_assemble_delay[0] < 0 and 'frame_assemble_delay' in self.boundary():
+            self.frame_assemble_delay[0] = self.boundary()['frame_assemble_delay'][1]
         self.frame_g2g_delay[0] = self.calculate_statistics(
             [frame.g2g_delay() * 1000 for frame in frames if frame.g2g_delay() >= 0])
+        if self.frame_g2g_delay[0] < 0 and 'frame_g2g_delay' in self.boundary():
+            self.frame_g2g_delay[0] = self.boundary()['frame_g2g_delay'][1]
         self.frame_size[0] = self.calculate_statistics(
             [frame.encoded_size for frame in frames if frame.encoded_size > 0])
         self.frame_height[0] = self.calculate_statistics(
@@ -166,7 +177,7 @@ class Observation(object):
             'frame_encoding_delay': [0, 1000],
             # 'frame_pacing_delay': [0, 1000],
             # 'frame_decoding_delay': [0, 1000],
-            # 'frame_assemble_delay': [0, 1000],
+            'frame_assemble_delay': [0, 1000],
             'frame_g2g_delay': [0, 1000],
             'frame_size': [0, 1000_000],
             # 'frame_height': [0, 2160],
@@ -217,7 +228,7 @@ class Action():
             # 'padding_rate': [0, 500 * 1024],
             # 'fec_rate_key': [0, 255],
             # 'fec_rate_delta': [0, 255],
-            # 'resolution': [240, 1080],
+            # 'resolution': [144, 1080],
         }
 
     def __str__(self) -> str:
@@ -286,15 +297,13 @@ class Action():
 
 
 class WebRTCEnv(Env):
-    metadata = {}
-
-    def __init__(self, config={}, **kwargs) -> None:
-        print(f'WebRTCEnv init with config: {config}, kwargs: {kwargs}')
+    def __init__(self, config={}) -> None:
         self.uuid = 0
         self.sender_log = config.get('sender_log', None)
         self.enable_shm = config.get('enable_shm', True)
         self.legacy_api = config.get('legacy_api', True)
         self.width = config.get('width', 2160)
+        print(f'WebRTCEnv init with config: {config}')
         self.init_timeout = 5
         self.frame_history_size = 10
         self.packet_history_size = 10
@@ -411,7 +420,10 @@ class WebRTCEnv(Env):
                 pass
             if time.time() - ts >= self.init_timeout:
                 print(f'Warning: WebRTC init timeout.')
-                return self.get_observation(), 0, True, True, {}
+                if self.legacy_api:
+                    return self.get_observation(), 0, True, {}
+                else:
+                    return self.get_observation(), 0, True, True, {}
             # print('WebRTC is running.')
             self.start_ts = time.time()
         end_ts = self.start_ts + self.step_duration * self.step_count
@@ -425,10 +437,10 @@ class WebRTCEnv(Env):
         self.step_count += 1
         reward = self.reward()
         print(f'#{self.step_count} R.w.: {reward:.02f}, Act.: {action}, Obs.: {self.observation}')
-        if True:
-            return self.get_observation(), reward, done, {}
+        if self.legacy_api:
+            return [self.get_observation(), reward, done, {}]
         else:
-            return self.get_observation(), reward, False, done, {}
+            return [self.get_observation(), reward, False, done, {}]
 
     def close(self):
         self.stop_event.set()

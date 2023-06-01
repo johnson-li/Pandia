@@ -6,11 +6,13 @@ import cv2
 
 def main(width=1080):
     path = os.path.expanduser("~/Downloads/drive.mp4")
+    target_path = path.replace('.mp4', f'_{width}p.yuv')
+    if os.path.exists(target_path):
+        return
     cap = cv2.VideoCapture(path)
     frames = 100
     count = 0
     scale = width / 2160
-    target_path = path.replace('.mp4', f'_{width}p.yuv')
     data = []
     with open(target_path, 'bw+') as f:
         while cap.isOpened() and count < frames:
@@ -29,5 +31,5 @@ def main(width=1080):
 
 
 if __name__ == "__main__":
-    for w in [360, 720, 960, 1080, 1440, 2160]:
+    for w in [144, 240, 360, 720, 960, 1080, 1440, 2160]:
         main(w)
