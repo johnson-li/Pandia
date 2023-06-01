@@ -100,8 +100,8 @@ class Observation(object):
                f'{self.frame_height[0]}p/{self.frame_encoded_height[0]}p, ' \
                f'FPS: {self.fps[0]}, ' \
                f'Codec: {CODEC_NAMES[self.codec[0]]}, ' \
-               f'size: {self.frame_size[0]}, ' \
-               f'B.r.: {self.codec_bitrate[0]}, ' \
+               f'size: {self.frame_size[0]} bytes, ' \
+               f'B.r.: {self.frame_bitrate[0]} kbps, ' \
                f'QP: {self.frame_qp[0]}, '
     def calculate_statistics(self, data):
         if not data:
@@ -223,15 +223,15 @@ class Action():
     def __str__(self) -> str:
         res = ''
         boundary = Action.boundary()
-        if 'resolution' in boundary.keys():
+        if 'resolution' in boundary:
             res += f'Res.: {self.resolution[0]}p, '
-        elif 'pacing_rate' in boundary.keys():
+        if 'pacing_rate' in boundary:
             res += f'P.r.: {self.pacing_rate[0] / 1024:.02f} mbps, '
-        elif 'bitrate' in boundary.keys():
+        if 'bitrate' in boundary:
             res += f'B.r.: {self.bitrate[0] / 1024:.02f} mbps, '
-        elif 'fps' in boundary.keys():
+        if 'fps' in boundary:
             res += f'FPS: {self.fps[0]}, '
-        elif 'fec_rate_key' in boundary.keys():
+        if 'fec_rate_key' in boundary:
             res += f'FEC: {self.fec_rate_key[0]}/{self.fec_rate_delta[0]}'
         return res
 
@@ -387,12 +387,13 @@ class WebRTCEnv(Env):
 
     def get_action(self):
         action = Action()
+        print("asdf", str(action))
         for k in Action.boundary():
             if k == 'bitrate':
                 action.bitrate[0] = self.context.action_context.bitrate
-            elif k == 'pacing_rate':
-                action.bitrate[0] = self.context.action_context.pacing_rate
-            elif k == 'resolution':
+            if k == 'pacing_rate':
+                action.pacing_rate[0] = self.context.action_context.pacing_rate
+            if k == 'resolution':
                 action.resolution[0] = self.context.action_context.resolution
         return action
 

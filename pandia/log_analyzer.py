@@ -342,6 +342,7 @@ def parse_line(line, context: StreamingContext) -> dict:
         ts = int(m[1]) / 1000
         pacing_rate = int(m[2])
         padding_rate = int(m[3])
+        context.action_context.pacing_rate = pacing_rate
         context.networking.pacing_rate_data.append(
             [ts, pacing_rate, padding_rate])
     elif line.startswith('(video_stream_encoder.cc') and 'SetRates, ' in line:

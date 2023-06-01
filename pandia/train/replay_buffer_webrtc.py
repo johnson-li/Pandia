@@ -13,7 +13,8 @@ def save_replay_buffer(replay_buffer, path):
 def main():
     env = WebRTCEnv(config={
         'legacy_api': True,
-        'enable_shm': False
+        'enable_shm': False,
+        'width': 720,
         })
     done = False
     action = Action()
@@ -23,10 +24,11 @@ def main():
         obs, reward, done, info = env.step(action.array())
         action = env.get_action()
         print(f"GCC action: {action}")
-        replay_buffer.add(obs_pre, obs, action.array(), reward, done, info)
+        replay_buffer.add(obs_pre, obs, action.array(), reward, done, [{'TimeLimit.truncated': True}])
         obs_pre = obs
         if done:
             break
+    env.close()
     save_replay_buffer(replay_buffer, "replay_buffer_gcc")   
 
 
