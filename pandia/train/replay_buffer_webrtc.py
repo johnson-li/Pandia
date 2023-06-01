@@ -1,4 +1,6 @@
+import os
 import pickle
+import uuid
 from pandia.agent.env import Action, WebRTCEnv
 from stable_baselines3.common.buffers import ReplayBuffer
 from stable_baselines3 import SAC
@@ -29,7 +31,11 @@ def main():
         if done:
             break
     env.close()
-    save_replay_buffer(replay_buffer, "replay_buffer_gcc")   
+    rb_dir = os.path.expanduser("~/Workspace/Pandia/resources/replay_buffer")
+    if not os.path.exists(rb_dir):
+        os.makedirs(rb_dir)
+    name = f"replay_buffer_gcc_{uuid.uuid4()}.pkl"
+    save_replay_buffer(replay_buffer, os.path.join(rb_dir, name))
 
 
 if __name__ == "__main__":

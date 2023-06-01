@@ -211,9 +211,9 @@ class Action():
     @staticmethod
     def boundary():
         return {
-            'bitrate': [10, 10 * 1024],
+            'bitrate': [10, 20 * 1024],
             # 'fps': [1, 60],
-            'pacing_rate': [10, 500 * 1024],
+            'pacing_rate': [10, 800 * 1024],
             # 'padding_rate': [0, 500 * 1024],
             # 'fec_rate_key': [0, 255],
             # 'fec_rate_delta': [0, 255],
@@ -289,6 +289,7 @@ class WebRTCEnv(Env):
     metadata = {}
 
     def __init__(self, config={}, **kwargs) -> None:
+        print(f'WebRTCEnv init with config: {config}, kwargs: {kwargs}')
         self.uuid = 0
         self.sender_log = config.get('sender_log', None)
         self.enable_shm = config.get('enable_shm', True)
@@ -387,7 +388,6 @@ class WebRTCEnv(Env):
 
     def get_action(self):
         action = Action()
-        print("asdf", str(action))
         for k in Action.boundary():
             if k == 'bitrate':
                 action.bitrate[0] = self.context.action_context.bitrate
