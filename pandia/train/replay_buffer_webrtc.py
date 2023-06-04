@@ -20,7 +20,7 @@ def limit_network(bw=1024, delay=10):
 
 
 def run(bw=1024, delay=10, name=str(uuid.uuid4())):
-    os.system('sudo tc qdisc del dev lo root 2> /dev/null')
+    print(f"Starting exp, bw: {bw}, delay: {delay}")
     limit_network(bw, delay)
     env = WebRTCEnv(config={
         'legacy_api': True,
@@ -46,7 +46,6 @@ def run(bw=1024, delay=10, name=str(uuid.uuid4())):
         os.makedirs(rb_dir)
     name = f"replay_buffer_gcc_{name}.pkl"
     save_replay_buffer(replay_buffer, os.path.join(rb_dir, name))
-    os.system('sudo tc qdisc del dev lo root 2> /dev/null')
 
 
 def main():
