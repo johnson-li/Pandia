@@ -53,7 +53,7 @@ while true; do
 done
 
 cd ~/Workspace/webrtc/src
-gn gen out/Default --args='is_debug=true rtc_use_h264=true ffmpeg_branding="Chrome" use_rtti=true'
+# gn gen out/Default --args='is_debug=true rtc_use_h264=true ffmpeg_branding="Chrome" use_rtti=true'
 ninja -C out/Default
 cd -
 
@@ -69,10 +69,10 @@ done
 tmux send-key -t $session:1 "~/Workspace/webrtc/src/out/Default/peerconnection_server --port ${port}" Enter
 echo 'Server started'
 sleep .1
-tmux send-key -t $session:2 "~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --port ${port} --name receiver --receiving_only true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ 2> ~/Workspace/Pandia/results/receiver.log" Enter
+tmux send-key -t $session:2 "~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --port ${port} --name receiver --receiving_only true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ 2> /tmp/pandia-receiver.log" Enter
 echo 'Receiver started'
 sleep 3
-tmux send-key -t $session:3 "~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --port ${port} --width ${width} --fps ${fps} --name sender --autocall true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ 2> ~/Workspace/Pandia/results/sender.log" Enter
+tmux send-key -t $session:3 "~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --port ${port} --width ${width} --fps ${fps} --name sender --autocall true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ 2> /tmp/pandia-sender.log" Enter
 echo 'Sender started'
 tmux send-key -t $session:4 'nload lo' Enter
 tmux send-key -t $session:5 '' Enter

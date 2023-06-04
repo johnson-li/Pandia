@@ -56,8 +56,7 @@ class FrameContext(object):
         for i in range(self.rtp_id_range[1], self.rtp_id_range[0] - 1, -1):
             pkt = self.rtp_packets.get(i, None)
             if pkt and pkt.sent_at > 0:
-                last_ts = pkt.sent_at
-        return last_ts
+                return pkt.sent_at
 
     def last_rtp_recv_ts(self):
         last_ts = -1
@@ -74,6 +73,7 @@ class FrameContext(object):
         return self.assembled_at - self.captured_at if self.assembled_at > 0 else -1
 
     def pacing_delay(self):
+        if self.frame_id == 594:
         return self.last_rtp_send_ts() - self.captured_at if self.last_rtp_send_ts() else -1
 
     def decoding_delay(self):
@@ -380,16 +380,16 @@ def analyze_frame(context: StreamingContext) -> None:
             lost_frames.append(frame.captured_at - context.start_ts)
     plt.close()
     ylim = 0
-    for i in ['decoded by', 'assembled by', 'paced by', 'encoded by']:
+    colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
+    for i, k in enumerate(['decoded by', 'assembled by', 'paced by', 'encoded by'][::-1]):
         x = np.array([d['ts'] - context.start_ts for d in data_frame_delay])
-        y = np.array([d[i] for d in data_frame_delay]) * 1000
-        print(f'Median: {i} {np.median(y)} ms')
-        if not ylim:
-            ylim = np.percentile(y, 50)
+        y = np.array([d[k] for d in data_frame_delay]) * 1000
+        print(f'Median: {k} {np.median(y)} ms')
+        ylim = np.percentile(y, 50)
         indexes = (y > 0).nonzero()
-        plt.plot(x[indexes], y[indexes])
+        plt.plot(x[indexes], y[indexes], colors[i])
     plt.plot(lost_frames, [10 for _ in lost_frames], 'x')
-    plt.legend(['Decoding', 'Transmission', 'Pacing', 'Encoding', 'Lost'])
+    plt.legend(['Decoding', 'Transmission', 'Pacing', 'Encoding'][::-1] + ['Lost'])
     plt.xlabel('Timestamp (s)')
     plt.ylabel('Delay (ms)')
     plt.ylim([0, ylim * 1.8])
