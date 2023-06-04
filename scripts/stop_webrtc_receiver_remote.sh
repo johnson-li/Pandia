@@ -1,3 +1,5 @@
+#!/bin/bash
+
 host='mobix'
 
 port=9999
@@ -21,6 +23,10 @@ while true; do
         -p|--port)
             port="$2"
             shift 2
+            ;;
+        --)
+            shift
+            break
             ;;
         *)
             echo "Programming error"

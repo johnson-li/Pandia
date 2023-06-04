@@ -1,3 +1,5 @@
+#!/bin/bash
+
 host='mobix'
 
 duration=30
@@ -27,8 +29,12 @@ while true; do
             port="$2"
             shift 2
             ;;
+        --)
+            shift
+            break
+            ;;
         *)
-            echo "Programming error"
+            echo "Programming error: " $1
             exit 3
             ;;
     esac
