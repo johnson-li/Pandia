@@ -304,7 +304,7 @@ class WebRTCEnv(Env):
         self.legacy_api = config.get('legacy_api', True)
         self.width = config.get('width', 2160)
         print(f'WebRTCEnv init with config: {config}')
-        self.init_timeout = 5
+        self.init_timeout = 15
         self.frame_history_size = 10
         self.packet_history_size = 10
         self.packet_history_duration = 10
@@ -353,11 +353,13 @@ class WebRTCEnv(Env):
                 name=self.shm_name(), create=False, size=Action.shm_size())
             print('Shared memory opened: ', self.shm.name)
         self.stop_event = Event()
-        subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_sender_remote.sh'), '-p', str(self.uuid), '-d', str(self.duration + 10)],
+        subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'), '-p', str(self.uuid), '-d', str(self.duration + 10)],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=False)
+        print('Started WebRTC receiver...')
 
     def start_webrtc(self):
         self.process_sender = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'),
+                                                '--server', '195.148.127.230',
                                                 '--port', str(self.uuid), '--name', 'sender',
                                                 '--width', str(self.width), '--fps', str(30), '--autocall', 'true',
                                                 '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/'],
@@ -368,7 +370,7 @@ class WebRTCEnv(Env):
         self.monitor_thread.start()
 
     def stop_wevrtc(self):
-        subprocess.Popen([os.path.join(SCRIPTS_PATH, 'stop_webrtc_sender_remote.sh'), '-p', str(self.uuid)],
+        subprocess.Popen([os.path.join(SCRIPTS_PATH, 'stop_webrtc_receiver_remote.sh'), '-p', str(self.uuid)],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=False)
         if self.process_sender:
             self.process_sender.kill()
@@ -407,11 +409,11 @@ class WebRTCEnv(Env):
         if not self.context.codec_initiated:
             assert self.step_count == 0
             self.start_webrtc()
-            # print('Waiting for WebRTC ready...')
+            print('Waiting for WebRTC to be ready...')
             ts = time.time()
             while not self.context.codec_initiated and \
                 time.time() - ts < self.init_timeout:
-                pass
+                time.sleep(.1)
             if time.time() - ts >= self.init_timeout:
                 print(f'Warning: WebRTC init timeout.')
                 if self.legacy_api:
