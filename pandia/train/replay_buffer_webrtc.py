@@ -3,7 +3,6 @@ import pickle
 import uuid
 from pandia.agent.env import Action, WebRTCEnv
 from stable_baselines3.common.buffers import ReplayBuffer
-from stable_baselines3 import SAC
 
 
 def save_replay_buffer(replay_buffer, path):
@@ -19,7 +18,7 @@ def limit_network(bw=1024, delay=10):
         os.system(f"ssh mobix '~/Workspace/Pandia/scripts/start_traffic_control.sh -d {delay} -b {bw}'")
 
 
-def run(bw=1024, delay=10, name=str(uuid.uuid4())):
+def run(bw=1024, delay=10, width=240, name=str(uuid.uuid4())):
     print(f"Starting exp, bw: {bw}, delay: {delay}")
     limit_network(bw, delay)
     env = WebRTCEnv(config={
@@ -44,14 +43,14 @@ def run(bw=1024, delay=10, name=str(uuid.uuid4())):
     rb_dir = os.path.expanduser("~/Workspace/Pandia/resources/replay_buffer")
     if not os.path.exists(rb_dir):
         os.makedirs(rb_dir)
-    name = f"replay_buffer_gcc_{name}.pkl"
     save_replay_buffer(replay_buffer, os.path.join(rb_dir, name))
 
 
 def main():
-    j = 10
-    for i in range(100, 200, 100):
-        run(bw=i, delay=j, name=str(i))
+    for width in [144, 240, 360, 720, 960, 1080]:
+        for bw in range(100, 200, 100):
+            for delay in [10, 20, 50, 100, 200, 500]:
+                run(bw=bw, delay=delay, width=width, name=f'gcc_{width}p_{bw}kbps_{delay}ms.pkl')
 
 
 if __name__ == "__main__":
