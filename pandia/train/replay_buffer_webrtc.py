@@ -12,13 +12,16 @@ def save_replay_buffer(replay_buffer, path):
         print(f"Replay buffer saved to {path}")
 
 
-def run(bw_limit=1024, name=str(uuid.uuid4())):
+def limit_network(bw=1024, delay=10):
+    if bw <= 0:
+        os.system(f"ssh mobix '~/Workspace/Pandia/scripts/stop_traffic_control.sh'")
+    else:
+        os.system(f"ssh mobix '~/Workspace/Pandia/scripts/start_traffic_control.sh -d {delay} -b {bw}'")
+
+
+def run(bw=1024, delay=10, name=str(uuid.uuid4())):
     os.system('sudo tc qdisc del dev lo root 2> /dev/null')
-    if bw_limit > 0:
-        # os.system('sudo tc qdisc add dev lo root netem delay 50ms')
-        os.system(f'sudo tc qdisc add dev lo root handle 1: htb default 10')
-        os.system(f'sudo tc class add dev lo parent 1: classid 1:1 htb rate {bw_limit}kbit')
-        os.system(f'sudo tc filter add dev lo parent 1: protocol ip prio 1 u32 match ip src 0.0.0.0/0 flowid 1:1')
+    limit_network(bw, delay)
     env = WebRTCEnv(config={
         'legacy_api': True,
         'enable_shm': False,
@@ -47,8 +50,9 @@ def run(bw_limit=1024, name=str(uuid.uuid4())):
 
 
 def main():
+    j = 10
     for i in range(100, 200, 100):
-        run(bw_limit=i, name=str(i))
+        run(bw=i, delay=j, name=str(i))
 
 
 if __name__ == "__main__":
