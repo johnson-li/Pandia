@@ -73,7 +73,6 @@ class FrameContext(object):
         return self.assembled_at - self.captured_at if self.assembled_at > 0 else -1
 
     def pacing_delay(self):
-        if self.frame_id == 594:
         return self.last_rtp_send_ts() - self.captured_at if self.last_rtp_send_ts() else -1
 
     def decoding_delay(self):

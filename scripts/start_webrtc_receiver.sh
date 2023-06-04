@@ -1,7 +1,7 @@
 #!/bin/bash
 
 duration=30
-port=9999
+port=7999
 
 set -o errexit -o pipefail -o noclobber -o nounset
 ! getopt --test > /dev/null
@@ -45,9 +45,9 @@ for i in `seq 1 5`
 do
   tmux new-window -t ${session}:$i
 done
-tmux send-key -t $session:1 "~/Workspace/webrtc/src/out/Default/peerconnection_server --port ${port}" Enter
+tmux send-key -t $session:1 "sudo ip netns exec pandia ~/Workspace/webrtc/src/out/Default/peerconnection_server --port ${port}" Enter
 echo 'Server started'
 sleep .1
-tmux send-key -t $session:2 "~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --port ${port} --name receiver --receiving_only true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ 2> /tmp/pandia-receiver.log" Enter
+tmux send-key -t $session:2 "sudo ip netns exec pandia ~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --port ${port} --name receiver --receiving_only true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ 2> /dev/null" Enter
 tmux send-key -t $session:3 "sleep ${duration}; tmux kill-session -t ${session} 2> /dev/null" Enter
 echo 'Receiver started'

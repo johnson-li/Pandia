@@ -327,7 +327,7 @@ class WebRTCEnv(Env):
     @staticmethod
     def random_uuid():
         while True:
-            res = random.randint(9_000, 9_999)
+            res = random.randint(7_000, 7_999)
             if os.path.exists(f'/tmp/webrtc_{res}'):
                 continue
             with open(f'/tmp/webrtc_{res}', 'w+') as f:
@@ -353,7 +353,7 @@ class WebRTCEnv(Env):
                 name=self.shm_name(), create=False, size=Action.shm_size())
             print('Shared memory opened: ', self.shm.name)
         self.stop_event = Event()
-        subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_sender_remote.sh'), '-p', str(self.uuid), '-d', '30'],
+        subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_sender_remote.sh'), '-p', str(self.uuid), '-d', str(self.duration + 10)],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=False)
 
     def start_webrtc(self):

@@ -1,9 +1,7 @@
-#!/bin/bash
-
 host='mobix'
 
 duration=30
-port=9999
+port=7999
 
 set -o errexit -o pipefail -o noclobber -o nounset
 ! getopt --test > /dev/null
@@ -29,12 +27,8 @@ while true; do
             port="$2"
             shift 2
             ;;
-        --)
-            shift
-            break
-            ;;
         *)
-            echo "Programming error: " $1
+            echo "Programming error"
             exit 3
             ;;
     esac
