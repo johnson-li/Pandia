@@ -175,7 +175,7 @@ class Observation(object):
     def boundary():
         return {
             'frame_encoding_delay': [0, 1000],
-            # 'frame_pacing_delay': [0, 1000],
+            'frame_pacing_delay': [0, 1000],
             # 'frame_decoding_delay': [0, 1000],
             'frame_assemble_delay': [0, 1000],
             'frame_g2g_delay': [0, 1000],

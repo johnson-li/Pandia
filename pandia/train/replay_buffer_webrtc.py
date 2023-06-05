@@ -6,6 +6,7 @@ from stable_baselines3.common.buffers import ReplayBuffer
 
 
 rb_dir = os.path.expanduser("~/Workspace/Pandia/resources/replay_buffer")
+log_dir = os.path.expanduser("~/Workspace/Pandia/resources/logs")
 
 
 def save_replay_buffer(replay_buffer, path):
@@ -28,7 +29,7 @@ def run(bw=1024, delay=10, width=144, name=str(uuid.uuid4())):
         'legacy_api': True,
         'enable_shm': False,
         'width': width,
-        'sender_log': 'sender_log.log',
+        'sender_log': os.path.join(log_dir, f'{name}.log'),
         })
     done = False
     action = Action()
@@ -45,7 +46,7 @@ def run(bw=1024, delay=10, width=144, name=str(uuid.uuid4())):
     env.close()
     if not os.path.exists(rb_dir):
         os.makedirs(rb_dir)
-    save_replay_buffer(replay_buffer, os.path.join(rb_dir, name))
+    save_replay_buffer(replay_buffer, os.path.join(rb_dir, f'{name}.pkl'))
 
 
 def main():
@@ -55,8 +56,8 @@ def main():
                    10 * 1024, 20 * 1024, 50 * 1024, 80 * 1024,
                    100 * 1024, 200 * 1024, 500 * 1024]:
             for delay in [10, 20, 50, 80, 100, 200, 500]:
-                name = f'gcc_{width}p_{bw}kbps_{delay}ms.pkl'
-                path = os.path.join(rb_dir, name)
+                name = f'gcc_{width}p_{bw}kbps_{delay}ms'
+                path = os.path.join(rb_dir, f'{name}.pkl')
                 if not os.path.exists(path):
                     run(bw=bw, delay=delay, width=width, name=name)
 
