@@ -5,6 +5,9 @@ from pandia.agent.env import Action, WebRTCEnv
 from stable_baselines3.common.buffers import ReplayBuffer
 
 
+rb_dir = os.path.expanduser("~/Workspace/Pandia/resources/replay_buffer")
+
+
 def save_replay_buffer(replay_buffer, path):
     with open(path, "wb+") as f:
         pickle.dump(replay_buffer, f, protocol=pickle.HIGHEST_PROTOCOL)
@@ -18,13 +21,13 @@ def limit_network(bw=1024, delay=10):
         os.system(f"ssh mobix '~/Workspace/Pandia/scripts/start_traffic_control.sh -d {delay} -b {bw}'")
 
 
-def run(bw=1024, delay=10, width=240, name=str(uuid.uuid4())):
+def run(bw=1024, delay=10, width=144, name=str(uuid.uuid4())):
     print(f"Starting exp, bw: {bw}, delay: {delay}")
     limit_network(bw, delay)
     env = WebRTCEnv(config={
         'legacy_api': True,
         'enable_shm': False,
-        'width': 144,
+        'width': width,
         'sender_log': 'sender_log.log',
         })
     done = False
@@ -40,7 +43,6 @@ def run(bw=1024, delay=10, width=240, name=str(uuid.uuid4())):
         if done:
             break
     env.close()
-    rb_dir = os.path.expanduser("~/Workspace/Pandia/resources/replay_buffer")
     if not os.path.exists(rb_dir):
         os.makedirs(rb_dir)
     save_replay_buffer(replay_buffer, os.path.join(rb_dir, name))
@@ -48,9 +50,15 @@ def run(bw=1024, delay=10, width=240, name=str(uuid.uuid4())):
 
 def main():
     for width in [144, 240, 360, 720, 960, 1080]:
-        for bw in range(100, 200, 100):
-            for delay in [10, 20, 50, 100, 200, 500]:
-                run(bw=bw, delay=delay, width=width, name=f'gcc_{width}p_{bw}kbps_{delay}ms.pkl')
+        for bw in [100, 200, 500, 800,
+                   1 * 1024, 2 * 1024, 5 * 1024, 8 * 1024,
+                   10 * 1024, 20 * 1024, 50 * 1024, 80 * 1024,
+                   100 * 1024, 200 * 1024, 500 * 1024]:
+            for delay in [10, 20, 50, 80, 100, 200, 500]:
+                name = f'gcc_{width}p_{bw}kbps_{delay}ms.pkl'
+                path = os.path.join(rb_dir, name)
+                if not os.path.exists(path):
+                    run(bw=bw, delay=delay, width=width, name=name)
 
 
 if __name__ == "__main__":
