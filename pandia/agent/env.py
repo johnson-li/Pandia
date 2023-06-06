@@ -302,7 +302,7 @@ class WebRTCEnv(Env):
         self.sender_log = config.get('sender_log', None)
         self.enable_shm = config.get('enable_shm', True)
         self.legacy_api = config.get('legacy_api', True)
-        self.width = config.get('width', 2160)
+        self.width = config.get('width', 720)
         print(f'WebRTCEnv init with config: {config}')
         self.init_timeout = 15
         self.frame_history_size = 10
@@ -432,7 +432,7 @@ class WebRTCEnv(Env):
             done = True
         self.step_count += 1
         reward = self.reward()
-        print(f'#{self.step_count} R.w.: {reward:.02f}, Act.: {action}, Obs.: {self.observation}')
+        print(f'[{int(time.time())}] #{self.step_count} R.w.: {reward:.02f}, Act.: {action}, Obs.: {self.observation}')
         if self.legacy_api:
             return [self.get_observation(), reward, done, {}]
         else:

@@ -144,7 +144,8 @@ class StreamingContext(object):
     def latest_egress_packets(self, duration=1):
         res = []
         for i in range(self.last_egress_packet_id, 0, -1):
-            if self.packets[i].sent_at >= self.packets[self.last_egress_packet_id].sent_at - duration:
+            if i in self.packets and \
+                self.packets[i].sent_at >= self.packets[self.last_egress_packet_id].sent_at - duration:
                 res.append(self.packets[i])
             else:
                 break
@@ -153,7 +154,8 @@ class StreamingContext(object):
     def latest_acked_packets(self, duration=1):
         res = []
         for i in range(self.last_acked_packet_id, 0, -1):
-            if self.packets[i].acked_at >= self.packets[self.last_acked_packet_id].acked_at - duration:
+            if i in self.packets and \
+                self.packets[i].acked_at >= self.packets[self.last_acked_packet_id].acked_at - duration:
                 res.append(self.packets[i])
             else:
                 break
