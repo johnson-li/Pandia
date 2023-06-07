@@ -49,6 +49,8 @@ if sudo ip netns list| grep $ns > /dev/null; then
     echo 'Network namespace already exists'
 else
     echo 'Create network namespace:' $ns
+    sudo mkdir -p /etc/netns/$ns
+    sudo sh -c "echo nameserver 8.8.8.8 > /etc/netns/${ns}/resolv.conf"
     sudo ip netns add $ns
     sudo ip link add $veth type veth peer name $vpeer
     sudo ip link set $vpeer netns $ns
