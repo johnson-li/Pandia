@@ -1,4 +1,5 @@
 #!/bin/bash
+set -o errexit -o pipefail -o noclobber -o nounset
 
 while read -r line
 do 
