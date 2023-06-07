@@ -346,9 +346,7 @@ class WebRTCEnv(Env):
             print('Shared memory opened: ', self.shm.name)
         self.stop_event = Event()
         subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'), 
-                          '-p', str(self.port), '-d', str(self.duration + 10),
-                          '-n', str(self.env_id)],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=False)
+                          '-p', str(self.port), '-d', str(self.duration + 10)], shell=False)
         print('Started WebRTC receiver...')
 
     def start_webrtc(self):
