@@ -1,4 +1,5 @@
 #!/bin/bash
+set -o errexit -o pipefail -o noclobber -o nounset
 
 cd ~/Workspace/rl-baselines3-zoo
 export CUDA_VISIBLE_DEVICES=""

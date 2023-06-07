@@ -298,7 +298,7 @@ class Action():
 
 class WebRTCEnv(Env):
     def __init__(self, config={}) -> None:
-        self.port = config.get('port', 7001)
+        self.port = int(config.get('port', 7001))
         assert self.port >= 7001 and self.port <= 7099
         self.sender_log = config.get('sender_log', None)
         self.enable_shm = config.get('enable_shm', True)
@@ -326,22 +326,12 @@ class WebRTCEnv(Env):
     def seed(self, s):
         pass
 
-    @staticmethod
-    def random_uuid():
-        while True:
-            res = random.randint(7_000, 7_999)
-            if os.path.exists(f'/tmp/webrtc_{res}'):
-                continue
-            with open(f'/tmp/webrtc_{res}', 'w+') as f:
-                f.write('')
-            return res
-
     def get_observation(self):
         return self.observation.array()
 
     def shm_name(self):
         if self.enable_shm:
-            return f'pandia_{self.uuid}'
+            return f'pandia_{self.port}'
         else:
             return f'pandia_disabled'
 
@@ -356,7 +346,7 @@ class WebRTCEnv(Env):
             print('Shared memory opened: ', self.shm.name)
         self.stop_event = Event()
         subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'), 
-                          '-p', str(self.uuid), '-d', str(self.duration + 10),
+                          '-p', str(self.port), '-d', str(self.duration + 10),
                           '-n', str(self.env_id)],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=False)
         print('Started WebRTC receiver...')
@@ -374,7 +364,7 @@ class WebRTCEnv(Env):
         self.monitor_thread.start()
 
     def stop_wevrtc(self):
-        subprocess.Popen([os.path.join(SCRIPTS_PATH, 'stop_webrtc_receiver_remote.sh'), '-p', str(self.uuid)],
+        subprocess.Popen([os.path.join(SCRIPTS_PATH, 'stop_webrtc_receiver_remote.sh'), '-p', str(self.port)],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=False)
         if self.process_sender:
             self.process_sender.kill()
@@ -382,10 +372,7 @@ class WebRTCEnv(Env):
             self.stop_event.set()
 
     def reset(self, *, seed=None, options=None):
-        if os.path.exists(f'/tmp/webrtc_{self.uuid}'):
-            os.remove(f'/tmp/webrtc_{self.uuid}')
         self.stop_wevrtc()
-        self.uuid = self.random_uuid()
         self.step_count = 0
         self.context = StreamingContext()
         self.observation = Observation()
@@ -446,8 +433,6 @@ class WebRTCEnv(Env):
         self.stop_wevrtc()
         self.shm.close()
         self.shm.unlink()
-        if os.path.exists(f'/tmp/webrtc_{self.uuid}'):
-            os.remove(f'/tmp/webrtc_{self.uuid}')
 
     def reward(self):
         if self.observation.fps[0] == 0:
