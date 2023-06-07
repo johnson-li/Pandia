@@ -3,7 +3,7 @@
 host='mobix'
 
 duration=30
-port=7999
+port=7001
 
 set -o errexit -o pipefail -o noclobber -o nounset
 ! getopt --test > /dev/null
@@ -40,4 +40,4 @@ while true; do
     esac
 done
 
-ssh $host "cd ~/Workspace/Pandia && ./scripts/start_webrtc_receiver.sh -p $port -d $duration"
+ssh $host "cd ~/Workspace/Pandia && ./scripts/start_webrtc_receiver.sh -p $port -d $duration -n $name"
