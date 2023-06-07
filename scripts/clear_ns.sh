@@ -2,15 +2,14 @@
 set -o errexit -o pipefail -o noclobber -o nounset
 
 while read -r line
-do 
-    IFS=' _'
+do
+    IFS=' '
     read -a array <<< "$line"
-    port=${array[1]}
-    echo $port
-    ns=pandia_$port
+    ns=${array[0]}
+    port=${ns:6}
     veth=veth$port
-    vpeer=vpeer$port
-    sudo ip netns del $ns 
-    sudo ip link del $veth 
-    sudo ip link del $vpeer 
+    ns=pandia$port
+    echo Delete ns, port: $port, veth: $veth, ns: $ns
+    sudo ip link del $veth || true
+    sudo ip netns del $ns || true
 done < <(sudo ip netns list)

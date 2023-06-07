@@ -40,16 +40,17 @@ done
 
 # Create network namespace before starting tmux session
 iface=eno1
-ns=pandia_$port
+ns=pandia$port
 veth=veth$port
 vpeer=vpeer$port
 veth_addr=10.200.1.${port:(-2)}
 vpeer_addr=10.200.1.1${port:(-2)}
-if sudo ip netns list| grep $ns; then
+if sudo ip netns list| grep $ns > /dev/null; then
     echo 'Network namespace already exists'
 else
+    echo 'Create network namespace:' $ns
     sudo ip netns add $ns
-    sudo ip link add $veth type veth peer name $vpeer 2> /dev/null || true
+    sudo ip link add $veth type veth peer name $vpeer
     sudo ip link set $vpeer netns $ns
     sudo ip addr add $veth_addr/24 dev $veth
     sudo ip link set $veth up
@@ -69,17 +70,17 @@ else
     sudo iptables -t nat -A PREROUTING -i ${iface} -p tcp --dport ${port} -j DNAT --to-destination ${vpeer_addr}:${port}
 fi
 
-session=pandia_$port
+session=pandia$port
 tmux kill-session -t $session 2> /dev/null || true
 tmux new-session -d -s $session
 for i in `seq 1 5`
 do
   tmux new-window -t ${session}:$i
 done
-tmux send-key -t $session:1 "sudo ip netns exec pandia ~/Workspace/webrtc/src/out/Default/peerconnection_server --port ${port}" Enter
+tmux send-key -t $session:1 "sudo ip netns exec ${ns} ~/Workspace/webrtc/src/out/Default/peerconnection_server --port ${port}" Enter
 echo 'Server started'
 sleep .1
-tmux send-key -t $session:2 "sudo ip netns exec pandia ~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --port ${port} --name receiver --receiving_only true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ 2> /tmp/pandia-receiver.log" Enter
+tmux send-key -t $session:2 "sudo ip netns exec ${ns} ~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --port ${port} --name receiver --receiving_only true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ 2> /dev/null" Enter
 
 # Remove network namespace and kill tmux session after duration
 tmux send-key -t $session:3 "sleep ${duration}; tmux kill-session -t ${session} 2> /dev/null" Enter
