@@ -39,10 +39,10 @@ function init_iptables () {
     sudo iptables -t nat -A PREROUTING -i $iface -p tcp --dport $port -j DNAT --to-destination ${vpeer_addr}:$port
 }
 
-for i in `seq 1 2`
+for i in `seq 1 9`
 do
     if [[ 1 == ${#i} ]]; then
         i="0$i"
     fi
-    init_iptables $i  
+    init_iptables $i
 done
