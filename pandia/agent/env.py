@@ -28,12 +28,12 @@ def monitor_webrtc_sender(context: StreamingContext, stdout: str, stop_event: th
     f = open(sender_log, 'w+') if sender_log else None
     while not stop_event.is_set():
         line = stdout.readline().decode().strip()
-        if f:
-            f.write(line + '\n')
         if line:
+            if f:
+                f.write(line + '\n')
             parse_line(line, context)
-        # if not context.codec_initiated:
-        #     log(line)
+            # if not context.codec_initiated:
+            #     log(line)
     if f:
         f.close()
 
@@ -311,7 +311,7 @@ class WebRTCEnv(Env):
         self.duration = int(config.get('duration', 60))
         self.width = int(config.get('width', 720))
         log(f'WebRTCEnv init with config: {config}')
-        self.init_timeout = 15
+        self.init_timeout = 8
         self.frame_history_size = 10
         self.packet_history_size = 10
         self.packet_history_duration = 10
@@ -349,10 +349,9 @@ class WebRTCEnv(Env):
                 name=self.shm_name(), create=False, size=Action.shm_size())
             log(f'Shared memory opened: {self.shm.name}')
         self.stop_event = Event()
-        subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'), 
+        process = subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'), 
                           '-p', str(self.port), '-d', str(self.duration + 10)], shell=False)
-        log('Starting WebRTC receiver, wait for 3 seconds')
-        time.sleep(3)
+        process.wait()
 
     def start_webrtc(self):
         self.process_sender = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'),
@@ -367,8 +366,9 @@ class WebRTCEnv(Env):
         self.monitor_thread.start()
 
     def stop_wevrtc(self):
-        subprocess.Popen([os.path.join(SCRIPTS_PATH, 'stop_webrtc_receiver_remote.sh'), '-p', str(self.port)],
+        process = subprocess.Popen([os.path.join(SCRIPTS_PATH, 'stop_webrtc_receiver_remote.sh'), '-p', str(self.port)],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=False)
+        process.wait()
         if self.process_sender:
             self.process_sender.kill()
         if self.stop_event and not self.stop_event.isSet():
@@ -380,10 +380,14 @@ class WebRTCEnv(Env):
         self.context = StreamingContext()
         self.observation = Observation()
         self.init_webrtc()
+        obs = self.get_observation()
+        # Wait a bit so that the previous process is killed
+        time.sleep(.1)
+        log(f'#0, Obs.: {self.observation}')
         if self.legacy_api:
-            return self.get_observation()
+            return obs
         else:
-            return self.get_observation(), {}
+            return obs, {}
 
     def get_action(self):
         action = Action()
@@ -407,7 +411,7 @@ class WebRTCEnv(Env):
             ts = time.time()
             while not self.context.codec_initiated and \
                 time.time() - ts < self.init_timeout:
-                time.sleep(.3)
+                time.sleep(.1)
             if time.time() - ts >= self.init_timeout:
                 log(f'Warning: WebRTC init timeout.')
                 if self.legacy_api:

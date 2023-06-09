@@ -33,5 +33,5 @@ while true; do
     esac
 done
 
-session=pandia_$port
+session=pandia$port
 tmux kill-session -t $session 2> /dev/null || true
