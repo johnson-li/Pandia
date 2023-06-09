@@ -40,7 +40,7 @@ done
 
 ns=pandia$port
 uuid=`uuidgen`
-echo "UUID: $uuid"
+echo "UUID: $uuid, port: $port, duration: $duration"
 
 session=pandia$port
 tmux kill-session -t $session 2> /dev/null || true

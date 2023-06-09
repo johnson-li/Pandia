@@ -7,7 +7,7 @@ from typing import List
 import numpy as np
 import gymnasium
 from gymnasium import Env, spaces
-from multiprocessing import shared_memory
+from multiprocessing import shared_memory, current_process
 from pandia import RESULTS_PATH, SCRIPTS_PATH, BIN_PATH
 from pandia.log_analyzer import CODEC_NAMES, ActionContext, FrameContext, StreamingContext, parse_line
 from pandia.agent.normalization import nml, dnml, NORMALIZATION_RANGE
@@ -16,6 +16,10 @@ import gym
 
 
 DEFAULT_HISTORY_SIZE = 3
+
+
+def log(s: str):
+    print(f'[{current_process().pid}] {s}')
 
 
 def monitor_webrtc_sender(context: StreamingContext, stdout: str, stop_event: threading.Event, sender_log=None):
@@ -28,6 +32,8 @@ def monitor_webrtc_sender(context: StreamingContext, stdout: str, stop_event: th
             f.write(line + '\n')
         if line:
             parse_line(line, context)
+        # if not context.codec_initiated:
+        #     log(line)
     if f:
         f.close()
 
@@ -223,7 +229,7 @@ class Action():
         return {
             'bitrate': [10, 2500], # When 2500 is the max bitrate set by WebRTC for 720p video
             # 'fps': [1, 60],
-            'pacing_rate': [10, 800 * 1024],
+            # 'pacing_rate': [10, 800 * 1024],
             # 'padding_rate': [0, 500 * 1024],
             # 'fec_rate_key': [0, 255],
             # 'fec_rate_delta': [0, 255],
@@ -304,7 +310,7 @@ class WebRTCEnv(Env):
         self.legacy_api = bool(config.get('legacy_api', True))
         self.duration = int(config.get('duration', 60))
         self.width = int(config.get('width', 720))
-        print(f'WebRTCEnv init with config: {config}')
+        log(f'WebRTCEnv init with config: {config}')
         self.init_timeout = 15
         self.frame_history_size = 10
         self.packet_history_size = 10
@@ -337,16 +343,16 @@ class WebRTCEnv(Env):
         try:
             self.shm = shared_memory.SharedMemory(
                 name=self.shm_name(), create=True, size=Action.shm_size())
-            print('Shared memory created: ', self.shm.name)
+            log(f'Shared memory created: {self.shm.name}')
         except FileExistsError:
             self.shm = shared_memory.SharedMemory(
                 name=self.shm_name(), create=False, size=Action.shm_size())
-            print('Shared memory opened: ', self.shm.name)
+            log(f'Shared memory opened: {self.shm.name}')
         self.stop_event = Event()
         subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'), 
                           '-p', str(self.port), '-d', str(self.duration + 10)], shell=False)
-        # print('Starting WebRTC receiver, wait for 2 seconds')
-        # time.sleep(3)
+        log('Starting WebRTC receiver, wait for 3 seconds')
+        time.sleep(3)
 
     def start_webrtc(self):
         self.process_sender = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'),
@@ -397,18 +403,18 @@ class WebRTCEnv(Env):
         if not self.context.codec_initiated:
             assert self.step_count == 0
             self.start_webrtc()
-            print('Waiting for WebRTC to be ready...')
+            log('Waiting for WebRTC to be ready...')
             ts = time.time()
             while not self.context.codec_initiated and \
                 time.time() - ts < self.init_timeout:
                 time.sleep(.3)
             if time.time() - ts >= self.init_timeout:
-                print(f'Warning: WebRTC init timeout.')
+                log(f'Warning: WebRTC init timeout.')
                 if self.legacy_api:
                     return self.get_observation(), 0, True, {}
                 else:
                     return self.get_observation(), 0, True, True, {}
-            # print('WebRTC is running.')
+            # log('WebRTC is running.')
             self.start_ts = time.time()
         end_ts = self.start_ts + self.step_duration * self.step_count
         sleep_duration = end_ts - time.time()
@@ -420,7 +426,7 @@ class WebRTCEnv(Env):
             done = True
         self.step_count += 1
         reward = self.reward()
-        print(f'[{int(time.time())}] #{self.step_count} R.w.: {reward:.02f}, Act.: {action}, Obs.: {self.observation}')
+        log(f'#{self.step_count} R.w.: {reward:.02f}, Act.: {action}, Obs.: {self.observation}')
         if self.legacy_api:
             return [self.get_observation(), reward, done, {}]
         else:

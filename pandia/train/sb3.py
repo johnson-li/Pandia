@@ -15,7 +15,7 @@ def make_env(env_id):
 
 
 def main():
-  num_envs = 5
+  num_envs = 4
   env = SubprocVecEnv([make_env(i) for i in range(num_envs)])
   # env = WebRTCEnv(config={'legacy_api': True})
   model = SAC("MlpPolicy", env, verbose=1)
