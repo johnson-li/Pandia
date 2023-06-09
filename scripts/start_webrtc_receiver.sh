@@ -1,6 +1,6 @@
 #!/bin/bash
 
-duration=30
+duration=300
 port=7001
 
 set -o errexit -o pipefail -o noclobber -o nounset
@@ -38,39 +38,7 @@ while true; do
     esac
 done
 
-# Create network namespace before starting tmux session
-iface=eno1
 ns=pandia$port
-veth=veth$port
-vpeer=vpeer$port
-veth_addr=10.200.1.${port:(-2)}
-vpeer_addr=10.200.1.1${port:(-2)}
-if sudo ip netns list| grep $ns > /dev/null; then
-    echo 'Network namespace already exists'
-else
-    echo 'Create network namespace:' $ns
-    sudo mkdir -p /etc/netns/$ns
-    sudo sh -c "echo nameserver 8.8.8.8 > /etc/netns/${ns}/resolv.conf"
-    sudo ip netns add $ns
-    sudo ip link add $veth type veth peer name $vpeer
-    sudo ip link set $vpeer netns $ns
-    sudo ip addr add $veth_addr/24 dev $veth
-    sudo ip link set $veth up
-
-    sudo ip netns exec $ns ip addr add $vpeer_addr/24 dev $vpeer
-    sudo ip netns exec $ns ip link set $vpeer up
-    sudo ip netns exec $ns ip link set lo up
-    sudo ip netns exec $ns ip route add default via $veth_addr
-
-    sudo sh -c 'echo 1 > /proc/sys/net/ipv4/ip_forward'
-    sudo iptables -P FORWARD DROP
-    sudo iptables -F FORWARD
-    sudo iptables -t nat -F
-    sudo iptables -t nat -A POSTROUTING -s $vpeer_addr/24 -o $iface -j MASQUERADE
-    sudo iptables -A FORWARD -i $iface -o $veth -j ACCEPT
-    sudo iptables -A FORWARD -o $iface -i $veth -j ACCEPT
-    sudo iptables -t nat -A PREROUTING -i ${iface} -p tcp --dport ${port} -j DNAT --to-destination ${vpeer_addr}:${port}
-fi
 
 session=pandia$port
 tmux kill-session -t $session 2> /dev/null || true
