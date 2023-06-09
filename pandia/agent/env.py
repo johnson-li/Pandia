@@ -311,7 +311,7 @@ class WebRTCEnv(Env):
         self.packet_history_size = 10
         self.packet_history_duration = 10
         self.step_duration = 1
-        self.duration = 30
+        self.duration = 60
         self.start_ts = time.time()
         self.step_count = 0
         self.monitor_thread: Thread = None
@@ -347,7 +347,8 @@ class WebRTCEnv(Env):
         self.stop_event = Event()
         subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'), 
                           '-p', str(self.port), '-d', str(self.duration + 10)], shell=False)
-        print('Started WebRTC receiver...')
+        print('Starting WebRTC receiver, wait for 2 seconds')
+        time.sleep(3)
 
     def start_webrtc(self):
         self.process_sender = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'),
@@ -443,10 +444,10 @@ class WebRTCEnv(Env):
 gymnasium.register(
     id='WebRTCEnv-v0',
     entry_point=WebRTCEnv,
-    max_episode_steps=30,
+    max_episode_steps=60,
 )
 gym.register(
     id='WebRTCEnv-v0',
     entry_point=WebRTCEnv,
-    max_episode_steps=30,
+    max_episode_steps=60,
 )
