@@ -21,6 +21,9 @@ function init_iptables () {
     veth_addr=10.200.$1.1
     vpeer_addr=10.200.$1.2
 
+    sudo mkdir -p /etc/netns/$ns
+    sudo bash -c "echo nameserver 8.8.8.8 > /etc/netns/$ns/resolv.conf"
+
     sudo ip netns del $ns 2> /dev/null || true
     sudo ip link del $veth 2> /dev/null || true
     sudo ip link del $vpeer 2> /dev/null || true
