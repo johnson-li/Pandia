@@ -10,13 +10,16 @@ iface=eno1
 
 function init_iptables () {
     id=$1
+    if [[ 1 == ${#id} ]]; then
+        id="0$id"
+    fi
     port=70$id
     echo "init iptables for $port"
     ns=pandia$port
     veth=veth$port
     vpeer=vpeer$port
-    veth_addr=10.200.$id.1
-    vpeer_addr=10.200.$id.2
+    veth_addr=10.200.$1.1
+    vpeer_addr=10.200.$1.2
 
     sudo ip netns del $ns 2> /dev/null || true
     sudo ip link del $veth 2> /dev/null || true
@@ -41,8 +44,5 @@ function init_iptables () {
 
 for i in `seq 1 9`
 do
-    if [[ 1 == ${#i} ]]; then
-        i="0$i"
-    fi
     init_iptables $i
 done
