@@ -39,6 +39,8 @@ while true; do
 done
 
 ns=pandia$port
+uuid=`uuidgen`
+echo "UUID: $uuid"
 
 session=pandia$port
 tmux kill-session -t $session 2> /dev/null || true
@@ -50,7 +52,7 @@ done
 tmux send-key -t $session:1 "sudo ip netns exec ${ns} ~/Workspace/webrtc/src/out/Default/peerconnection_server --port ${port}" Enter
 echo 'Server started'
 sleep .1
-tmux send-key -t $session:2 "sudo ip netns exec ${ns} ~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --port ${port} --name receiver --receiving_only true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ 2> /dev/null" Enter
+tmux send-key -t $session:2 "sudo ip netns exec ${ns} ~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --port ${port} --name receiver --receiving_only true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ 2> /tmp/pandia_$uuid" Enter
 
 # Remove network namespace and kill tmux session after duration
 tmux send-key -t $session:3 "sleep ${duration}; tmux kill-session -t ${session} 2> /dev/null" Enter

@@ -1,5 +1,4 @@
 import os
-import random
 import subprocess
 import threading
 from threading import Event, Thread
@@ -222,7 +221,7 @@ class Action():
     @staticmethod
     def boundary():
         return {
-            'bitrate': [10, 20 * 1024],
+            'bitrate': [10, 2500], # When 2500 is the max bitrate set by WebRTC for 720p video
             # 'fps': [1, 60],
             'pacing_rate': [10, 800 * 1024],
             # 'padding_rate': [0, 500 * 1024],
@@ -301,17 +300,16 @@ class WebRTCEnv(Env):
         self.port = int(config.get('port', 7001))
         assert self.port >= 7001 and self.port <= 7099
         self.sender_log = config.get('sender_log', None)
-        self.enable_shm = config.get('enable_shm', True)
-        self.legacy_api = config.get('legacy_api', True)
-        self.env_id = config.get('env_id', 999)
-        self.width = config.get('width', 720)
+        self.enable_shm = bool(config.get('enable_shm', True))
+        self.legacy_api = bool(config.get('legacy_api', True))
+        self.duration = int(config.get('duration', 60))
+        self.width = int(config.get('width', 720))
         print(f'WebRTCEnv init with config: {config}')
         self.init_timeout = 15
         self.frame_history_size = 10
         self.packet_history_size = 10
         self.packet_history_duration = 10
         self.step_duration = 1
-        self.duration = 60
         self.start_ts = time.time()
         self.step_count = 0
         self.monitor_thread: Thread = None
@@ -347,8 +345,8 @@ class WebRTCEnv(Env):
         self.stop_event = Event()
         subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'), 
                           '-p', str(self.port), '-d', str(self.duration + 10)], shell=False)
-        print('Starting WebRTC receiver, wait for 2 seconds')
-        time.sleep(3)
+        # print('Starting WebRTC receiver, wait for 2 seconds')
+        # time.sleep(3)
 
     def start_webrtc(self):
         self.process_sender = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'),
