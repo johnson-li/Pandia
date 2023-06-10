@@ -122,7 +122,7 @@ class StreamingContext(object):
 
     def fps(self):
         res = 0
-        for i in range(self.last_captured_frame_id, -1, -1):
+        for i in range(self.last_captured_frame_id, 0, -1):
             diff = self.frames[self.last_captured_frame_id].captured_at - \
                 self.frames[i].captured_at
             if diff <= 1:

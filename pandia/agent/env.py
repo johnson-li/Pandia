@@ -328,7 +328,9 @@ class WebRTCEnv(Env):
         self.process_receiver = None
 
     def seed(self, s):
-        pass
+        s = int(s)
+        assert 1 <= s <= 99
+        self.port = 7000 + s
 
     def get_observation(self):
         return self.observation.array()
@@ -382,7 +384,7 @@ class WebRTCEnv(Env):
         self.init_webrtc()
         obs = self.get_observation()
         # Wait a bit so that the previous process is killed
-        time.sleep(.1)
+        time.sleep(1)
         log(f'#0, Obs.: {self.observation}')
         if self.legacy_api:
             return obs
