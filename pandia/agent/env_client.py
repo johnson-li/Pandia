@@ -17,7 +17,7 @@ class Env():
         self.port = 7000 + client_id
         self.duration = duration
         self.width = width
-        self.init_timeout = 8
+        self.init_timeout = 5
         self.hisory_size = 10
         self.step_duration = step_duration
         self.last_ts = time.time()
@@ -44,6 +44,8 @@ class Env():
                                            create=False, size=shm_size)
         process = subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'), 
                           '-p', str(self.port), '-d', str(self.duration + 10)], shell=False)
+        process.wait()
+        time.sleep(1)
 
     def start_webrtc(self):
         self.process_sender = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'),
@@ -57,10 +59,10 @@ class Env():
     def stop_webrtc(self):
         process = subprocess.Popen([os.path.join(SCRIPTS_PATH, 'stop_webrtc_receiver_remote.sh'), '-p', str(self.port)],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=False)
+        process.wait()
+        time.sleep(1)
         if self.process_sender:
             self.process_sender.kill()
-        # Wait a bit until the processes are killed
-        time.sleep(1)
 
     def reward(self):
         if self.observation.fps[0] == 0:
@@ -150,7 +152,7 @@ def run(client_id=1):
 
 
 def main():
-    concurrency = 5
+    concurrency = 8
     with Pool(concurrency) as p:
         p.map(run, [i + 1 for i in range(concurrency)])
 

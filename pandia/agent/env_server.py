@@ -11,14 +11,17 @@ from ray.rllib.offline import IOContext, InputReader
 
 SERVER_ADDRESS = "localhost"
 SERVER_PORT = 9900
-CHECKPOINT_FILE = os.path.join(MODELS_PATH, "env_server.out")
-NUM_WORKERS = 5
-TUNE = False
+CHECKPOINT_FILE = os.path.join(MODELS_PATH, "env_server.txt")
+NUM_WORKERS = 10
+TUNE = True
 
 def main():
     ray.init()
     run='SAC'
-    checkpoint_path = CHECKPOINT_FILE
+    if os.path.exists(CHECKPOINT_FILE):
+        checkpoint_path = open(CHECKPOINT_FILE).read().strip()
+    else:
+        checkpoint_path = None
 
     def _input(ioctx: IOContext) -> InputReader:
         print(f'Worker index: {ioctx.worker_index}')
@@ -58,9 +61,9 @@ def main():
             }
         )
     stop = {
-        "training_iteration": 200,
-        "timesteps_total": 100000,
-        "episode_reward_mean": 100,
+        "training_iteration": 2000,
+        "timesteps_total": 1000000,
+        "episode_reward_mean": 200,
     }
     if TUNE:
         tune.Tuner(
@@ -68,13 +71,13 @@ def main():
         ).fit()
     else:
         algo = config.build()
-        if os.path.exists(checkpoint_path):
+        if checkpoint_path and os.path.exists(checkpoint_path):
             algo.restore(checkpoint_path)
         for _ in range(stop['timesteps_total']):
             algo.train()
             checkpoint = algo.save()
             print(f'Checkpoint saved at {checkpoint}')
-            with open(checkpoint_path, 'w') as f:
+            with open(CHECKPOINT_FILE, 'w') as f:
                 f.write(checkpoint)
         algo.stop()
 

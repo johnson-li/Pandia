@@ -229,11 +229,11 @@ class Action():
         return {
             'bitrate': [10, 2500], # When 2500 is the max bitrate set by WebRTC for 720p video
             # 'fps': [1, 60],
-            # 'pacing_rate': [10, 800 * 1024],
+            'pacing_rate': [10, 800 * 1024],
             # 'padding_rate': [0, 500 * 1024],
             # 'fec_rate_key': [0, 255],
             # 'fec_rate_delta': [0, 255],
-            # 'resolution': [144, 1080],
+            'resolution': [144, 1080],
         }
 
     def __str__(self) -> str:
