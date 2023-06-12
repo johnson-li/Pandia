@@ -1,7 +1,7 @@
 import numpy as np
 
 NORMALIZATION_RANGE = [-1, 1]
-RESOLUTION_LIST = [240, 360, 480, 720, 960, 1080]
+RESOLUTION_LIST = [144, 240, 360, 480, 720, 960, 1080]
 
 
 def nml(name, value: np.ndarray, value_range, normalized_range=NORMALIZATION_RANGE) -> np.ndarray:

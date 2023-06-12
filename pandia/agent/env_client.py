@@ -2,7 +2,9 @@ from multiprocessing import Pool, Process, shared_memory
 import os
 import subprocess
 import time
-from typing import TextIO
+from typing import Optional, TextIO
+
+import numpy as np
 from pandia import BIN_PATH, SCRIPTS_PATH
 from pandia.agent.env import Action, Observation
 from ray.rllib.env.policy_client import PolicyClient
@@ -24,8 +26,10 @@ class Env():
         self.step_count = 0
         self.context: StreamingContext
         self.observation: Observation
-        self.process_sender: subprocess.Popen = None
+        self.process_sender: Optional[subprocess.Popen] = None
         self.stdout: TextIO 
+        self.previous_action: Optional[Action] = None
+        self.resolution_change_record = np.zeros(10)
 
     @property
     def shm_name(self):
@@ -69,9 +73,16 @@ class Env():
             return -10
         delay_score = self.observation.frame_g2g_delay[0] / 100
         quality_score = self.observation.frame_bitrate[0] / 1000
-        return quality_score - delay_score
+        resolution_penalty = np.sum(self.resolution_change_record)
+        print(f'Resolution change penalty: {resolution_penalty}')
+        # Donot penalize if the resolution is changed less than 1 time during the last 10 steps
+        if resolution_penalty <= 1:
+            resolution_penalty = 0
+        return quality_score - delay_score - resolution_penalty
 
     def reset(self):
+        self.previous_action = None
+        self.resolution_change_record.fill(0)
         self.stop_webrtc()
         self.step_count = 0
         self.context = StreamingContext()
@@ -85,6 +96,13 @@ class Env():
         self.context.reset_action_context()
         act = Action.from_array(action)
         act.write(self.shm)
+
+        self.resolution_change_record[1:] = self.resolution_change_record[:-1]
+        if self.previous_action and self.previous_action.resolution != act.resolution:
+            self.resolution_change_record[0] = 1
+        else:
+            self.resolution_change_record[0] = 0
+        self.previous_action = act
 
         # Start WebRTC at the first step
         if self.step_count == 0:
