@@ -4,7 +4,7 @@ Milestone
 Track the development of new features
 
 ### 12th Jun
-- [ ] Add resolution change penalty in the reward to keep the resolution stable.
+- [x] Add resolution change penalty in the reward to keep the resolution stable. (SAC/SAC_None_48fb1_00000_0_2023-06-13_10-09-49, the result is close to SAC/SAC_None_6fc5b_00000_0_2023-06-11_08-47-22)
 
 ### 11th Jun
 - [x] Use (resolution, bitrate, pacing rate) as the action. (SAC/SAC_None_6fc5b_00000_0_2023-06-11_08-47-22) (the reward is much worse than a fixed resolution)
