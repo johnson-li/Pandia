@@ -68,7 +68,7 @@ def main():
     }
     if TUNE:
         checkpoint_config = CheckpointConfig()
-        checkpoint_config.checkpoint_frequency = 1000
+        checkpoint_config.checkpoint_frequency = 100
         checkpoint_config.num_to_keep = 10
         tune.Tuner(
             run, param_space=config, 
