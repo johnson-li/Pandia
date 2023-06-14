@@ -6,6 +6,7 @@ from ray import air, tune
 from ray.rllib.algorithms.sac import SACConfig
 from ray.rllib.env.policy_server_input import PolicyServerInput
 from ray.rllib.offline import IOContext, InputReader
+from ray.air.config import CheckpointConfig
 
 
 
@@ -66,8 +67,12 @@ def main():
         "episode_reward_mean": 200,
     }
     if TUNE:
+        checkpoint_config = CheckpointConfig()
+        checkpoint_config.checkpoint_frequency = 1000
+        checkpoint_config.num_to_keep = 10
         tune.Tuner(
-            run, param_space=config, run_config=air.RunConfig(stop=stop, verbose=2)
+            run, param_space=config, 
+            run_config=air.RunConfig(stop=stop, verbose=2, checkpoint_config=checkpoint_config)
         ).fit()
     else:
         algo = config.build()

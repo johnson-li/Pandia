@@ -74,10 +74,10 @@ class Env():
         delay_score = self.observation.frame_g2g_delay[0] / 100
         quality_score = self.observation.frame_bitrate[0] / 1000
         resolution_penalty = np.sum(self.resolution_change_record)
-        print(f'Resolution change penalty: {resolution_penalty}')
         # Donot penalize if the resolution is changed less than 1 time during the last 10 steps
         if resolution_penalty <= 1:
             resolution_penalty = 0
+
         return quality_score - delay_score - resolution_penalty
 
     def reset(self):

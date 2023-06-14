@@ -229,7 +229,7 @@ class Action():
         return {
             'bitrate': [10, 2500], # When 2500 is the max bitrate set by WebRTC for 720p video
             # 'fps': [1, 60],
-            # 'pacing_rate': [10, 800 * 1024],
+            'pacing_rate': [10, 800 * 1024],
             # 'padding_rate': [0, 500 * 1024],
             # 'fec_rate_key': [0, 255],
             # 'fec_rate_delta': [0, 255],
@@ -288,9 +288,8 @@ class Action():
     @staticmethod
     def action_space(legacy_api=False):
         boundary = Action.boundary()
-        keys = sorted(boundary.keys())
-        low = np.ones(len(keys), dtype=np.float32) * NORMALIZATION_RANGE[0]
-        high = np.ones(len(keys), dtype=np.float32) * NORMALIZATION_RANGE[1]
+        low = np.ones(len(boundary), dtype=np.float32) * NORMALIZATION_RANGE[0]
+        high = np.ones(len(boundary), dtype=np.float32) * NORMALIZATION_RANGE[1]
         if legacy_api:
             return Box(low=low, high=high, dtype=np.float32)
         else:

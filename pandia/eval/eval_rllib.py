@@ -1,13 +1,16 @@
 import os
 from ray.rllib.algorithms.sac import SACConfig
 from pandia.agent.env import WebRTCEnv
+from pandia.agent.env_client import Env
 
 
 def main():
+    env = WebRTCEnv(config={'enable_shm': True, 'width': 720, 'port': 7009})
     config = SACConfig()\
         .rollouts(num_rollout_workers=0)\
-        .environment(env=WebRTCEnv, env_config={'enable_shm': False, 'width': 720})
+        .environment(env=env)
     algo = config.build()
+    path = '~/ray_results/SAC/SAC_None_d24ac_00000_0_2023-06-10_15-03-33/checkpoint_000200'
     algo.restore(os.path.expanduser("~/Workspace/Pandia/results/checkpoint"))
     env = algo.workers.local_worker().env
     obs, info = env.reset()
