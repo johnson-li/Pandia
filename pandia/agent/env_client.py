@@ -2,6 +2,7 @@ from multiprocessing import Pool, Process, shared_memory
 import os
 import subprocess
 import time
+import gymnasium as gym
 from typing import Optional, TextIO
 
 import numpy as np
@@ -12,24 +13,30 @@ from pandia.agent.env_server import SERVER_PORT
 from pandia.log_analyzer import StreamingContext, parse_line
 
 
-class Env():
+class WebRTCEnv0(gym.Env):
     def __init__(self, client_id=1, duration=30, width=720,
-                 step_duration=1,) -> None:
+                 step_duration=1, enable_shm=True, 
+                 sender_log=None) -> None:
         self.client_id = client_id
         self.port = 7000 + client_id
         self.duration = duration
         self.width = width
+        self.enable_shm = enable_shm
+        self.sender_log = sender_log
         self.init_timeout = 5
         self.hisory_size = 10
         self.step_duration = step_duration
         self.last_ts = time.time()
         self.step_count = 0
+        self.shm = None
         self.context: StreamingContext
         self.observation: Observation
         self.process_sender: Optional[subprocess.Popen] = None
         self.stdout: TextIO 
         self.previous_action: Optional[Action] = None
         self.resolution_change_record = np.zeros(10)
+        self.action_space = Action.action_space(legacy_api=False)
+        self.observation_space = Observation.observation_space(legacy_api=False)
 
     @property
     def shm_name(self):
@@ -37,15 +44,16 @@ class Env():
 
     def init_webrtc(self):
         shm_size = Action.shm_size()
-        print(f"[{self.client_id}] Initializing shm {self.shm_name} for WebRTC")
-        try:
-            self.shm = \
-                shared_memory.SharedMemory(name=self.shm_name, 
-                                           create=True, size=shm_size)
-        except FileExistsError:
-            self.shm = \
-                shared_memory.SharedMemory(name=self.shm_name, 
-                                           create=False, size=shm_size)
+        if self.enable_shm:
+            print(f"[{self.client_id}] Initializing shm {self.shm_name} for WebRTC")
+            try:
+                self.shm = \
+                    shared_memory.SharedMemory(name=self.shm_name, 
+                                            create=True, size=shm_size)
+            except FileExistsError:
+                self.shm = \
+                    shared_memory.SharedMemory(name=self.shm_name, 
+                                            create=False, size=shm_size)
         process = subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'), 
                           '-p', str(self.port), '-d', str(self.duration + 10)], shell=False)
         process.wait()
@@ -80,7 +88,7 @@ class Env():
 
         return quality_score - delay_score - resolution_penalty
 
-    def reset(self):
+    def reset(self, seed=None, options=None):
         self.previous_action = None
         self.resolution_change_record.fill(0)
         self.stop_webrtc()
@@ -95,7 +103,8 @@ class Env():
         # Write action
         self.context.reset_action_context()
         act = Action.from_array(action)
-        act.write(self.shm)
+        if self.enable_shm:
+            act.write(self.shm)
 
         self.resolution_change_record[1:] = self.resolution_change_record[:-1]
         if self.previous_action and self.previous_action.resolution != act.resolution:
@@ -120,6 +129,9 @@ class Env():
                 return self.step(action)
             line = self.stdout.readline().decode().strip()
             if line:
+                if self.sender_log:
+                    with open(self.sender_log, 'a+') as f:
+                        f.write(line + '\n')
                 codec_initiated = self.context.codec_initiated
                 parse_line(line, self.context)
                 if not codec_initiated and self.context.codec_initiated:
@@ -137,8 +149,9 @@ class Env():
 
     def close(self):
         self.stop_webrtc()
-        self.shm.close()
-        self.shm.unlink()
+        if self.shm:
+            self.shm.close()
+            self.shm.unlink()
 
 
 def run(client_id=1):
@@ -147,7 +160,7 @@ def run(client_id=1):
     client = PolicyClient(
         f"http://localhost:{SERVER_PORT+client_id}", inference_mode='remote'
     )
-    env = Env(client_id=client_id, duration=60)
+    env = WebRTCEnv0(client_id=client_id, duration=60)
     obs, info = env.reset()
     action_space = Action.action_space(legacy_api=False)
     eid = client.start_episode()
