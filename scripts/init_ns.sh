@@ -45,7 +45,7 @@ function init_iptables () {
     sudo iptables -t nat -A PREROUTING -i $iface -p tcp --dport $port -j DNAT --to-destination ${vpeer_addr}:$port
 }
 
-for i in `seq 1 9`
+for i in `seq 1 19`
 do
     init_iptables $i
 done
