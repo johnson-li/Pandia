@@ -4,6 +4,7 @@ host='mobix'
 
 duration=30
 port=7001
+log='/dev/null'
 
 set -o errexit -o pipefail -o noclobber -o nounset
 ! getopt --test > /dev/null
@@ -12,8 +13,8 @@ if [[ ${PIPESTATUS[0]} -ne 4 ]]; then
     exit 1
 fi
 
-LONGOPTS=duration,port
-OPTIONS=d:p:
+LONGOPTS=duration,port,log
+OPTIONS=d:p:l:
 ! PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name "$0" -- "$@")
 if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
     exit 2
@@ -29,6 +30,10 @@ while true; do
             port="$2"
             shift 2
             ;;
+        -l|--log)
+            log="$2"
+            shift 2
+            ;;
         --)
             shift
             break
@@ -40,4 +45,4 @@ while true; do
     esac
 done
 
-ssh $host "cd ~/Workspace/Pandia && ./scripts/start_webrtc_receiver.sh -p $port -d $duration"
+ssh $host "cd ~/Workspace/Pandia && ./scripts/start_webrtc_receiver.sh -p $port -d $duration -l $log"

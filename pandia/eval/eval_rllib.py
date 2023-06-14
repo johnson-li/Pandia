@@ -13,7 +13,8 @@ def main():
     tune.register_env('pandia', lambda config: WebRTCEnv0(**config))
     env_config={'enable_shm': enable_shm, 'width': 720, 
                             'client_id': 18, 'duration': 30,
-                            'sender_log': '/tmp/sender_log_eval.txt',}
+                            'sender_log': '/tmp/sender_log_eval.txt',
+                            'receiver_log': '/tmp/receiver_log_eval.txt'}
     config = SACConfig()\
         .rollouts(num_rollout_workers=0)\
         .environment(env='pandia', env_config=env_config)

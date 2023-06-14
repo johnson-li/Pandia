@@ -16,13 +16,14 @@ from pandia.log_analyzer import StreamingContext, parse_line
 class WebRTCEnv0(gym.Env):
     def __init__(self, client_id=1, duration=30, width=720,
                  step_duration=1, enable_shm=True, 
-                 sender_log=None) -> None:
+                 sender_log=None, receiver_log='/dev/null') -> None:
         self.client_id = client_id
         self.port = 7000 + client_id
         self.duration = duration
         self.width = width
         self.enable_shm = enable_shm
         self.sender_log = sender_log
+        self.receiver_log = receiver_log
         self.init_timeout = 5
         self.hisory_size = 10
         self.step_duration = step_duration
@@ -55,7 +56,8 @@ class WebRTCEnv0(gym.Env):
                     shared_memory.SharedMemory(name=self.shm_name, 
                                             create=False, size=shm_size)
         process = subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'), 
-                          '-p', str(self.port), '-d', str(self.duration + 10)], shell=False)
+                          '-p', str(self.port), '-d', str(self.duration + 3), 
+                          '-l', str(self.receiver_log)], shell=False)
         process.wait()
         time.sleep(1)
 
