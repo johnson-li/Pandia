@@ -52,10 +52,10 @@ ns=pandia$port
 veth=veth$port
 vpeer=vpeer$port
 
-sudo tc qdisc del dev $veth handle ffff: ingress 2> /dev/null || true
 sudo tc qdisc del dev $veth root 2> /dev/null || true
 sudo ip netns exec $ns tc qdisc del dev $vpeer root 2> /dev/null || true
 
-sudo ip link set $veth txqueuelen $qlen
+# sudo tc qdisc add dev $veth root handle 1: pfifo limit ${qlen}
 sudo tc qdisc add dev $veth root netem delay ${delay}ms rate ${bw}kbit
 sudo ip netns exec $ns tc qdisc add dev $vpeer root netem delay ${delay}ms rate ${bw}kbit
+
