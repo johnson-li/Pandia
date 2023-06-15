@@ -9,12 +9,13 @@ from pandia.log_analyzer import analyze_stream
 
 
 def main():
-    enable_shm = True
+    enable_shm = False
+    bw = 1024
     tune.register_env('pandia', lambda config: WebRTCEnv0(**config))
-    env_config={'enable_shm': enable_shm, 'width': 720, 
+    env_config={'enable_shm': enable_shm, 'width': 720, 'bw': bw,
                             'client_id': 18, 'duration': 30,
-                            'sender_log': '/tmp/sender_log_eval.txt',
-                            'receiver_log': '/tmp/receiver_log_eval.txt'}
+                            'sender_log': '/tmp/eval_sender_log.txt',
+                            'receiver_log': '/tmp/eval_receiver_log.txt'}
     config = SACConfig()\
         .rollouts(num_rollout_workers=0)\
         .environment(env='pandia', env_config=env_config)
@@ -32,6 +33,7 @@ def main():
             break
     env.close()
     print(f'Average reward: {np.mean(rewards)}')
+    os.system('scp mobix:/tmp/eval_receiver_log.txt /tmp')
     analyze_stream(env.context)
 
 

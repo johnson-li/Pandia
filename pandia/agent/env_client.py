@@ -15,13 +15,14 @@ from pandia.log_analyzer import StreamingContext, parse_line
 
 class WebRTCEnv0(gym.Env):
     def __init__(self, client_id=1, duration=30, width=720,
-                 step_duration=1, enable_shm=True, bw=None,
+                 step_duration=1, enable_shm=True, bw=1024 * 1024, delay=0,
                  sender_log=None, receiver_log='/dev/null') -> None:
         self.client_id = client_id
         self.port = 7000 + client_id
         self.duration = duration
         self.width = width
         self.bw = bw
+        self.delay = delay
         self.enable_shm = enable_shm
         self.sender_log = sender_log
         self.receiver_log = receiver_log
@@ -63,6 +64,10 @@ class WebRTCEnv0(gym.Env):
         time.sleep(1)
 
     def start_webrtc(self):
+        self.process_traffic_control = \
+            subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_traffic_control_remote.sh'),
+                                '-p', str(self.port), '-b', str(self.bw), '-d', str(self.delay),])
+        self.process_traffic_control.wait()
         self.process_sender = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'),
                                                 '--server', '195.148.127.230',
                                                 '--port', str(self.port), '--name', 'sender',
@@ -92,6 +97,9 @@ class WebRTCEnv0(gym.Env):
         return quality_score - delay_score - resolution_penalty
 
     def reset(self, seed=None, options=None):
+        if self.sender_log:
+            if os.path.exists(self.sender_log):
+                os.remove(self.sender_log)
         self.previous_action = None
         self.resolution_change_record.fill(0)
         self.stop_webrtc()
