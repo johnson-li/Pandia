@@ -114,7 +114,7 @@ class Observation(object):
             return -1
         return np.median(data)
 
-    def append(self, context: StreamingContext):
+    def append(self, context: StreamingContext) -> None:
         self.roll()
         frames: List[FrameContext] = context.latest_frames()
         self.frame_encoding_delay[0] = self.calculate_statistics(
@@ -160,13 +160,13 @@ class Observation(object):
         self.codec_bitrate[0] = context.bitrate_data[-1][1] if context.bitrate_data else 0
         self.codec_fps[0] = context.fps_data[-1][1] if context.fps_data else 0
 
-    def array(self):
+    def array(self) -> np.ndarray:
         boundary = Observation.boundary()
         keys = sorted(boundary.keys())
         return np.concatenate([nml(k, getattr(self, k), boundary[k], log=False) for k in keys])
 
     @staticmethod
-    def from_array(array):
+    def from_array(array) -> 'Observation':
         observation = Observation()
         boundary = Observation.boundary()
         keys = sorted(boundary.keys())
@@ -177,7 +177,7 @@ class Observation(object):
         return observation
 
     @staticmethod
-    def boundary():
+    def boundary() -> dict:
         return {
             'frame_encoding_delay': [0, 1000],
             'frame_pacing_delay': [0, 1000],
@@ -225,7 +225,7 @@ class Action():
         self.fec_rate_delta = np.array([0, ], dtype=np.int32)
 
     @staticmethod
-    def boundary():
+    def boundary() -> dict:
         return {
             'bitrate': [10, 2500], # When 2500 is the max bitrate set by WebRTC for 720p video
             # 'fps': [1, 60],
@@ -252,7 +252,7 @@ class Action():
         return res
 
 
-    def write(self, shm):
+    def write(self, shm) -> None:
         def write_int(value, offset):
             if isinstance(value, np.ndarray):
                 value = value[0]
@@ -267,13 +267,13 @@ class Action():
         write_int(self.padding_rate, 5)
         write_int(self.resolution, 6)
 
-    def array(self):
+    def array(self) -> np.ndarray:
         boundary = Action.boundary()
         keys = sorted(boundary.keys())
         return np.concatenate([nml(k, getattr(self, k), boundary[k], log=False) for k in keys])
 
     @staticmethod
-    def from_array(array):
+    def from_array(array) -> 'Action':
         action = Action()
         boundary = Action.boundary()
         keys = sorted(boundary.keys())

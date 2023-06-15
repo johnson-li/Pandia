@@ -110,7 +110,7 @@ class WebRTCEnv0(gym.Env):
         return self.observation.array(), {}
 
 
-    def step(self, action):
+    def step(self, action: np.ndarray):
         # Write action
         self.context.reset_action_context()
         act = Action.from_array(action)
@@ -186,7 +186,7 @@ def run(client_id=1):
         rewards += reward
         client.log_returns(eid, reward, info=info)
         if terminated or truncated:
-            print(f'[{client_id}] Total reward after {env.step_count} steps: {rewards}')
+            print(f'[{client_id}] Total reward after {env.step_count} steps: {rewards:.02f}')
             rewards = 0
             client.end_episode(eid, obs)
             obs, info = env.reset()

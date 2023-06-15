@@ -39,7 +39,9 @@ class FrameContext(object):
         self.height = 0
         self.encoded_at = 0
         self.assembled_at = 0
+        self.assembled0_at = 0
         self.decoded_at = 0
+        self.decoding_at = 0
         self.bitrate = 0
         self.codec = None
         self.encoded_size = 0
@@ -74,6 +76,9 @@ class FrameContext(object):
 
     def pacing_delay(self):
         return self.last_rtp_send_ts() - self.captured_at if self.last_rtp_send_ts() else -1
+
+    def decoding_queue_delay(self):
+        return self.decoding_at - self.captured_at if self.decoding_at > 0 else -1
 
     def decoding_delay(self):
         return self.decoded_at - self.captured_at if self.decoded_at > 0 else -1
@@ -308,9 +313,11 @@ def parse_line(line, context: StreamingContext) -> dict:
             frame.rtp_packets_num = rtp_packets
     elif line.startswith('(rtcp_receiver.cc') and 'Frame decoding acked' in line:
         m = re.match(re.compile(
-            '.*\\[(\\d+)\\] Frame decoding acked, id: (\\d+).*'), line)
+            '.*\\[(\\d+)\\] Frame decoding acked, id: (\\d+), receiving offset: (\\d+), decoding offset: (\\d+).*'), line)
         ts = int(m[1]) / 1000
         rtp_sequence = int(m[2])
+        recving_offset = int(m[3]) / 1000
+        decoding_offset = int(m[4]) / 1000
         rtp_id = context.packet_id_map.get(rtp_sequence, None)
         if rtp_id:
             for i in range(context.last_captured_frame_id, 0, -1):
@@ -318,6 +325,8 @@ def parse_line(line, context: StreamingContext) -> dict:
                 if frame:
                     if frame.rtp_id_range[0] == rtp_id:
                         frame.decoded_at = ts
+                        frame.decoding_at = ts - decoding_offset
+                        frame.assembled0_at = ts - recving_offset
                         context.last_decoded_frame_id = max(
                             frame.frame_id, context.last_decoded_frame_id)
                         break
@@ -376,13 +385,14 @@ def analyze_frame(context: StreamingContext) -> None:
                                      'encoded by': frame.encoding_delay(),
                                      'paced by': frame.pacing_delay(),
                                      'assembled by': frame.assemble_delay(),
+                                     'queued by': frame.decoding_queue_delay(),
                                      'decoded by': frame.decoding_delay(),})
         elif started:
             lost_frames.append(frame.captured_at - context.start_ts)
     plt.close()
     ylim = 0
     colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
-    for i, k in enumerate(['decoded by', 'assembled by', 'paced by', 'encoded by'][::-1]):
+    for i, k in enumerate(['decoded by', 'queued by', 'assembled by', 'paced by', 'encoded by'][::-1]):
         x = np.array([d['ts'] - context.start_ts for d in data_frame_delay])
         y = np.array([d[k] for d in data_frame_delay]) * 1000
         print(f'Median: {k} {np.median(y)} ms')
@@ -390,7 +400,7 @@ def analyze_frame(context: StreamingContext) -> None:
         indexes = (y > 0).nonzero()
         plt.plot(x[indexes], y[indexes], colors[i])
     plt.plot(lost_frames, [10 for _ in lost_frames], 'x')
-    plt.legend(['Decoding', 'Transmission', 'Pacing', 'Encoding'][::-1] + ['Lost'])
+    plt.legend(['Decoding', 'Queue', 'Transmission', 'Pacing', 'Encoding'][::-1] + ['Lost'])
     plt.xlabel('Timestamp (s)')
     plt.ylabel('Delay (ms)')
     plt.ylim([0, ylim * 1.8])
@@ -537,7 +547,7 @@ def analyze_stream(context: StreamingContext) -> None:
 
 
 def main() -> None:
-    sender_log = '/tmp/pandia-sender.log'
+    sender_log = '/tmp/eval_sender_log.txt'
     context = StreamingContext()
     for line in open(sender_log).readlines():
         parse_line(line, context)

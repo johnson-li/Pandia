@@ -27,6 +27,7 @@ def main():
     rewards = []
     for i in range(1000):
         action = Action()
+        action.bitrate = 800
         obs, reward, done, truncated, info = env.step(action.array())
         rewards.append(reward)
         if done or truncated:
