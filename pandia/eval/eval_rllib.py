@@ -9,7 +9,7 @@ from pandia.log_analyzer import analyze_stream
 
 
 def main():
-    enable_shm = False
+    enable_shm = True
     tune.register_env('pandia', lambda config: WebRTCEnv0(**config))
     env_config={'enable_shm': enable_shm, 'width': 720, 
                             'client_id': 18, 'duration': 30,

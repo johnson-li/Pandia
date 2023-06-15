@@ -4,6 +4,7 @@ bw=1048576 # bandwidth in kbps, 1Gbps by default
 port=7001
 delay=0 # ms
 qlen=10000 # packets, 250ms of buffer, it is around 21 packets for 1 Mbps
+host=mobix
 
 set -o errexit -o pipefail -o noclobber -o nounset
 ! getopt --test > /dev/null
@@ -12,8 +13,8 @@ if [[ ${PIPESTATUS[0]} -ne 4 ]]; then
     exit 1
 fi
 
-LONGOPTS=delay,bw,qlen,port
-OPTIONS=d:b:q:p:
+LONGOPTS=delay,bw,qlen,port,host
+OPTIONS=d:b:q:p:h:
 ! PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name "$0" -- "$@")
 if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
     exit 2
@@ -37,6 +38,10 @@ while true; do
             port="$2"
             shift 2
             ;;
+        -h|--host)
+            host="$2"
+            shift 2
+            ;;
         --)
             shift
             break
@@ -48,14 +53,4 @@ while true; do
     esac
 done
 
-ns=pandia$port
-veth=veth$port
-vpeer=vpeer$port
-
-sudo tc qdisc del dev $veth handle ffff: ingress 2> /dev/null || true
-sudo tc qdisc del dev $veth root 2> /dev/null || true
-sudo ip netns exec $ns tc qdisc del dev $vpeer root 2> /dev/null || true
-
-sudo ip link set $veth txqueuelen $qlen
-sudo tc qdisc add dev $veth root netem delay ${delay}ms rate ${bw}kbit
-sudo ip netns exec $ns tc qdisc add dev $vpeer root netem delay ${delay}ms rate ${bw}kbit
+ssh $host "cd ~/Workspace/Pandia && ./scripts/start_traffic_control.sh -p $port -b $bw -d $delay -q $qlen"

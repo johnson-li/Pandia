@@ -163,7 +163,7 @@ class Observation(object):
     def array(self):
         boundary = Observation.boundary()
         keys = sorted(boundary.keys())
-        return np.concatenate([nml(k, getattr(self, k), boundary[k]) for k in keys])
+        return np.concatenate([nml(k, getattr(self, k), boundary[k], log=False) for k in keys])
 
     @staticmethod
     def from_array(array):
@@ -173,7 +173,7 @@ class Observation(object):
         for i, k in enumerate(keys):
             setattr(observation, k,
                     dnml(k, array[i * DEFAULT_HISTORY_SIZE:(i + 1) * DEFAULT_HISTORY_SIZE],
-                                boundary[k]))
+                                boundary[k], log=False))
         return observation
 
     @staticmethod
@@ -270,7 +270,7 @@ class Action():
     def array(self):
         boundary = Action.boundary()
         keys = sorted(boundary.keys())
-        return np.concatenate([nml(k, getattr(self, k), boundary[k]) for k in keys])
+        return np.concatenate([nml(k, getattr(self, k), boundary[k], log=False) for k in keys])
 
     @staticmethod
     def from_array(array):
@@ -278,7 +278,7 @@ class Action():
         boundary = Action.boundary()
         keys = sorted(boundary.keys())
         for i, k in enumerate(keys):
-            setattr(action, k, dnml(k, array[i:i+1], boundary[k]))
+            setattr(action, k, dnml(k, array[i:i+1], boundary[k], log=False))
 
         # Post process to avoid invalid action settings
         if action.bitrate[0] > action.pacing_rate[0]:

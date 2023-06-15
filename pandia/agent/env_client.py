@@ -15,12 +15,13 @@ from pandia.log_analyzer import StreamingContext, parse_line
 
 class WebRTCEnv0(gym.Env):
     def __init__(self, client_id=1, duration=30, width=720,
-                 step_duration=1, enable_shm=True, 
+                 step_duration=1, enable_shm=True, bw=None,
                  sender_log=None, receiver_log='/dev/null') -> None:
         self.client_id = client_id
         self.port = 7000 + client_id
         self.duration = duration
         self.width = width
+        self.bw = bw
         self.enable_shm = enable_shm
         self.sender_log = sender_log
         self.receiver_log = receiver_log

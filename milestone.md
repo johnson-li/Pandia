@@ -6,8 +6,8 @@ Track the development of new features
 ### 14th Jun
 - [ ] Add script of generating replay buffer from logs for offline training
 - [ ] Support offline training
-- [ ] Add evaluation code
-- [x] Support non-linear normalization for values of large range
+- [x] Add evaluation code
+- [x] Support non-linear normalization for values of large range (SAC/SAC_None_e4c6c_00000_0_2023-06-14_15-13-38, the action stucks at low-bitrate, resulting in low reward)
 
 ### 12th Jun
 - [x] Add resolution change penalty in the reward to keep the resolution stable. (SAC/SAC_None_48fb1_00000_0_2023-06-13_10-09-49, the result is close to SAC/SAC_None_6fc5b_00000_0_2023-06-11_08-47-22)
