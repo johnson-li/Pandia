@@ -48,6 +48,8 @@ def parse_line(line, stream: Stream) -> None:
 
 
 def analyze(stream: Stream) -> None:
+    if not stream.frames:
+        return
     ids = list(sorted(stream.frames.keys()))
     x = []
     y1 = []

@@ -14,7 +14,7 @@ from pandia.log_analyzer import StreamingContext, parse_line
 
 
 class WebRTCEnv0(gym.Env):
-    def __init__(self, client_id=1, duration=30, width=720,
+    def __init__(self, client_id=1, duration=30, width=720, fps=10,
                  step_duration=1, enable_shm=True, bw=1024 * 1024, delay=0,
                  sender_log=None, receiver_log='/dev/null') -> None:
         self.client_id = client_id
@@ -22,6 +22,7 @@ class WebRTCEnv0(gym.Env):
         self.duration = duration
         self.width = width
         self.bw = bw
+        self.fps = fps
         self.delay = delay
         self.enable_shm = enable_shm
         self.sender_log = sender_log
@@ -71,7 +72,7 @@ class WebRTCEnv0(gym.Env):
         self.process_sender = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'),
                                                 '--server', '195.148.127.230',
                                                 '--port', str(self.port), '--name', 'sender',
-                                                '--width', str(self.width), '--fps', str(30), '--autocall', 'true',
+                                                '--width', str(self.width), '--fps', str(self.fps), '--autocall', 'true',
                                                 '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/'],
                                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
         return self.process_sender.stderr

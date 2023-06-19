@@ -107,6 +107,7 @@ class StreamingContext(object):
         self.networking = NetworkContext()
         self.fec = FecContext()
         self.bitrate_data = []
+        self.rtt_data = []
         self.fps_data = []
         self.codec_initiated = False
         self.last_captured_frame_id = 0
@@ -145,6 +146,43 @@ class StreamingContext(object):
             else:
                 break
         return res
+
+    def latest_packets(self, duration=1):
+        res = []
+        for i in range(self.last_egress_packet_id, 0, -1):
+            if self.packets[i].sent_at >= self.packets[self.last_egress_packet_id].sent_at - duration:
+                res.append(self.packets[i])
+            else:
+                break
+        return res
+
+    def packet_rtt_measured(self, duration=1):
+        res = []
+        for i in range(len(self.rtt_data) - 1, -1, -1):
+            if self.rtt_data[i][0] >= self.rtt_data[-1][0] - duration:
+                res.append(self.rtt_data[i][1])
+            else:
+                break
+        if res:
+            return np.mean(res)
+        if self.rtt_data:
+            return self.rtt_data[-1][1]
+        return 0
+
+
+    def packet_loss_rate(self, duration=1):
+        # TODO: We currently do not count recently lost packets
+        sent_count = 0
+        received_count = 0
+        for i in range(self.last_egress_packet_id, 0, -1):
+            if self.packets[i].sent_at >= self.packets[self.last_egress_packet_id].sent_at - duration:
+                if self.packets[i].received_at > 0:
+                    received_count += 1
+                if received_count > 0:
+                    sent_count += 1
+            else:
+                break
+        return received_count / sent_count
 
     def latest_egress_packets(self, duration=1):
         res = []
@@ -256,6 +294,11 @@ def parse_line(line, context: StreamingContext) -> dict:
         rtp_id = int(m[1])
         sequence_number = int(m[2])
         context.packet_id_map[sequence_number] = rtp_id
+    elif line.startswith('(rtcp_receiver.cc') and 'RTCP RTT' in line:
+        m = re.match(re.compile('.*\\[(\\d+)\\] RTCP RTT: (\\d+) ms.*'), line)
+        ts = int(m[1]) / 1000
+        rtt = int(m[2]) / 1000
+        context.rtt_data.append((ts, rtt))
     elif line.startswith('(rtp_transport_controller_send.cc') and 'OnSentPacket' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] OnSentPacket, id: (-?\\d+), type: (\\d+), size: (\\d+).*'), line)
@@ -366,7 +409,7 @@ def parse_line(line, context: StreamingContext) -> dict:
     return data
 
 
-def analyze_frame(context: StreamingContext) -> None:
+def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     frame_id_list = list(sorted(context.frames.keys()))
     data_frame_delay = []
     lost_frames = []
@@ -404,7 +447,7 @@ def analyze_frame(context: StreamingContext) -> None:
     plt.xlabel('Timestamp (s)')
     plt.ylabel('Delay (ms)')
     plt.ylim([0, ylim * 1.8])
-    plt.savefig(os.path.join(OUTPUT_DIR, 'delay-frame.pdf'))
+    plt.savefig(os.path.join(output_dir, 'delay-frame.pdf'))
     x = []
     y = []
     bitrates = []
@@ -427,23 +470,38 @@ def analyze_frame(context: StreamingContext) -> None:
     ax2 = ax1.twinx()
     ax2.plot(x, bitrates, 'r')
     ax2.set_ylabel('Bitrate (Kbps)')
-    plt.savefig(os.path.join(OUTPUT_DIR, 'size-frame.pdf'))
+    plt.savefig(os.path.join(output_dir, 'size-frame.pdf'))
 
     plt.close()
     plt.plot([f[0] for f in qp_data], [f[1] for f in qp_data])
     plt.xlabel('Timestamp (s)')
     plt.ylabel('QP')
-    plt.savefig(os.path.join(OUTPUT_DIR, 'qp-frame.pdf'))
+    plt.savefig(os.path.join(output_dir, 'qp-frame.pdf'))
+
+    plt.close()
+    frames = filter(lambda x: x.encoded_at > 0, context.frames.values())
+    ts_list = [f.encoded_at for f in frames]
+    ts_list = sorted(ts_list)
+    duration = 1
+    bucks = (ts_list[-1] - ts_list[0]) / duration + 1
+    data = np.zeros((int(bucks), 1))
+    for t in ts_list:
+        data[int((t - ts_list[0]) / duration)] += 1
+    x = [i * duration for i in range(len(data))]
+    plt.plot(x, data)
+    plt.xlabel('Timestamp (s)')
+    plt.ylabel('FPS')
+    plt.savefig(os.path.join(output_dir, 'fps.pdf'))
 
 
-def analyze_packet(context: StreamingContext) -> None:
+def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     data_ack = []
     data_recv = []
     for pkt in sorted(context.packets.values(), key=lambda x: x.sent_at):
         pkt: PacketContext = pkt
         if pkt.ack_delay() > 0:
             data_ack.append((pkt.sent_at, pkt.ack_delay()))
-        if pkt.recv_delay() > 0:
+        if pkt.recv_delay() != -1:
             data_recv.append((pkt.sent_at, pkt.recv_delay()))
     plt.close()
     x = [(d[0] - context.start_ts) for d in data_recv]
@@ -453,14 +511,16 @@ def analyze_packet(context: StreamingContext) -> None:
     plt.ylabel('RTT (ms)')
     if y:
         plt.ylim([min(y), max(y)])
-    plt.savefig(os.path.join(OUTPUT_DIR, 'delay-packet-biased.pdf'))
+    plt.savefig(os.path.join(output_dir, 'delay-packet-biased.pdf'))
+
     plt.close()
     plt.plot([(d[0] - context.start_ts)
              for d in data_ack], [d[1] * 1000 for d in data_ack], 'x')
     plt.xlabel('Timestamp (s)')
     plt.ylabel('RTT (ms)')
-    plt.ylim([0, 50])
-    plt.savefig(os.path.join(OUTPUT_DIR, 'delay-packet.pdf'))
+    # plt.ylim([0, 50])
+    plt.savefig(os.path.join(output_dir, 'delay-packet.pdf'))
+
     cdf_x = list(sorted([d[1] * 1000 for d in data_ack]))
     cdf_y = np.arange(len(cdf_x)) / len(cdf_x)
     plt.close()
@@ -469,10 +529,10 @@ def analyze_packet(context: StreamingContext) -> None:
     plt.ylabel('CDF')
     plt.ylim([0, 1])
     plt.xlim([0, max(cdf_x)])
-    plt.savefig(os.path.join(OUTPUT_DIR, 'delay-cdf-packet.pdf'))
+    plt.savefig(os.path.join(output_dir, 'delay-packet-cdf.pdf'))
 
 
-def analyze_network(context: StreamingContext) -> None:
+def analyze_network(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     data = context.networking.pacing_rate_data
     x = [d[0] - context.start_ts for d in data]
     y = [d[1] / 1024 for d in data]
@@ -483,7 +543,7 @@ def analyze_network(context: StreamingContext) -> None:
     plt.xlabel("Timestamp (s)")
     plt.ylabel("Rate (Mbps)")
     plt.legend(["Pacing rate", "Padding rate"])
-    plt.savefig(os.path.join(OUTPUT_DIR, 'pacing-rate.pdf'))
+    plt.savefig(os.path.join(output_dir, 'pacing-rate.pdf'))
     ts_min = context.start_ts
     ts_max = max([p.sent_at for p in context.packets.values()])
     ts_range = ts_max - ts_min
@@ -497,7 +557,15 @@ def analyze_network(context: StreamingContext) -> None:
     plt.plot(np.arange(len(buckets)) * period, buckets)
     plt.xlabel("Timestamp (s)")
     plt.ylabel("RTP egress rate (Mbps)")
-    plt.savefig(os.path.join(OUTPUT_DIR, 'sending-rate.pdf'))
+    plt.savefig(os.path.join(output_dir, 'sending-rate.pdf'))
+
+    plt.close()
+    x = [r[0] for r in context.rtt_data]
+    y = [r[1] * 1000 for r in context.rtt_data]
+    plt.plot(x, y)
+    plt.xlabel("Timestamp (s)")
+    plt.ylabel("RTT (ms)")
+    plt.savefig(os.path.join(output_dir, 'rtt.pdf'))
 
 
 def print_statistics(context: StreamingContext) -> None:
@@ -510,7 +578,7 @@ def print_statistics(context: StreamingContext) -> None:
         f"Total frames: {frames_total}, loss rate: {(frames_total - frames_recvd) / frames_total:.2%}")
 
 
-def analyze_codec(context: StreamingContext) -> None:
+def analyze_codec(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.close()
     fig, ax1 = plt.subplots()
     ax1.set_xlabel('Timestamp (s)')
@@ -523,9 +591,9 @@ def analyze_codec(context: StreamingContext) -> None:
     fps_data = np.array(context.fps_data)
     ax2.plot((fps_data[:, 0] - context.start_ts), fps_data[:, 1], 'r')
     ax2.tick_params(axis='y', labelcolor='r')
-    plt.savefig(os.path.join(OUTPUT_DIR, 'codec-params.pdf'))
+    plt.savefig(os.path.join(output_dir, 'codec-params.pdf'))
 
-def analyze_fec(context: StreamingContext) -> None:
+def analyze_fec(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.close()
     plt.plot([d[0] - context.start_ts for d in context.fec.fec_key_data],
              [d[1] for d in context.fec.fec_key_data], '--')
@@ -534,20 +602,21 @@ def analyze_fec(context: StreamingContext) -> None:
     plt.xlabel('Timestamp (s)')
     plt.ylabel('FEC Ratio')
     plt.legend(['Key frame FEC', 'Delta frame FEC'])
-    plt.savefig(os.path.join(OUTPUT_DIR, 'fec.pdf'))
+    plt.savefig(os.path.join(output_dir, 'fec.pdf'))
 
 
-def analyze_stream(context: StreamingContext) -> None:
+def analyze_stream(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     print_statistics(context)
-    analyze_frame(context)
-    analyze_packet(context)
-    analyze_network(context)
-    analyze_codec(context)
-    analyze_fec(context)
+    analyze_frame(context, output_dir)
+    analyze_packet(context, output_dir)
+    analyze_network(context, output_dir)
+    analyze_codec(context, output_dir)
+    analyze_fec(context, output_dir)
 
 
 def main() -> None:
     sender_log = '/tmp/eval_sender_log.txt'
+    sender_log = os.path.join(DIAGRAMS_PATH, 'eval_rllib', 'eval_sender_log.txt')
     context = StreamingContext()
     for line in open(sender_log).readlines():
         parse_line(line, context)

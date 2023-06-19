@@ -70,6 +70,10 @@ class Observation(object):
             self.packet_history_size, dtype=np.int32)
         self.packet_ack_rate: np.ndarray = np.zeros(
             self.packet_history_size, dtype=np.int32)
+        self.packet_loss_rate: np.ndarray = np.zeros(
+            self.packet_history_size, dtype=np.int32)
+        self.packet_rtt_mea: np.ndarray = np.zeros(
+            self.packet_history_size, dtype=np.int32)
         self.pacing_rate: np.ndarray = np.zeros(self.packet_history_size, dtype=np.int32)
         self.pacing_burst_interval: np.ndarray = np.zeros(
             self.packet_history_size, dtype=np.int32)
@@ -91,6 +95,8 @@ class Observation(object):
         self.fps = np.roll(self.fps, 1)
         self.packet_egress_rate = np.roll(self.packet_egress_rate, 1)
         self.packet_ack_rate = np.roll(self.packet_ack_rate, 1)
+        self.packet_loss_rate = np.roll(self.packet_loss_rate, 1)
+        self.packet_rtt_mea = np.roll(self.packet_rtt_mea, 1)
         self.pacing_rate = np.roll(self.pacing_rate, 1)
         self.pacing_burst_interval = np.roll(self.pacing_burst_interval, 1)
         self.codec_bitrate = np.roll(self.codec_bitrate, 1)
@@ -117,6 +123,7 @@ class Observation(object):
     def append(self, context: StreamingContext) -> None:
         self.roll()
         frames: List[FrameContext] = context.latest_frames()
+        packets: List[PacketContext] = context.latest_packets()
         self.frame_encoding_delay[0] = self.calculate_statistics(
             [frame.encoding_delay() * 1000 for frame in frames if frame.encoding_delay() >= 0])
         if self.frame_encoding_delay[0] < 0 and 'frame_encoding_delay' in self.boundary():
@@ -153,6 +160,8 @@ class Observation(object):
                 / self.packet_statistics_duration * 8 / 1024
         self.packet_ack_rate[0] = sum([p.size for p in context.latest_acked_packets()]) \
                 / self.packet_statistics_duration * 8 / 1024
+        self.packet_loss_rate[0] = context.packet_loss_rate()
+        self.packet_rtt_mea[0] = context.packet_rtt_measured()
         self.pacing_rate[0] = context.networking.pacing_rate_data[-1][1] \
                 if context.networking.pacing_rate_data else 0
         self.pacing_burst_interval[0] = context.networking.pacing_burst_interval_data[-1][1] \
@@ -184,15 +193,17 @@ class Observation(object):
             # 'frame_decoding_delay': [0, 1000],
             'frame_assemble_delay': [0, 1000],
             'frame_g2g_delay': [0, 1000],
-            'frame_size': [0, 1000_000],
+            # 'frame_size': [0, 1000_000],
             # 'frame_height': [0, 2160],
             # 'frame_encoded_height': [0, 2160],
             'frame_bitrate': [0, 100_000],
             # 'frame_qp': [0, 255],
             # 'codec': [0, 4],
-            # 'fps': [0, 60],
-            # 'packet_egress_rate': [0, 500 * 1024 * 1024],
+            'fps': [0, 60],
+            'packet_egress_rate': [0, 500 * 1024 * 1024], # Throughput
             # 'packet_ack_rate': [0, 500 * 1024 * 1024],
+            'packet_loss_rate': [0, 1],
+            'packet_rtt_mea': [0, 1000], 
             # 'pacing_rate': [0, 500 * 1024 * 1024],
             # 'pacing_burst_interval': [0, 1000],
             # 'codec_bitrate': [0, 10 * 1024],

@@ -3,9 +3,17 @@ Milestone
 
 Track the development of new features
 
+### 18th Jun
+- [x] Support RTCP RTT estimation
+- [ ] Implement OnRL observation (loss, delay, delay interval, throughput, and gap)
+- [ ] Implement OnRL reward
+- [ ] Implement the safety condition detector
+- [ ] Implement the hybrid mode, i.e., RL + GCC
+- [ ] Support federated learning (learning aggregation)
+
 ### 15th Jun
 - [x] RTCP report frame deocding start time
-- [ ] Support qlen in traffic control 
+- [ ] Support qlen in traffic control so that we can simulate the router buffer size
 
 ### 14th Jun
 - [ ] Add script of generating replay buffer from logs for offline training
