@@ -8,10 +8,15 @@ from pandia import RESULTS_PATH, DIAGRAMS_PATH
 CODEC_NAMES = ['Generic', 'VP8', 'VP9', 'AV1', 'H264', 'Multiplex']
 OUTPUT_DIR = DIAGRAMS_PATH
 
+kDeltaTick=.25  # In ms
+kBaseTimeTick=kDeltaTick*(1<<8)  # In ms
+kTimeWrapPeriod=kBaseTimeTick * (1 << 24)  # In ms
+
 
 class PacketContext(object):
     def __init__(self, rtp_id, payload_type, size, sent_at) -> None:
         self.sent_at = sent_at
+        self.sent_at_utc = -1.0
         self.acked_at = -1
         self.received_at = -1  # Remote ts
         self.rtp_id = rtp_id
@@ -23,7 +28,7 @@ class PacketContext(object):
         return self.acked_at - self.sent_at if self.acked_at > 0 else -1
 
     def recv_delay(self):
-        return self.received_at - self.sent_at if self.received_at > 0 else -1
+        return self.received_at - self.sent_at_utc if self.received_at > 0 else -1
 
 
 class FecContext(object):
@@ -35,6 +40,7 @@ class FrameContext(object):
     def __init__(self, frame_id, captured_at) -> None:
         self.frame_id = frame_id
         self.captured_at = captured_at
+        self.captured_at_utc = 0
         self.width = 0
         self.height = 0
         self.encoded_at = 0
@@ -215,12 +221,14 @@ def parse_line(line, context: StreamingContext) -> dict:
     data = {}
     if (line.startswith('(video_capture_impl.cc') or line.startswith('(frame_generator_capturer')) and 'FrameCaptured' in line:
         m = re.match(re.compile(
-            '.*\\[(\\d+)\\] FrameCaptured, id: (\\d+), width: (\\d+), height: (\\d+), .*'), line)
+            '.*\\[(\\d+)\\] FrameCaptured, id: (\\d+), width: (\\d+), height: (\\d+), ts: (\\d+), utc ts: (\\d+) ms.*'), line)
         ts = int(m[1]) / 1000
         frame_id = int(m[2])
         width = int(m[3])
         height = int(m[4])
+        utc_ts = int(m[6])
         frame = FrameContext(frame_id, ts)
+        frame.captured_at_utc = utc_ts
         context.last_captured_frame_id = frame_id
         context.frames[frame_id] = frame
     elif line.startswith('(video_codec_initializer.cc') and 'SetupCodec' in line:
@@ -301,13 +309,15 @@ def parse_line(line, context: StreamingContext) -> dict:
         context.rtt_data.append((ts, rtt))
     elif line.startswith('(rtp_transport_controller_send.cc') and 'OnSentPacket' in line:
         m = re.match(re.compile(
-            '.*\\[(\\d+)\\] OnSentPacket, id: (-?\\d+), type: (\\d+), size: (\\d+).*'), line)
+            '.*\\[(\\d+)\\] OnSentPacket, id: (-?\\d+), type: (\\d+), size: (\\d+), utc: (\\d+) ms.*'), line)
         ts = int(m[1]) / 1000
         rtp_id = int(m[2])
         rtp_type = int(m[3])
         size = int(m[4])
+        utc = int(m[5]) / 1000
         if rtp_id >= 0:
             packet = PacketContext(rtp_id, rtp_type, size, ts)
+            packet.sent_at_utc = utc
             if packet.payload_type == 1:
                 context.packets[packet.rtp_id] = packet
                 for i in range(context.last_captured_frame_id, 0, -1):
@@ -318,10 +328,12 @@ def parse_line(line, context: StreamingContext) -> dict:
                 rtp_id, context.last_egress_packet_id)
     elif line.startswith('(transport_feedback.cc:') and 'RTCP feedback, packet acked' in line:
         m = re.match(re.compile(
-            '.*\\[(\\d+)\\] RTCP feedback, packet acked: (\\d+) at (\\d+).*'), line)
+            '.*\\[(\\d+)\\] RTCP feedback, packet acked: (\\d+) at (\\d+) ms.*'), line)
         ts = int(m[1]) / 1000
         rtp_id = int(m[2])
-        received_at = int(m[3]) / 1000
+        # The recv time is wrapped by kTimeWrapPeriod. 
+        # The fixed value 1570 should be calculated according to the current time.
+        received_at = (int(m[3]) + 1570 * kTimeWrapPeriod) / 1000
         packet = context.packets.get(rtp_id, None)
         if packet:
             packet.received_at = received_at
@@ -615,7 +627,7 @@ def analyze_stream(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
 
 
 def main() -> None:
-    sender_log = '/tmp/eval_sender_log.txt'
+    # sender_log = '/tmp/eval_sender_log.txt'
     sender_log = os.path.join(DIAGRAMS_PATH, 'eval_rllib', 'eval_sender_log.txt')
     context = StreamingContext()
     for line in open(sender_log).readlines():

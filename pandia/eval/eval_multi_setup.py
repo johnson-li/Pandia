@@ -9,12 +9,13 @@ from ray import tune
 from pandia.log_analyzer import analyze_stream
 
 
-def run(bitrate=1024, fps=10, width=720, working_dir=os.path.join(DIAGRAMS_PATH, 'eval_default')):
+def run(bitrate=1024, fps=10, width=720, working_dir=os.path.join(DIAGRAMS_PATH, 'eval_default'), 
+        duration=30):
     enable_shm = True
     bw = 1024 * 1024
     tune.register_env('pandia', lambda config: WebRTCEnv0(**config))
     env_config={'enable_shm': enable_shm, 'width': 1080, 'bw': bw,
-                            'client_id': 18, 'duration': 30, 'fps': fps,
+                            'client_id': 18, 'duration': duration, 'fps': fps,
                             'sender_log': '/tmp/eval_sender_log.txt',
                             'receiver_log': '/tmp/eval_receiver_log.txt'}
     config = SACConfig()\
