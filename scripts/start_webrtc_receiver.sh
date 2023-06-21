@@ -54,6 +54,7 @@ for i in `seq 1 5`
 do
   tmux new-window -t ${session}:$i
 done
+# tmux send-key -t $session:0 "cd ~/Workspace/Pandia; python pandia.ntp.ntpserver" Enter
 tmux send-key -t $session:1 "sudo ip netns exec ${ns} ~/Workspace/webrtc/src/out/Default/peerconnection_server --port ${port}" Enter
 echo 'Server started'
 tmux send-key -t $session:2 "sudo ip netns exec ${ns} ~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --port ${port} --name receiver --receiving_only true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ 2> $log" Enter
