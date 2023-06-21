@@ -247,7 +247,7 @@ def main():
             for tempSocket in rlist:
                 try:
                     data,addr = tempSocket.recvfrom(1024)
-                    recvTimestamp = recvTimestamp = system_to_ntp_time(time.time())
+                    recvTimestamp = system_to_ntp_time(time.time())
                     recvPacket = NTPPacket()
                     recvPacket.from_data(data)
                     timeStamp_high,timeStamp_low = recvPacket.GetTxTimeStamp()
