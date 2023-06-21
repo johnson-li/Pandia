@@ -3,6 +3,9 @@ Milestone
 
 Track the development of new features
 
+### 20th Jun
+- [x] Add ntp client and server 
+
 ### 18th Jun
 - [x] Support RTCP RTT estimation
 - [ ] Implement OnRL observation (loss, delay, delay interval, throughput, and gap)
