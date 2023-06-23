@@ -3,13 +3,17 @@ Milestone
 
 Track the development of new features
 
+### 21th Jun
+- [ ] Figure out how WebRTC drops packets on high g2g delay
+- [ ] Support nvenc
+
 ### 20th Jun
 - [x] Add ntp client and server 
 
 ### 18th Jun
 - [x] Support RTCP RTT estimation
-- [ ] Implement OnRL observation (loss, delay, delay interval, throughput, and gap)
-- [ ] Implement OnRL reward
+- [x] Implement OnRL observation (loss, delay, delay interval, throughput, and gap)
+- [x] Implement OnRL reward
 - [ ] Implement the safety condition detector
 - [ ] Implement the hybrid mode, i.e., RL + GCC
 - [ ] Support federated learning (learning aggregation)

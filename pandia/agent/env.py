@@ -16,6 +16,7 @@ import gym
 
 
 DEFAULT_HISTORY_SIZE = 3
+use_OnRL=True
 
 
 def log(s: str):
@@ -74,11 +75,14 @@ class Observation(object):
             self.packet_history_size, dtype=np.int32)
         self.packet_rtt_mea: np.ndarray = np.zeros(
             self.packet_history_size, dtype=np.int32)
+        self.packet_delay: np.ndarray = np.zeros(self.packet_history_size, dtype=np.int32)
+        self.packet_delay_interval: np.ndarray = np.zeros(self.packet_history_size, dtype=np.int32)
         self.pacing_rate: np.ndarray = np.zeros(self.packet_history_size, dtype=np.int32)
         self.pacing_burst_interval: np.ndarray = np.zeros(
             self.packet_history_size, dtype=np.int32)
         self.codec_bitrate: np.ndarray = np.zeros(self.codec_history_size, dtype=np.int32)
         self.codec_fps: np.ndarray = np.zeros(self.codec_history_size, dtype=np.int32)
+        self.action_gap: np.ndarray = np.zeros(self.codec_history_size, dtype=np.int32)
 
     def roll(self):
         self.frame_encoding_delay = np.roll(self.frame_encoding_delay, 1)
@@ -97,10 +101,13 @@ class Observation(object):
         self.packet_ack_rate = np.roll(self.packet_ack_rate, 1)
         self.packet_loss_rate = np.roll(self.packet_loss_rate, 1)
         self.packet_rtt_mea = np.roll(self.packet_rtt_mea, 1)
+        self.packet_delay = np.roll(self.packet_delay, 1)
+        self.packet_delay_interval = np.roll(self.packet_delay_interval, 1)
         self.pacing_rate = np.roll(self.pacing_rate, 1)
         self.pacing_burst_interval = np.roll(self.pacing_burst_interval, 1)
         self.codec_bitrate = np.roll(self.codec_bitrate, 1)
         self.codec_fps = np.roll(self.codec_fps, 1)
+        self.action_gap = np.roll(self.action_gap, 1)
 
     def __str__(self) -> str:
         delays = (self.frame_encoding_delay[0],
@@ -120,7 +127,7 @@ class Observation(object):
             return -1
         return np.median(data)
 
-    def append(self, context: StreamingContext) -> None:
+    def append(self, context: StreamingContext, action: Action) -> None:
         self.roll()
         frames: List[FrameContext] = context.latest_frames()
         packets: List[PacketContext] = context.latest_packets()
@@ -162,12 +169,15 @@ class Observation(object):
                 / self.packet_statistics_duration * 8 / 1024
         self.packet_loss_rate[0] = context.packet_loss_rate()
         self.packet_rtt_mea[0] = context.packet_rtt_measured()
+        self.packet_delay[0] = context.packet_delay()
+        self.pacing_burst_interval[0] = context.packet_delay_interval()
         self.pacing_rate[0] = context.networking.pacing_rate_data[-1][1] \
                 if context.networking.pacing_rate_data else 0
         self.pacing_burst_interval[0] = context.networking.pacing_burst_interval_data[-1][1] \
                 if context.networking.pacing_burst_interval_data else 0
         self.codec_bitrate[0] = context.bitrate_data[-1][1] if context.bitrate_data else 0
         self.codec_fps[0] = context.fps_data[-1][1] if context.fps_data else 0
+        self.action_gap[0] = action.bitrate - self.packet_egress_rate
 
     def array(self) -> np.ndarray:
         boundary = Observation.boundary()
@@ -187,11 +197,20 @@ class Observation(object):
 
     @staticmethod
     def boundary() -> dict:
+        # observation used in OnRL 
+        if use_OnRL:
+            return {
+                'packet_loss_rate': [0, 1],
+                'packet_delay': [0, 1000],
+                'packet_delay_interval': [0, 10],
+                'packet_ack_rate': [0, 500 * 1024 * 1024],
+                'action_gps': [- 500 * 1024 * 1024, 500 * 1024 * 1024],
+            }
         return {
             'frame_encoding_delay': [0, 1000],
             'frame_pacing_delay': [0, 1000],
-            # 'frame_decoding_delay': [0, 1000],
-            'frame_assemble_delay': [0, 1000],
+            'frame_decoding_delay': [0, 1000],
+            # 'frame_assemble_delay': [0, 1000],
             'frame_g2g_delay': [0, 1000],
             # 'frame_size': [0, 1000_000],
             # 'frame_height': [0, 2160],
@@ -200,10 +219,12 @@ class Observation(object):
             # 'frame_qp': [0, 255],
             # 'codec': [0, 4],
             'fps': [0, 60],
-            'packet_egress_rate': [0, 500 * 1024 * 1024], # Throughput
-            # 'packet_ack_rate': [0, 500 * 1024 * 1024],
+            'packet_egress_rate': [0, 500 * 1024 * 1024], 
+            'packet_ack_rate': [0, 500 * 1024 * 1024],
             'packet_loss_rate': [0, 1],
-            'packet_rtt_mea': [0, 1000], 
+            # 'packet_rtt_mea': [0, 1000], 
+            'packet_delay': [0, 1000],
+            'packet_delay_interval': [0, 10],
             # 'pacing_rate': [0, 500 * 1024 * 1024],
             # 'pacing_burst_interval': [0, 1000],
             # 'codec_bitrate': [0, 10 * 1024],
@@ -436,24 +457,34 @@ class WebRTCEnv(Env):
         sleep_duration = end_ts - time.time()
         if sleep_duration > 0:
             time.sleep(sleep_duration)
-        self.observation.append(self.context)
+        self.observation.append(self.context, action)
         done = self.process_sender.poll() is not None
         if time.time() - self.start_ts > self.duration:
             done = True
         self.step_count += 1
-        reward = self.reward()
+        reward = self.reward(action)
         log(f'#{self.step_count} R.w.: {reward:.02f}, Act.: {action}, Obs.: {self.observation}')
         if self.legacy_api:
             return [self.get_observation(), reward, done, {}]
         else:
             return [self.get_observation(), reward, False, done, {}]
 
+    def detect_safe_condition(self):
+        pass
+
     def close(self):
         self.stop_wevrtc()
         self.shm.close()
         self.shm.unlink()
 
-    def reward(self):
+    def reward(self, action: Action):
+        if use_OnRL:
+            q = self.observation.packet_ack_rate[0] / 1024
+            l = self.observation.packet_loss_rate[0]
+            d = self.observation.packet_delay[0] / 10
+            p = (self.action_pre.bitrate[0] - action.bitrate[0]) / 1000 if self.action_pre else 0
+            self.action_pre = action
+            return q - l - d - p
         if self.observation.fps[0] == 0:
             return -10
         delay_score = self.observation.frame_g2g_delay[0] / 100

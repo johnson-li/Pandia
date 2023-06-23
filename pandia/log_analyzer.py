@@ -162,6 +162,37 @@ class StreamingContext(object):
                 break
         return res
 
+    def packet_delay(self, duration=1):
+        res = []
+        for i in range(self.last_egress_packet_id, 0, -1):
+            pkt = self.packets[i]
+            if pkt.sent_at >= self.packets[self.last_egress_packet_id].sent_at - duration:
+                if pkt.recv_delay() >= 0:
+                    res.append(pkt.recv_delay())
+            else:
+                break
+        return np.mean(res) if res else 0
+
+    def packet_delay_interval(self, duration=1):
+        limit = 3
+        buf = []
+        res = []
+        for i in range(self.last_egress_packet_id, 0, -1):
+            pkt = self.packets[i]
+            if pkt.sent_at >= self.packets[self.last_egress_packet_id].sent_at - duration:
+                if pkt.received_at > 0:
+                    if buf:
+                        a = pkt.received_at - buf[0].received_at
+                        b = pkt.sent_at - buf[0].sent_at
+                        if b != 0:
+                            res.append(a / b) 
+                    buf.append(pkt)
+                    if len(buf) > limit:
+                        buf.pop(0)
+            else:
+                break
+        return np.mean(res) if res else 0
+
     def packet_rtt_measured(self, duration=1):
         res = []
         for i in range(len(self.rtt_data) - 1, -1, -1):
