@@ -127,7 +127,7 @@ class Observation(object):
             return -1
         return np.median(data)
 
-    def append(self, context: StreamingContext, action: Action) -> None:
+    def append(self, context: StreamingContext, action: "Action") -> None:
         self.roll()
         frames: List[FrameContext] = context.latest_frames()
         packets: List[PacketContext] = context.latest_packets()
@@ -197,7 +197,7 @@ class Observation(object):
 
     @staticmethod
     def boundary() -> dict:
-        # observation used in OnRL 
+        # observation used in OnRL
         if use_OnRL:
             return {
                 'packet_loss_rate': [0, 1],
@@ -219,10 +219,10 @@ class Observation(object):
             # 'frame_qp': [0, 255],
             # 'codec': [0, 4],
             'fps': [0, 60],
-            'packet_egress_rate': [0, 500 * 1024 * 1024], 
+            'packet_egress_rate': [0, 500 * 1024 * 1024],
             'packet_ack_rate': [0, 500 * 1024 * 1024],
             'packet_loss_rate': [0, 1],
-            # 'packet_rtt_mea': [0, 1000], 
+            # 'packet_rtt_mea': [0, 1000],
             'packet_delay': [0, 1000],
             'packet_delay_interval': [0, 10],
             # 'pacing_rate': [0, 500 * 1024 * 1024],
@@ -382,7 +382,7 @@ class WebRTCEnv(Env):
                 name=self.shm_name(), create=False, size=Action.shm_size())
             log(f'Shared memory opened: {self.shm.name}')
         self.stop_event = Event()
-        process = subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'), 
+        process = subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'),
                           '-p', str(self.port), '-d', str(self.duration + 10)], shell=False)
         process.wait()
 

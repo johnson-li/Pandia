@@ -1,8 +1,7 @@
 #!/bin/bash
 
-duration=30
-port=9999
-rid=''
+duration=10
+port=7018
 width=1080
 fps=30
 
@@ -12,8 +11,8 @@ if [[ ${PIPESTATUS[0]} -ne 4 ]]; then
     echo 'I’m sorry, `getopt --test` failed in this environment.'
     exit 1
 fi
-LONGOPTS=duration,port,id,width,fps
-OPTIONS=d:p:i:w:f:
+LONGOPTS=duration,port,width,fps
+OPTIONS=d:p:w:f:
 ! PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name "$0" -- "$@")
 if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
     exit 2
@@ -27,10 +26,6 @@ while true; do
             ;;
         -p|--port)
             port="$2"
-            shift 2
-            ;;
-        -i|--id)
-            rid="$2"
             shift 2
             ;;
         -f|--fps)
@@ -56,27 +51,18 @@ cd ~/Workspace/webrtc/src
 # gn gen out/Default --args='is_debug=true rtc_use_h264=true ffmpeg_branding="Chrome" use_rtti=true'
 ninja -C out/Default
 cd -
-
 rm /tmp/dump/* 2> /dev/null || true
 
-session=pandia
-tmux kill-session -t $session 2> /dev/null || true
-tmux new-session -d -s $session
-for i in `seq 1 5`
-do
-  tmux new-window -t ${session}:$i
-done
-tmux send-key -t $session:1 "~/Workspace/webrtc/src/out/Default/peerconnection_server --port ${port}" Enter
-echo 'Server started'
-sleep .1
-tmux send-key -t $session:2 "~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --port ${port} --name receiver --receiving_only true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ 2> /tmp/pandia-receiver.log" Enter
-echo 'Receiver started'
-sleep 3
-tmux send-key -t $session:3 "~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --port ${port} --width ${width} --fps ${fps} --name sender --autocall true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ 2> /tmp/pandia-sender.log" Enter
-echo 'Sender started'
-tmux send-key -t $session:4 'nload lo' Enter
-tmux send-key -t $session:5 '' Enter
+# Start receiver
+~/Workspace/Pandia/scripts/start_webrtc_receiver_remote.sh -p $port -d $duration -l /tmp/test_receiver.log
 
-echo Wait $duration seconds...
-sleep $duration
-~/Workspace/Pandia/stop.sh
+# Init traffic control
+~/Workspace/Pandia/scripts/start_traffic_control_remote.sh -p $port -b 1000000 -d 0
+
+# Start sender
+echo "Runnig... Will last for $duration s"
+rm /tmp/test_sender.log 2> /dev/null
+~/Workspace/Pandia/bin/peerconnection_client_headless --server 195.148.127.230 --port $port --width $width --fps $fps --name sender --autocall true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ 2> /tmp/test_sender.log
+
+# Copy receiver log
+scp mobix:/tmp/test_receiver.log /tmp
