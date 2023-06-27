@@ -50,4 +50,4 @@ while true; do
     esac
 done
 
-ssh $host "cd ~/Workspace/Pandia && ./scripts/start_webrtc_receiver.sh -p $port -d $duration -l $log"
+ssh $host "cd ~/Workspace/Pandia && ./scripts/start_webrtc_receiver.sh -p $port -d $duration -l $log -u $dump"
