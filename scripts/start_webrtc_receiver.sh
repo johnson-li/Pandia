@@ -62,7 +62,7 @@ done
 # tmux send-key -t $session:0 "cd ~/Workspace/Pandia; python pandia.ntp.ntpserver" Enter
 tmux send-key -t $session:1 "sudo ip netns exec ${ns} ~/Workspace/webrtc/src/out/Default/peerconnection_server --port ${port}" Enter
 echo 'Server started'
-tmux send-key -t $session:2 "sudo ip netns exec ${ns} ~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --port ${port} --dump-path ${dump} --name receiver --receiving_only true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ 2> $log" Enter
+tmux send-key -t $session:2 "sudo ip netns exec ${ns} ~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --port ${port} --dump_path ${dump} --name receiver --receiving_only true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ 2> $log" Enter
 
 # Remove network namespace and kill tmux session after duration
 tmux send-key -t $session:3 "sleep ${duration}; tmux kill-session -t ${session} 2> /dev/null" Enter
