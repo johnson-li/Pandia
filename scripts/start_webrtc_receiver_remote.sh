@@ -5,7 +5,7 @@ host='mobix'
 duration=30
 port=7001
 log='/dev/null'
-dump=''
+dump='0'
 
 set -o errexit -o pipefail -o noclobber -o nounset
 ! getopt --test > /dev/null
