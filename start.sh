@@ -54,7 +54,7 @@ cd -
 rm /tmp/dump/* 2> /dev/null || true
 
 # Start receiver
-~/Workspace/Pandia/scripts/start_webrtc_receiver_remote.sh -p $port -d $duration -l /tmp/test_receiver.log
+~/Workspace/Pandia/scripts/start_webrtc_receiver_remote.sh -p $port -d $duration -l /tmp/test_receiver.log -u /tmp/dump
 
 # Init traffic control
 ~/Workspace/Pandia/scripts/start_traffic_control_remote.sh -p $port -b 1000000 -d 0

@@ -185,7 +185,7 @@ class StreamingContext(object):
                         a = pkt.received_at - buf[0].received_at
                         b = pkt.sent_at - buf[0].sent_at
                         if b != 0:
-                            res.append(a / b) 
+                            res.append(a / b)
                     buf.append(pkt)
                     if len(buf) > limit:
                         buf.pop(0)
@@ -362,7 +362,7 @@ def parse_line(line, context: StreamingContext) -> dict:
             '.*\\[(\\d+)\\] RTCP feedback, packet acked: (\\d+) at (\\d+) ms.*'), line)
         ts = int(m[1]) / 1000
         rtp_id = int(m[2])
-        # The recv time is wrapped by kTimeWrapPeriod. 
+        # The recv time is wrapped by kTimeWrapPeriod.
         # The fixed value 1570 should be calculated according to the current time.
         received_at = (int(m[3]) + 1570 * kTimeWrapPeriod) / 1000
         packet = context.packets.get(rtp_id, None)
@@ -659,7 +659,8 @@ def analyze_stream(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
 
 def main() -> None:
     # sender_log = '/tmp/eval_sender_log.txt'
-    sender_log = os.path.join(DIAGRAMS_PATH, 'eval_rllib', 'eval_sender_log.txt')
+    sender_log = '/tmp/test_sender.log'
+    # sender_log = os.path.join(DIAGRAMS_PATH, 'eval_rllib', 'eval_sender_log.txt')
     context = StreamingContext()
     for line in open(sender_log).readlines():
         parse_line(line, context)

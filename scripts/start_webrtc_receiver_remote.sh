@@ -5,6 +5,7 @@ host='mobix'
 duration=30
 port=7001
 log='/dev/null'
+dump=''
 
 set -o errexit -o pipefail -o noclobber -o nounset
 ! getopt --test > /dev/null
@@ -13,8 +14,8 @@ if [[ ${PIPESTATUS[0]} -ne 4 ]]; then
     exit 1
 fi
 
-LONGOPTS=duration,port,log
-OPTIONS=d:p:l:
+LONGOPTS=duration,port,log,dump
+OPTIONS=d:p:l:u:
 ! PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name "$0" -- "$@")
 if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
     exit 2
@@ -32,6 +33,10 @@ while true; do
             ;;
         -l|--log)
             log="$2"
+            shift 2
+            ;;
+        -u|--dump)
+            dump="$2"
             shift 2
             ;;
         --)
