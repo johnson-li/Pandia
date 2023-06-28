@@ -151,7 +151,7 @@ class WebRTCEnv0(gym.Env):
         self.last_ts = time.time()
 
         # Collection rollouts
-        self.observation.append(self.context)
+        self.observation.append(self.context, act)
         truncated = self.process_sender.poll() is not None
         reward = self.reward()
 

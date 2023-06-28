@@ -48,6 +48,12 @@ while true; do
     esac
 done
 
+# if [[ ${#dump} -g 1 ]]
+# then
+#     rm -r $dump
+#     mkdir -p $dump
+# fi
+
 ns=pandia$port
 uuid=`uuidgen`
 echo "UUID: $uuid, port: $port, duration: $duration"
