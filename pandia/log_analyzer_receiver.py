@@ -29,6 +29,14 @@ def parse_line(line, stream: Stream) -> None:
         frame = stream.frames.get(frame_id, None)
         if frame:
             frame.decoded_at = ts
+    elif line.startswith('(h264_nvenc_decoder.cc') and 'Frame decoded' in line:
+        m = re.match(re.compile(
+            '.*\\[(\\d+)\\] Frame decoded, frame id: (\\d+), first rtp sequence: (\\d+).*'), line)
+        ts = int(m[1]) / 1000
+        frame_id = int(m[3])
+        frame = stream.frames.get(frame_id, None)
+        if frame:
+            frame.decoded_at = ts
     elif line.startswith('(call.cc') and 'OnFrameReceived' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] OnFrameReceived, id: (\\d+).*'), line)
@@ -45,6 +53,23 @@ def parse_line(line, stream: Stream) -> None:
         frame = stream.frames.get(frame_id, None)
         if frame:
             frame.decoding_at = ts
+    elif line.startswith('(h264_nvenc_decoder.cc') and 'Start decoding' in line:
+        m = re.match(re.compile(
+            '.*\\[(\\d+)\\] Start decoding, frame id: (\\d+), first rtp sequence: (\\d+).*'), line)
+        ts = int(m[1]) / 1000
+        frame_id = int(m[3])
+        frame = stream.frames.get(frame_id, None)
+        if frame:
+            frame.decoding_at = ts
+    elif line.startswith('(call.cc') and 'OnFrameDecoded' in line:
+        m = re.match(re.compile(
+            '.*\\[(\\d+)\\] OnFrameDecoded, id: (\\d+).*'), line)
+        ts = int(m[1]) / 1000
+        frame_id = int(m[2])
+        frame = stream.frames.get(frame_id, None)
+        if frame:
+            frame.decoding_at = ts
+
 
 
 def analyze(stream: Stream) -> None:
@@ -59,12 +84,13 @@ def analyze(stream: Stream) -> None:
     for frame_id in ids:
         frame = stream.frames[frame_id]
         if frame.decoding_at:
+            print(frame.received_at, frame.decoding_at, frame.decoded_at)
             x.append(frame.received_at - ts_min)
             y1.append(frame.decoding_at - frame.received_at)
             if frame.decoded_at:
                 y2.append(frame.decoded_at - frame.received_at)
             else:
-                y2.append(-1)
+                y2.append(0)
     y1 = np.array(y1)
     y2 = np.array(y2)
     plt.close()

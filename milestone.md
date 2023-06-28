@@ -3,9 +3,12 @@ Milestone
 
 Track the development of new features
 
+### 28th Jun
+- [ ] NVDEC deocding does not return any frame on the first input. The reason is not clear. But it is not a big problem since we can anyway calculate the frame decoding delay. 
+
 ### 21th Jun
 - [ ] Figure out how WebRTC drops packets on high g2g delay
-- [ ] Support nvenc
+- [x] Support nvenc
 
 ### 20th Jun
 - [x] Add ntp client and server 
@@ -14,9 +17,9 @@ Track the development of new features
 - [x] Support RTCP RTT estimation
 - [x] Implement OnRL observation (loss, delay, delay interval, throughput, and gap)
 - [x] Implement OnRL reward
-- [ ] Implement the safety condition detector
-- [ ] Implement the hybrid mode, i.e., RL + GCC
-- [ ] Support federated learning (learning aggregation)
+- [ ] Implement the safety condition detector as in OnRL
+- [ ] Implement the hybrid mode, i.e., RL + GCC, as in OnRL
+- [ ] Support federated learning (learning aggregation), as in OnRL
 
 ### 15th Jun
 - [x] RTCP report frame deocding start time

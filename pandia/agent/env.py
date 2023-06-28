@@ -204,7 +204,7 @@ class Observation(object):
                 'packet_delay': [0, 1000],
                 'packet_delay_interval': [0, 10],
                 'packet_ack_rate': [0, 500 * 1024 * 1024],
-                'action_gps': [- 500 * 1024 * 1024, 500 * 1024 * 1024],
+                'action_gap': [- 500 * 1024 * 1024, 500 * 1024 * 1024],
             }
         return {
             'frame_encoding_delay': [0, 1000],
