@@ -77,14 +77,14 @@ def analyze(stream: Stream) -> None:
 
 
 def main() -> None:
-    receiver_log = "/tmp/eval_receiver_log.txt"
+    receiver_log = "/tmp/test_receiver.log"
     stream = Stream()
     for line in open(receiver_log).readlines():
         line = line.strip()
         if line:
             parse_line(line, stream)
     analyze(stream)
-    
+
 
 
 
