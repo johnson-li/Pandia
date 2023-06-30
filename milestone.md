@@ -3,12 +3,14 @@ Milestone
 
 Track the development of new features
 
+### 29th Jun
+- [x] Find out the root cause of the decoding queue delay. It is not caused by the decoding delay. (It is caused by the pacing delay)
+
 ### 28th Jun
 - [ ] NVDEC deocding does not return any frame on the first input. The reason is not clear. But it is not a big problem since we can anyway calculate the frame decoding delay. 
 
 ### 21th Jun
-- [ ] Figure out how WebRTC drops packets on high g2g delay
-- [x] Support nvenc
+- [x] Support nvenc/nvdec
 
 ### 20th Jun
 - [x] Add ntp client and server 

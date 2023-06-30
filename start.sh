@@ -62,7 +62,7 @@ rm /tmp/dump/* 2> /dev/null || true
 # Start sender
 echo "Runnig... Will last for $duration s"
 rm /tmp/test_sender.log 2> /dev/null
-~/Workspace/Pandia/bin/peerconnection_client_headless --server 195.148.127.230 --port $port --width $width --fps $fps --name sender --autocall true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ 2> /tmp/test_sender.log
+~/Workspace/Pandia/bin/peerconnection_client_headless --server 195.148.127.230 --port $port --width $width --fps $fps --name sender --autocall true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ > /tmp/test_sender.log
 
 # Copy receiver log
 scp mobix:/tmp/test_receiver.log /tmp

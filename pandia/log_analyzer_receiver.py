@@ -37,11 +37,11 @@ def parse_line(line, stream: Stream) -> None:
         frame = stream.frames.get(frame_id, None)
         if frame:
             frame.decoded_at = ts
-    elif line.startswith('(call.cc') and 'OnFrameReceived' in line:
+    elif line.startswith('(rtp_video_stream_receiver2.cc') and 'Frame received' in line:
         m = re.match(re.compile(
-            '.*\\[(\\d+)\\] OnFrameReceived, id: (\\d+).*'), line)
+            '.*\\[(\\d+)\\] Frame received, id: (\\d+), first rtp seq: (\\d+).*'), line)
         ts = int(m[1]) / 1000
-        frame_id = int(m[2])
+        frame_id = int(m[3])
         frame = Frame(frame_id)
         frame.received_at = ts
         stream.frames[frame_id] = frame
@@ -61,18 +61,19 @@ def parse_line(line, stream: Stream) -> None:
         frame = stream.frames.get(frame_id, None)
         if frame:
             frame.decoding_at = ts
-    elif line.startswith('(call.cc') and 'OnFrameDecoded' in line:
-        m = re.match(re.compile(
-            '.*\\[(\\d+)\\] OnFrameDecoded, id: (\\d+).*'), line)
-        ts = int(m[1]) / 1000
-        frame_id = int(m[2])
-        frame = stream.frames.get(frame_id, None)
-        if frame:
-            frame.decoding_at = ts
+    # elif line.startswith('(call.cc') and 'OnFrameDecoded' in line:
+    #     m = re.match(re.compile(
+    #         '.*\\[(\\d+)\\] OnFrameDecoded, id: (\\d+).*'), line)
+    #     ts = int(m[1]) / 1000
+    #     frame_id = int(m[2])
+    #     frame = stream.frames.get(frame_id, None)
+    #     if frame:
+    #         frame.decoding_at = ts
 
 
 
-def analyze(stream: Stream) -> None:
+def analyze(stream: Stream, output_dir=OUTPUT_DIR) -> None:
+    print("==========statistics==========")
     if not stream.frames:
         return
     ids = list(sorted(stream.frames.keys()))
@@ -84,7 +85,6 @@ def analyze(stream: Stream) -> None:
     for frame_id in ids:
         frame = stream.frames[frame_id]
         if frame.decoding_at:
-            print(frame.received_at, frame.decoding_at, frame.decoded_at)
             x.append(frame.received_at - ts_min)
             y1.append(frame.decoding_at - frame.received_at)
             if frame.decoded_at:
@@ -99,7 +99,7 @@ def analyze(stream: Stream) -> None:
     plt.xlabel('Frame receiving time (s)')
     plt.ylabel('Delay (ms)')
     plt.legend(['Queuing Delay', 'Decoding Delay'])
-    plt.savefig(os.path.join(OUTPUT_DIR, 'delay-frame-receiver.pdf'))
+    plt.savefig(os.path.join(output_dir, 'delay-frame-receiver.pdf'))
 
 
 def main() -> None:

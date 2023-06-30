@@ -177,7 +177,7 @@ class Observation(object):
                 if context.networking.pacing_burst_interval_data else 0
         self.codec_bitrate[0] = context.bitrate_data[-1][1] if context.bitrate_data else 0
         self.codec_fps[0] = context.fps_data[-1][1] if context.fps_data else 0
-        self.action_gap[0] = action.bitrate - self.packet_egress_rate
+        self.action_gap[0] = action.bitrate - self.packet_egress_rate[0]
 
     def array(self) -> np.ndarray:
         boundary = Observation.boundary()

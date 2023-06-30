@@ -43,18 +43,18 @@ class FrameContext(object):
         self.captured_at_utc = 0
         self.width = 0
         self.height = 0
-        self.encoded_at = 0
-        self.assembled_at = 0
-        self.assembled0_at = 0
-        self.decoded_at = 0
-        self.decoding_at = 0
+        self.encoding_at = .0
+        self.encoded_at = .0
+        self.assembled_at = .0
+        self.assembled0_at = .0
+        self.decoded_at = .0
+        self.decoding_at = .0
         self.bitrate = 0
-        self.codec = None
+        self.codec = 0
         self.encoded_size = 0
-        self.encoded_shape = None
+        self.encoded_shape = (0, 0)
         self.rtp_packets: dict = {}
         self.rtp_id_range = [1000000, 0]
-        self.rtp_packets_num = 0
         self.dropped_by_encoder = False
         self.is_key_frame = False
         self.qp = 0
@@ -125,7 +125,7 @@ class StreamingContext(object):
     def reset_action_context(self):
         self.action_context = ActionContext()
 
-    def codec(self) -> int:
+    def codec_name(self) -> int:
         for i in range(self.last_captured_frame_id, -1, -1):
             frame = self.frames.get(i, None)
             if frame and frame.codec:
@@ -250,7 +250,7 @@ class NetworkContext(object):
 
 def parse_line(line, context: StreamingContext) -> dict:
     data = {}
-    if (line.startswith('(video_capture_impl.cc') or line.startswith('(frame_generator_capturer')) and 'FrameCaptured' in line:
+    if 'FrameCaptured' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] FrameCaptured, id: (\\d+), width: (\\d+), height: (\\d+), ts: (\\d+), utc ts: (\\d+) ms.*'), line)
         ts = int(m[1]) / 1000
@@ -262,83 +262,80 @@ def parse_line(line, context: StreamingContext) -> dict:
         frame.captured_at_utc = utc_ts
         context.last_captured_frame_id = frame_id
         context.frames[frame_id] = frame
-    elif line.startswith('(video_codec_initializer.cc') and 'SetupCodec' in line:
+    elif 'SetupCodec' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] SetupCodec.*'), line)
         ts = int(m[1]) / 1000
         context.codec_initiated = True
         context.start_ts = ts
-    elif line.startswith('(video_stream_encoder.cc') and 'Frame encoded' in line:
+    elif 'Frame encoded' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Frame encoded, id: (\\d+), codec: (\\d+), size: (\\d+), width: (\\d+), height: (\\d+), .*'), line)
         ts = int(m[1]) / 1000
         frame_id = int(m[2])
-        codec = CODEC_NAMES[int(m[3])]
+        codec = int(m[3])
         encoded_size = int(m[4])
         width = int(m[5])
         height = int(m[6])
-        frame = context.frames[frame_id]
+        frame: FrameContext = context.frames[frame_id]
         frame.encoded_at = ts
         frame.codec = codec
         frame.encoded_shape = (width, height)
         frame.encoded_size = encoded_size
-    elif line.startswith('(packet_router.cc') and 'Assign RTP id' in line:
+    elif 'Assign RTP id' in line:
         m = re.match(re.compile(
-            '.*Assign RTP id, id: (\\d+), frame id: (\\d+).*'), line)
-        rtp_id = int(m[1])
-        frame_id = int(m[2])
-        frame: FrameContext = context.frames.get(frame_id, None)
-        if frame:
+            '.*\\[(\\d+)\\] .*Assign RTP id, id: (\\d+), frame id: (\\d+).*'), line)
+        ts = int(m[1]) / 1000
+        rtp_id = int(m[2])
+        frame_id = int(m[3])
+        if frame_id in context.frames:
+            frame: FrameContext = context.frames[frame_id]
             frame.rtp_packets[rtp_id] = None
             frame.rtp_id_range[0] = min(frame.rtp_id_range[0], rtp_id)
             frame.rtp_id_range[1] = max(frame.rtp_id_range[1], rtp_id)
-    elif line.startswith('(video_stream_encoder.cc') and 'Start encoding' in line:
+    elif 'NVENC Start encoding' in line:
         m = re.match(re.compile(
-            '.*Start encoding, id: (\\d+), frame shape: (\\d+)x(\\d+).*'), line)
-        frame_id = int(m[1])
-        width = int(m[2])
-        height = int(m[3])
+            '.*\\[(\\d+)\\] NVENC Start encoding, frame id: (\\d+), shape: (\\d+) x (\\d+), bitrate: (\\d+) kbps.*'), line)
+        ts = int(m[1]) / 1000
+        frame_id = int(m[2])
+        width = int(m[3])
+        height = int(m[4])
+        bitrate = int(m[5])
         context.action_context.resolution = width
-        frame: FrameContext = context.frames.get(frame_id, None)
-        if frame:
-            frame.width = width
-            frame.height = height
-    elif (line.startswith('(h264_encoder_impl.cc') or line.startswith('(libvpx_vp8_encoder.cc')) and 'Start encoding' in line:
-        m = re.match(re.compile(
-            '.*Start encoding, frame id: (\\d+), bitrate: (\\d+) kbps.*'), line)
-        frame_id = int(m[1])
-        bitrate = int(m[2])
         if context.action_context.bitrate <= 0:
             context.action_context.bitrate = bitrate
-        frame: FrameContext = context.frames.get(frame_id, None)
-        if frame:
+        if frame_id in context.frames:
             frame: FrameContext = context.frames[frame_id]
             frame.bitrate = bitrate
-    elif (line.startswith('(h264_encoder_impl.cc') or line.startswith('(libvpx_vp8_encoder.cc')) and 'Finish encoding' in line:
+            frame.width = width
+            frame.height = height
+            frame.encoding_at = ts
+    # elif (line.startswith('(h264_encoder_impl.cc') or line.startswith('(libvpx_vp8_encoder.cc')) and 'Finish encoding' in line:
+    #     m = re.match(re.compile(
+    #         '.*Finish encoding, frame id: (\\d+), frame type: (\\d+), frame size: (\\d+), qp: (\\d+).*'), line)
+    #     frame_id = int(m[1])
+    #     frame_type = int(m[2])
+    #     frame_size = int(m[3])
+    #     qp = int(m[4])
+    #     frame: FrameContext = context.frames.get(frame_id, None)
+    #     if frame:
+    #         frame: FrameContext = context.frames[frame_id]
+    #         frame.is_key_frame = frame_type == 3
+    #         frame.dropped_by_encoder = frame_size == 0
+    #         frame.qp = qp
+    elif 'Assign sequence number' in line:
         m = re.match(re.compile(
-            '.*Finish encoding, frame id: (\\d+), frame type: (\\d+), frame size: (\\d+), qp: (\\d+).*'), line)
-        frame_id = int(m[1])
-        frame_type = int(m[2])
-        frame_size = int(m[3])
-        qp = int(m[4])
-        frame: FrameContext = context.frames.get(frame_id, None)
-        if frame:
-            frame: FrameContext = context.frames[frame_id]
-            frame.is_key_frame = frame_type == 3
-            frame.dropped_by_encoder = frame_size == 0
-            frame.qp = qp
-    elif line.startswith('(rtp_rtcp_impl2.cc') and 'Assign sequence number' in line:
-        m = re.match(re.compile(
-            '.*Assign sequence number, id: (\\d+), sequence number: (\\d+).*'), line)
-        rtp_id = int(m[1])
-        sequence_number = int(m[2])
+            '.*\\[(\\d+)\\] Assign sequence number, id: (\\d+), sequence number: (\\d+).*'), line)
+        ts = int(m[1]) / 1000
+        rtp_id = int(m[2])
+        sequence_number = int(m[3])
         context.packet_id_map[sequence_number] = rtp_id
-    elif line.startswith('(rtcp_receiver.cc') and 'RTCP RTT' in line:
+    elif 'RTCP RTT' in line:
         m = re.match(re.compile('.*\\[(\\d+)\\] RTCP RTT: (\\d+) ms.*'), line)
         ts = int(m[1]) / 1000
         rtt = int(m[2]) / 1000
         context.rtt_data.append((ts, rtt))
-    elif line.startswith('(rtp_transport_controller_send.cc') and 'OnSentPacket' in line:
+    elif 'OnSentPacket' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] OnSentPacket, id: (-?\\d+), type: (\\d+), size: (\\d+), utc: (\\d+) ms.*'), line)
         ts = int(m[1]) / 1000
@@ -352,12 +349,13 @@ def parse_line(line, context: StreamingContext) -> dict:
             if packet.payload_type == 1:
                 context.packets[packet.rtp_id] = packet
                 for i in range(context.last_captured_frame_id, 0, -1):
-                    frame = context.frames[i]
-                    if rtp_id in frame.rtp_packets:
-                        frame.rtp_packets[rtp_id] = packet
+                    if i in context.frames:
+                        frame = context.frames[i]
+                        if rtp_id in frame.rtp_packets:
+                            frame.rtp_packets[rtp_id] = packet
             context.last_egress_packet_id = max(
                 rtp_id, context.last_egress_packet_id)
-    elif line.startswith('(transport_feedback.cc:') and 'RTCP feedback, packet acked' in line:
+    elif 'RTCP feedback, packet acked' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] RTCP feedback, packet acked: (\\d+) at (\\d+) ms.*'), line)
         ts = int(m[1]) / 1000
@@ -368,7 +366,7 @@ def parse_line(line, context: StreamingContext) -> dict:
         packet = context.packets.get(rtp_id, None)
         if packet:
             packet.received_at = received_at
-    elif line.startswith('(transport_feedback_demuxer.cc:') and 'Packet acked' in line:
+    elif 'Packet acked' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Packet acked, id: (\\d+), received: (\\d+), delta_sum: (-?\\d+).*'), line)
         ts = int(m[1]) / 1000
@@ -381,7 +379,7 @@ def parse_line(line, context: StreamingContext) -> dict:
             packet.received = received == 1
             context.last_acked_packet_id = max(
                 rtp_id, context.last_acked_packet_id)
-    elif line.startswith('(ulpfec_generator.cc:') and 'SetProtectionParameters' in line:
+    elif 'SetProtectionParameters' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] SetProtectionParameters, delta: (\\d+), key: (\\d+).*'), line)
         ts = int(m[1]) / 1000
@@ -389,15 +387,7 @@ def parse_line(line, context: StreamingContext) -> dict:
         fec_key = int(m[3])
         context.fec.fec_key_data.append((ts, fec_key))
         context.fec.fec_delta_data.append((ts, fec_delta))
-    elif line.startswith('(rtp_sender_video.cc:') and 'SendVideo' in line:
-        m = re.match(re.compile(
-            '.*SendVideo, frame id: (\\d+), number of RTP packets: (\\d+).*'), line)
-        frame_id = int(m[1])
-        rtp_packets = int(m[2])
-        frame = context.frames.get(frame_id, None)
-        if frame:
-            frame.rtp_packets_num = rtp_packets
-    elif line.startswith('(rtcp_receiver.cc') and 'Frame decoding acked' in line:
+    elif 'Frame decoding acked' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Frame decoding acked, id: (\\d+), receiving offset: (\\d+), decoding offset: (\\d+).*'), line)
         ts = int(m[1]) / 1000
@@ -418,7 +408,7 @@ def parse_line(line, context: StreamingContext) -> dict:
                         break
                     if frame.rtp_id_range[0] < rtp_id:
                         break
-    elif line.startswith('(rtcp_receiver.cc') and 'Frame reception acked' in line:
+    elif 'Frame reception acked' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Frame reception acked, id: (\\d+).*'), line)
         ts = int(m[1]) / 1000
@@ -432,7 +422,7 @@ def parse_line(line, context: StreamingContext) -> dict:
                     break
                 if frame.rtp_id_range[0] < rtp_id:
                     break
-    elif line.startswith('(task_queue_paced_sender.cc') and 'SetPacingRates' in line:
+    elif 'SetPacingRates' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] SetPacingRates, pacing rate: (\\d+) kbps, pading rate: (\\d+) kbps.*'), line)
         ts = int(m[1]) / 1000
@@ -441,7 +431,7 @@ def parse_line(line, context: StreamingContext) -> dict:
         context.action_context.pacing_rate = pacing_rate
         context.networking.pacing_rate_data.append(
             [ts, pacing_rate, padding_rate])
-    elif line.startswith('(video_stream_encoder.cc') and 'SetRates, ' in line:
+    elif 'SetRates, ' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] SetRates, bitrate: (\\d+) kbps, framerate: (\\d+).*'), line)
         ts = int(m[1]) / 1000
@@ -490,7 +480,7 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.xlabel('Timestamp (s)')
     plt.ylabel('Delay (ms)')
     plt.ylim([0, ylim * 1.8])
-    plt.savefig(os.path.join(output_dir, 'delay-frame.pdf'))
+    plt.savefig(os.path.join(output_dir, 'mea-delay-frame.pdf'))
     x = []
     y = []
     bitrates = []
@@ -513,13 +503,13 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     ax2 = ax1.twinx()
     ax2.plot(x, bitrates, 'r')
     ax2.set_ylabel('Bitrate (Kbps)')
-    plt.savefig(os.path.join(output_dir, 'size-frame.pdf'))
+    plt.savefig(os.path.join(output_dir, 'mea-size-frame.pdf'))
 
     plt.close()
     plt.plot([f[0] for f in qp_data], [f[1] for f in qp_data])
     plt.xlabel('Timestamp (s)')
     plt.ylabel('QP')
-    plt.savefig(os.path.join(output_dir, 'qp-frame.pdf'))
+    plt.savefig(os.path.join(output_dir, 'rep-qp-frame.pdf'))
 
     plt.close()
     frames = filter(lambda x: x.encoded_at > 0, context.frames.values())
@@ -534,7 +524,7 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.plot(x, data)
     plt.xlabel('Timestamp (s)')
     plt.ylabel('FPS')
-    plt.savefig(os.path.join(output_dir, 'fps.pdf'))
+    plt.savefig(os.path.join(output_dir, 'mea-fps.pdf'))
 
 
 def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
@@ -554,7 +544,7 @@ def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.ylabel('RTT (ms)')
     if y:
         plt.ylim([min(y), max(y)])
-    plt.savefig(os.path.join(output_dir, 'delay-packet-biased.pdf'))
+    plt.savefig(os.path.join(output_dir, 'mea-delay-packet-biased.pdf'))
 
     plt.close()
     plt.plot([(d[0] - context.start_ts)
@@ -562,7 +552,7 @@ def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.xlabel('Timestamp (s)')
     plt.ylabel('RTT (ms)')
     # plt.ylim([0, 50])
-    plt.savefig(os.path.join(output_dir, 'delay-packet.pdf'))
+    plt.savefig(os.path.join(output_dir, 'mea-delay-packet.pdf'))
 
     cdf_x = list(sorted([d[1] * 1000 for d in data_ack]))
     cdf_y = np.arange(len(cdf_x)) / len(cdf_x)
@@ -572,7 +562,7 @@ def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.ylabel('CDF')
     plt.ylim([0, 1])
     plt.xlim([0, max(cdf_x)])
-    plt.savefig(os.path.join(output_dir, 'delay-packet-cdf.pdf'))
+    plt.savefig(os.path.join(output_dir, 'mea-delay-packet-cdf.pdf'))
 
 
 def analyze_network(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
@@ -586,21 +576,22 @@ def analyze_network(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.xlabel("Timestamp (s)")
     plt.ylabel("Rate (Mbps)")
     plt.legend(["Pacing rate", "Padding rate"])
-    plt.savefig(os.path.join(output_dir, 'pacing-rate.pdf'))
+    plt.savefig(os.path.join(output_dir, 'set-pacing-rate.pdf'))
     ts_min = context.start_ts
     ts_max = max([p.sent_at for p in context.packets.values()])
     ts_range = ts_max - ts_min
-    period = .3
+    period = .005
     buckets = np.zeros(int(ts_range / period + 1))
     for p in context.packets.values():
         ts = (p.sent_at - ts_min)
-        buckets[int(ts / period)] += p.size
+        if ts >= 0:
+            buckets[int(ts / period)] += p.size
     buckets = buckets / period * 8 / 1024 / 1024  # mbps
     plt.close()
-    plt.plot(np.arange(len(buckets)) * period, buckets)
+    plt.plot(np.arange(len(buckets)) * period, buckets, '.')
     plt.xlabel("Timestamp (s)")
     plt.ylabel("RTP egress rate (Mbps)")
-    plt.savefig(os.path.join(output_dir, 'sending-rate.pdf'))
+    plt.savefig(os.path.join(output_dir, 'mea-sending-rate.pdf'))
 
     plt.close()
     x = [r[0] for r in context.rtt_data]
@@ -608,17 +599,17 @@ def analyze_network(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.plot(x, y)
     plt.xlabel("Timestamp (s)")
     plt.ylabel("RTT (ms)")
-    plt.savefig(os.path.join(output_dir, 'rtt.pdf'))
+    plt.savefig(os.path.join(output_dir, 'rep-rtt.pdf'))
 
 
 def print_statistics(context: StreamingContext) -> None:
     print("==========statistics==========")
     frame_ids = list(sorted(
         filter(lambda k: context.frames[k].codec != None, context.frames.keys())))
-    frames_total = max(frame_ids) - min(frame_ids) + 1
+    frames_total = (max(frame_ids) - min(frame_ids) + 1) if frame_ids else 0
     frames_recvd = len(frame_ids)
-    print(
-        f"Total frames: {frames_total}, loss rate: {(frames_total - frames_recvd) / frames_total:.2%}")
+    loss_rate = ((frames_total - frames_recvd) / frames_total) if frames_total else 0
+    print(f"Total frames: {frames_total}, loss rate: {loss_rate:.2%}")
 
 
 def analyze_codec(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
@@ -634,7 +625,7 @@ def analyze_codec(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     fps_data = np.array(context.fps_data)
     ax2.plot((fps_data[:, 0] - context.start_ts), fps_data[:, 1], 'r')
     ax2.tick_params(axis='y', labelcolor='r')
-    plt.savefig(os.path.join(output_dir, 'codec-params.pdf'))
+    plt.savefig(os.path.join(output_dir, 'set-codec-params.pdf'))
 
 def analyze_fec(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.close()
@@ -645,7 +636,7 @@ def analyze_fec(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.xlabel('Timestamp (s)')
     plt.ylabel('FEC Ratio')
     plt.legend(['Key frame FEC', 'Delta frame FEC'])
-    plt.savefig(os.path.join(output_dir, 'fec.pdf'))
+    plt.savefig(os.path.join(output_dir, 'set-fec.pdf'))
 
 
 def analyze_stream(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
