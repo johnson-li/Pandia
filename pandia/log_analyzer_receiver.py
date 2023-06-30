@@ -29,7 +29,7 @@ def parse_line(line, stream: Stream) -> None:
         frame = stream.frames.get(frame_id, None)
         if frame:
             frame.decoded_at = ts
-    elif line.startswith('(h264_nvenc_decoder.cc') and 'Frame decoded' in line:
+    elif 'Frame decoded' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Frame decoded, frame id: (\\d+), first rtp sequence: (\\d+).*'), line)
         ts = int(m[1]) / 1000
@@ -37,7 +37,7 @@ def parse_line(line, stream: Stream) -> None:
         frame = stream.frames.get(frame_id, None)
         if frame:
             frame.decoded_at = ts
-    elif line.startswith('(rtp_video_stream_receiver2.cc') and 'Frame received' in line:
+    elif 'Frame received' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Frame received, id: (\\d+), first rtp seq: (\\d+).*'), line)
         ts = int(m[1]) / 1000
@@ -53,7 +53,7 @@ def parse_line(line, stream: Stream) -> None:
         frame = stream.frames.get(frame_id, None)
         if frame:
             frame.decoding_at = ts
-    elif line.startswith('(h264_nvenc_decoder.cc') and 'Start decoding' in line:
+    elif 'Start decoding' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Start decoding, frame id: (\\d+), first rtp sequence: (\\d+).*'), line)
         ts = int(m[1]) / 1000
@@ -61,16 +61,6 @@ def parse_line(line, stream: Stream) -> None:
         frame = stream.frames.get(frame_id, None)
         if frame:
             frame.decoding_at = ts
-    # elif line.startswith('(call.cc') and 'OnFrameDecoded' in line:
-    #     m = re.match(re.compile(
-    #         '.*\\[(\\d+)\\] OnFrameDecoded, id: (\\d+).*'), line)
-    #     ts = int(m[1]) / 1000
-    #     frame_id = int(m[2])
-    #     frame = stream.frames.get(frame_id, None)
-    #     if frame:
-    #         frame.decoding_at = ts
-
-
 
 def analyze(stream: Stream, output_dir=OUTPUT_DIR) -> None:
     print("==========statistics==========")
