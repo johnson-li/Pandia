@@ -1,3 +1,4 @@
+import argparse
 from multiprocessing import shared_memory
 import os
 import subprocess
@@ -13,7 +14,7 @@ GCC = False
 CLIENT_ID = 18
 PORT = 7000 + CLIENT_ID
 SHM_NAME = f'pandia_{PORT}'
-DURATION = 10
+DURATION = 30
 BW = 1024 * 1024
 PACING_RATE = 1024 * 1024
 BITRATE = 2 * 1024
@@ -104,7 +105,11 @@ def analyze():
 
 
 def main():
-    run()
+    parser = argparse.ArgumentParser(description="Evaluate WebRTC with static actions")
+    parser.add_argument('-d', '--dry', action='store_true', help='If set, reuse existing logs')
+    args = parser.parse_args()
+    if not args.dry:
+        run()
     analyze()
 
 

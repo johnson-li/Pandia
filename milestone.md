@@ -4,7 +4,8 @@ Milestone
 Track the development of new features
 
 ### 29th Jun
-- [x] Find out the root cause of the decoding queue delay. It is not caused by the decoding delay. (It is caused by the pacing delay)
+- [ ] Find out the root cause of the decoding queue delay. It is not caused by the decoding delay. 
+- [x] Find out the causes of frame drop. (pacing delay, encoded size too large)
 
 ### 28th Jun
 - [ ] NVDEC deocding does not return any frame on the first input. The reason is not clear. But it is not a big problem since we can anyway calculate the frame decoding delay. 

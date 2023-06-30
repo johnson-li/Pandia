@@ -506,6 +506,28 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.savefig(os.path.join(output_dir, 'mea-size-frame.pdf'))
 
     plt.close()
+    fig, ax1 = plt.subplots()
+    duration = 1
+    start = 0
+    count = y[0]
+    accu = [count]
+    fps = [1]
+    for i in range(1, len(x)):
+        while start < i and x[i] - x[start] > duration:
+            start += 1
+            count -= y[start]
+        count += y[i]
+        fps.append(i - start + 1)
+        accu.append(count)
+    ax1.plot(x, accu)
+    ax1.set_xlabel('Timestamp (s)')
+    ax1.set_ylabel('Accumulated frame size (KB)')
+    ax2 = ax1.twinx()
+    ax2.plot(x, fps, 'r')
+    ax2.set_ylabel('FPS')
+    plt.savefig(os.path.join(output_dir, 'mea-size-frame-accu.pdf'))
+
+    plt.close()
     plt.plot([f[0] for f in qp_data], [f[1] for f in qp_data])
     plt.xlabel('Timestamp (s)')
     plt.ylabel('QP')
@@ -605,7 +627,7 @@ def analyze_network(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
 def print_statistics(context: StreamingContext) -> None:
     print("==========statistics==========")
     frame_ids = list(sorted(
-        filter(lambda k: context.frames[k].codec != None, context.frames.keys())))
+        filter(lambda k: context.frames[k].codec, context.frames.keys())))
     frames_total = (max(frame_ids) - min(frame_ids) + 1) if frame_ids else 0
     frames_recvd = len(frame_ids)
     loss_rate = ((frames_total - frames_recvd) / frames_total) if frames_total else 0
