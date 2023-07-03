@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -362,7 +363,8 @@ def parse_line(line, context: StreamingContext) -> dict:
         rtp_id = int(m[2])
         # The recv time is wrapped by kTimeWrapPeriod.
         # The fixed value 1570 should be calculated according to the current time.
-        received_at = (int(m[3]) + 1570 * kTimeWrapPeriod) / 1000
+        offset = int(time.time() * 1000 / kTimeWrapPeriod) - 1
+        received_at = (int(m[3]) + offset * kTimeWrapPeriod) / 1000
         packet = context.packets.get(rtp_id, None)
         if packet:
             packet.received_at = received_at
@@ -552,20 +554,22 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
 def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     data_ack = []
     data_recv = []
+    offset = -0.00335956
     for pkt in sorted(context.packets.values(), key=lambda x: x.sent_at):
         pkt: PacketContext = pkt
         if pkt.ack_delay() > 0:
             data_ack.append((pkt.sent_at, pkt.ack_delay()))
         if pkt.recv_delay() != -1:
-            data_recv.append((pkt.sent_at, pkt.recv_delay()))
+            data_recv.append((pkt.sent_at, pkt.recv_delay() - offset))
     plt.close()
     x = [(d[0] - context.start_ts) for d in data_recv]
     y = [d[1] * 1000 for d in data_recv]
-    plt.plot(x, y, 'x')
+    plt.plot(x, y, '.')
     plt.xlabel('Timestamp (s)')
-    plt.ylabel('RTT (ms)')
+    plt.ylabel('Packet transmission delay (ms)')
     if y:
         plt.ylim([min(y), max(y)])
+    plt.ylim([0, 10])
     plt.savefig(os.path.join(output_dir, 'mea-delay-packet-biased.pdf'))
 
     plt.close()
@@ -672,12 +676,13 @@ def analyze_stream(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
 
 def main() -> None:
     # sender_log = '/tmp/eval_sender_log.txt'
-    sender_log = '/tmp/test_sender.log'
-    # sender_log = os.path.join(DIAGRAMS_PATH, 'eval_rllib', 'eval_sender_log.txt')
+    # sender_log = '/tmp/test_sender.log'
+    working_dir = os.path.join(RESULTS_PATH, 'eval_static')
+    sender_log = os.path.join(working_dir, 'eval_sender.log')
     context = StreamingContext()
     for line in open(sender_log).readlines():
         parse_line(line, context)
-    analyze_stream(context)
+    analyze_stream(context, output_dir=working_dir)
 
 
 if __name__ == "__main__":
