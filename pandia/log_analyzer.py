@@ -397,8 +397,8 @@ def parse_line(line, context: StreamingContext) -> dict:
         rtp_id = context.packet_id_map.get(rtp_sequence, None)
         if rtp_id:
             for i in range(context.last_captured_frame_id, 0, -1):
-                frame: FrameContext = context.frames.get(i, None)
-                if frame:
+                if i in context.frames:
+                    frame: FrameContext = context.frames[i]
                     if frame.rtp_id_range[0] == rtp_id:
                         frame.decoded_at = ts
                         frame.decoding_at = ts - decoding_offset
@@ -415,8 +415,8 @@ def parse_line(line, context: StreamingContext) -> dict:
         rtp_sequence = int(m[2])
         rtp_id = context.packet_id_map[rtp_sequence]
         for i in range(context.last_captured_frame_id, 0, -1):
-            frame: FrameContext = context.frames.get(i, None)
-            if frame:
+            if i in context.frames:
+                frame: FrameContext = context.frames[i]
                 if frame.rtp_id_range[0] == rtp_id:
                     frame.assembled_at = ts
                     break
