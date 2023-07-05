@@ -320,14 +320,16 @@ def parse_line(line, context: StreamingContext) -> dict:
             frame.encoding_at = ts
     elif 'Finish encoding' in line:
         m = re.match(re.compile(
-            '.*Finish encoding, frame id: (\\d+), frame type: (\\d+), frame size: (\\d+), qp: (-?\\d+).*'), line)
+            '.*Finish encoding, frame id: (\\d+), frame type: (\\d+), frame size: (\\d+), is key: (\\d+), qp: (-?\\d+).*'), line)
         frame_id = int(m[1])
         frame_type = int(m[2])
         frame_size = int(m[3])
-        qp = int(m[4])
+        is_key = int(m[4])
+        qp = int(m[5])
         if frame_id in context.frames:
             frame = context.frames[frame_id]
             frame.qp = qp
+            frame.is_key_frame = is_key != 0
     elif 'Assign sequence number' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Assign sequence number, id: (\\d+), sequence number: (\\d+).*'), line)

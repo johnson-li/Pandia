@@ -13,8 +13,8 @@ if [[ ${PIPESTATUS[0]} -ne 4 ]]; then
     exit 1
 fi
 
-LONGOPTS=delay,bw,qlen,port
-OPTIONS=d:b:q:p:
+LONGOPTS=delay,bw,qlen,port,loss
+OPTIONS=d:b:q:p:l:
 ! PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name "$0" -- "$@")
 if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
     exit 2
@@ -36,6 +36,10 @@ while true; do
             ;;
         -p|--port)
             port="$2"
+            shift 2
+            ;;
+        -l|--loss)
+            loss="$2"
             shift 2
             ;;
         --)
