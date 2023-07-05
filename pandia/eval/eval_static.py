@@ -13,11 +13,11 @@ from pandia.log_analyzer_receiver import Stream, parse_line as parse_line_receiv
 CLIENT_ID = 18
 PORT = 7000 + CLIENT_ID
 SHM_NAME = f'pandia_{PORT}'
-DURATION = 10
+DURATION = 30
 NETWORK = {
     'bw': 1024 * 1024,
     'delay': 5,
-    'loss': 0,
+    'loss': 5,
 }
 SOURCE = {
     'width': 1080,
@@ -44,17 +44,17 @@ def init_webrtc(duration=DURATION):
         shm = \
             shared_memory.SharedMemory(name=SHM_NAME, create=False, size=shm_size)
     process = subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'), 
-                        '-p', str(PORT), '-d', str(duration + 5), 
+                        '-p', str(PORT), '-d', str(duration + 5),
                         '-l', f'/tmp/{RECEIVER_LOG}'], shell=False)
     process.wait()
-    time.sleep(1)
+    # time.sleep(1)
     return shm
     
 
 def start_webrtc():
     process_traffic_control = \
         subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_traffic_control_remote.sh'),
-                            '-p', str(PORT), '-b', str(NETWORK["bw"]), 
+                            '-p', str(PORT), '-b', str(NETWORK["bw"]), '-l', str(NETWORK["loss"]),
                             '-d', str(NETWORK["delay"]),])
     process_traffic_control.wait()
     process_sender = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'),

@@ -3,6 +3,7 @@ import re
 
 from matplotlib import pyplot as plt
 import numpy as np
+from pandia import RESULTS_PATH
 
 from pandia.log_analyzer import OUTPUT_DIR
 
@@ -93,12 +94,16 @@ def analyze(stream: Stream, output_dir=OUTPUT_DIR) -> None:
 
 
 def main() -> None:
-    receiver_log = "/tmp/test_receiver.log"
+    # receiver_log = "/tmp/test_receiver.log"
+    receiver_log = os.path.join(RESULTS_PATH, 'eval_static', 'eval_receiver.log') 
     stream = Stream()
     for line in open(receiver_log).readlines():
         line = line.strip()
         if line:
-            parse_line(line, stream)
+            try:
+                parse_line(line, stream)
+            except Exception as e:
+                print(e)
     analyze(stream)
 
 

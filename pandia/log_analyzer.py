@@ -23,7 +23,7 @@ class PacketContext(object):
         self.rtp_id = rtp_id
         self.payload_type = payload_type
         self.size = size
-        self.received = None
+        self.received = False
 
     def ack_delay(self):
         return self.acked_at - self.sent_at if self.acked_at > 0 else -1
@@ -115,6 +115,7 @@ class StreamingContext(object):
         self.fec = FecContext()
         self.bitrate_data = []
         self.rtt_data = []
+        self.packet_loss_data = []
         self.fps_data = []
         self.codec_initiated = False
         self.last_captured_frame_id = 0
@@ -263,6 +264,12 @@ def parse_line(line, context: StreamingContext) -> dict:
         frame.captured_at_utc = utc_ts
         context.last_captured_frame_id = frame_id
         context.frames[frame_id] = frame
+    elif 'UpdateFecRates' in line:
+        m = re.match(re.compile(
+            '.*\\[(\\d+)\\] UpdateFecRates, fraction lost: ([0-9.]+).*'), line)
+        ts = int(m[1]) / 1000
+        loss_rate = float(m[2])
+        context.packet_loss_data.append((ts, loss_rate))
     elif 'SetupCodec' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] SetupCodec.*'), line)
@@ -596,6 +603,32 @@ def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.ylim([0, 1])
     plt.xlim([0, max(cdf_x)])
     plt.savefig(os.path.join(output_dir, 'mea-delay-packet-cdf.pdf'))
+
+    duration = 1
+    packets = sorted(context.packets.values(), key=lambda x: x.sent_at)
+    bucks_sent = np.zeros(int((packets[-1].sent_at - packets[0].sent_at) / duration + 1))
+    bucks_lost = np.zeros(int((packets[-1].sent_at - packets[0].sent_at) / duration + 1))
+    for p in packets:
+        i = int((p.sent_at - packets[0].sent_at) / duration)
+        if p.rtp_id >= 0:
+            bucks_sent[i] += 1
+            if not p.received:
+                bucks_lost[i] += 1
+    x = [i * duration for i in range(len(bucks_sent))]
+    y = bucks_lost / bucks_sent * 100
+    plt.close()
+    plt.plot(x, y)
+    plt.xlabel('Timestamp (s)')
+    plt.ylabel('Packet loss rate (%)')
+    plt.savefig(os.path.join(output_dir, 'mea-loss-packet.pdf'))
+
+    plt.close()
+    x = [i[0] - context.start_ts for i in context.packet_loss_data]
+    y = [i[1] * 100 for i in context.packet_loss_data]
+    plt.plot(x, y)
+    plt.xlabel('Timestamp (s)')
+    plt.ylabel('Packet loss rate (%)')
+    plt.savefig(os.path.join(output_dir, 'rep-loss-packet.pdf'))
 
 
 def analyze_network(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
