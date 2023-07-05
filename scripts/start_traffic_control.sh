@@ -1,9 +1,10 @@
 #!/bin/bash
 
 bw=1048576 # bandwidth in kbps, 1Gbps by default
-port=7001
+port=7018
 delay=0 # ms
 qlen=10000 # packets, 250ms of buffer, it is around 21 packets for 1 Mbps
+loss=0 # percentile
 
 set -o errexit -o pipefail -o noclobber -o nounset
 ! getopt --test > /dev/null
@@ -12,8 +13,8 @@ if [[ ${PIPESTATUS[0]} -ne 4 ]]; then
     exit 1
 fi
 
-LONGOPTS=delay,bw,qlen,port
-OPTIONS=d:b:q:p:
+LONGOPTS=delay,bw,qlen,port,loss
+OPTIONS=d:b:q:p:l:
 ! PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name "$0" -- "$@")
 if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
     exit 2
@@ -27,6 +28,10 @@ while true; do
             ;;
         -b|--bw)
             bw="$2"
+            shift 2
+            ;;
+        -l|--loss)
+            loss="$2"
             shift 2
             ;;
         -q|--qlen)
@@ -56,6 +61,6 @@ sudo tc qdisc del dev $veth root 2> /dev/null || true
 sudo ip netns exec $ns tc qdisc del dev $vpeer root 2> /dev/null || true
 
 # sudo tc qdisc add dev $veth root handle 1: pfifo limit ${qlen}
-sudo tc qdisc add dev $veth root netem delay ${delay}ms rate ${bw}kbit
-sudo ip netns exec $ns tc qdisc add dev $vpeer root netem delay ${delay}ms rate ${bw}kbit
+sudo tc qdisc add dev $veth root netem loss ${loss}% delay ${delay}ms rate ${bw}kbit
+sudo ip netns exec $ns tc qdisc add dev $vpeer root netem loss ${loss}% delay ${delay}ms rate ${bw}kbit
 
