@@ -311,19 +311,16 @@ def parse_line(line, context: StreamingContext) -> dict:
             frame.width = width
             frame.height = height
             frame.encoding_at = ts
-    # elif (line.startswith('(h264_encoder_impl.cc') or line.startswith('(libvpx_vp8_encoder.cc')) and 'Finish encoding' in line:
-    #     m = re.match(re.compile(
-    #         '.*Finish encoding, frame id: (\\d+), frame type: (\\d+), frame size: (\\d+), qp: (\\d+).*'), line)
-    #     frame_id = int(m[1])
-    #     frame_type = int(m[2])
-    #     frame_size = int(m[3])
-    #     qp = int(m[4])
-    #     frame: FrameContext = context.frames.get(frame_id, None)
-    #     if frame:
-    #         frame: FrameContext = context.frames[frame_id]
-    #         frame.is_key_frame = frame_type == 3
-    #         frame.dropped_by_encoder = frame_size == 0
-    #         frame.qp = qp
+    elif 'Finish encoding' in line:
+        m = re.match(re.compile(
+            '.*Finish encoding, frame id: (\\d+), frame type: (\\d+), frame size: (\\d+), qp: (-?\\d+).*'), line)
+        frame_id = int(m[1])
+        frame_type = int(m[2])
+        frame_size = int(m[3])
+        qp = int(m[4])
+        if frame_id in context.frames:
+            frame = context.frames[frame_id]
+            frame.qp = qp
     elif 'Assign sequence number' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Assign sequence number, id: (\\d+), sequence number: (\\d+).*'), line)
@@ -435,11 +432,14 @@ def parse_line(line, context: StreamingContext) -> dict:
             [ts, pacing_rate, padding_rate])
     elif 'SetRates, ' in line:
         m = re.match(re.compile(
-            '.*\\[(\\d+)\\] SetRates, bitrate: (\\d+) kbps, framerate: (\\d+).*'), line)
+            '.*\\[(\\d+)\\] SetRates, stream id: (\\d+), bitrate: (\\d+) kbps, '
+            'max bitrate: (\\d+) kbps, framerate: (\\d+).*'), line)
         ts = int(m[1]) / 1000
-        bitrate = int(m[2])
-        fps = int(m[3])
-        context.bitrate_data.append([ts, bitrate])
+        stream_id = int(m[2]) 
+        bitrate = int(m[3])
+        bitrate_max = int(m[4])
+        fps = int(m[5])
+        context.bitrate_data.append([ts, bitrate, bitrate_max])
         context.fps_data.append([ts, fps])
     return data
 
@@ -528,6 +528,13 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     ax2.plot(x, fps, 'r')
     ax2.set_ylabel('FPS')
     plt.savefig(os.path.join(output_dir, 'mea-size-frame-accu.pdf'))
+
+    plt.close()
+    accu = np.array(accu)
+    plt.plot(x, accu * 8 / duration)
+    plt.xlabel('Timestamp (s)')
+    plt.ylabel('Bitrate (Kbps)')
+    plt.savefig(os.path.join(output_dir, 'mea-bitrate.pdf'))
 
     plt.close()
     plt.plot([f[0] for f in qp_data], [f[1] for f in qp_data])
@@ -645,6 +652,8 @@ def analyze_codec(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     ax1.set_ylabel('Bitrate (Kbps)', color='b')
     bitrate_data = np.array(context.bitrate_data)
     ax1.plot((bitrate_data[:, 0] - context.start_ts), bitrate_data[:, 1], 'b')
+    ax1.plot((bitrate_data[:, 0] - context.start_ts), bitrate_data[:, 2], 'b-.')
+    ax1.legend(['Target', 'Max'])
     ax1.tick_params(axis='y', labelcolor='b')
     ax2 = ax1.twinx()
     ax2.set_ylabel('FPS', color='r')
