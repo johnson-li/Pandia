@@ -53,6 +53,8 @@ while true; do
     esac
 done
 
+echo Traffic control, bw: $bw, delay: $delay, qlen: $qlen, loss: $loss
+
 ns=pandia$port
 veth=veth$port
 vpeer=vpeer$port
@@ -61,6 +63,12 @@ sudo tc qdisc del dev $veth root 2> /dev/null || true
 sudo ip netns exec $ns tc qdisc del dev $vpeer root 2> /dev/null || true
 
 # sudo tc qdisc add dev $veth root handle 1: pfifo limit ${qlen}
-sudo tc qdisc add dev $veth root netem loss ${loss}% delay ${delay}ms rate ${bw}kbit
-sudo ip netns exec $ns tc qdisc add dev $vpeer root netem loss ${loss}% delay ${delay}ms rate ${bw}kbit
+if [[ $loss == 0 ]]
+then
+  loss_clause=''
+else
+  loss_clause="loss ${loss}%"
+fi
+sudo tc qdisc add dev $veth root netem ${loss_clause} delay ${delay}ms rate ${bw}kbit
+sudo ip netns exec $ns tc qdisc add dev $vpeer root netem ${loss_clause} delay ${delay}ms rate ${bw}kbit
 
