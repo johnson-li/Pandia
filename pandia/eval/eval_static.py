@@ -17,7 +17,7 @@ SHM_NAME = f'pandia_{PORT}'
 DURATION = 30
 BW = 1024 * 1024
 PACING_RATE = 1024 * 1024
-BITRATE = 2 * 1024
+BITRATE = 5 * 1024
 WIDTH = 1080
 DELAY = 0
 FPS = 30
@@ -37,7 +37,7 @@ def init_webrtc():
             shm = \
                 shared_memory.SharedMemory(name=SHM_NAME, create=False, size=shm_size)
     process = subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'), 
-                        '-p', str(PORT), '-d', str(DURATION + 3), 
+                        '-p', str(PORT), '-d', str(DURATION + 5), 
                         '-l', f'/tmp/{RECEIVER_LOG}'], shell=False)
     process.wait()
     time.sleep(1)
@@ -53,7 +53,7 @@ def start_webrtc():
                                             '--server', '195.148.127.230',
                                             '--port', str(PORT), '--name', 'sender',
                                             '--width', str(WIDTH), '--fps', str(FPS), '--autocall', 'true',
-                                            '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/'],
+                                            '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/WebRTC-FrameDropper/Disabled'],
                                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
     return process_sender
 

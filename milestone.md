@@ -3,8 +3,12 @@ Milestone
 
 Track the development of new features
 
+### 3rd July
+- [x] Many packets will be lost if the encoded image is much larger than the bitrate / FPS, causing high frame loss rate.
+- [ ] The RTCP reported decoding/assmbly delay is a little larger than the real delay.
+
 ### 29th Jun
-- [ ] Find out the root cause of the decoding queue delay. It is not caused by the decoding delay. 
+- [x] Find out the root cause of the decoding queue delay. It is not caused by the decoding delay. (It is caused by the VCMTiming)
 - [x] Find out the causes of frame drop. (pacing delay, encoded size too large)
 
 ### 28th Jun
