@@ -1,7 +1,7 @@
 #!/bin/bash
 
 bw=1048576 # bandwidth in kbps, 1Gbps by default
-port=7018
+port=7001
 delay=0 # ms
 qlen=10000 # packets, 250ms of buffer, it is around 21 packets for 1 Mbps
 loss=0 # percentile
@@ -13,8 +13,8 @@ if [[ ${PIPESTATUS[0]} -ne 4 ]]; then
     exit 1
 fi
 
-LONGOPTS=delay,bw,qlen,port,loss
-OPTIONS=d:b:q:p:l:
+LONGOPTS=delay,bw,qlen,port
+OPTIONS=d:b:q:p:
 ! PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name "$0" -- "$@")
 if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
     exit 2
@@ -28,10 +28,6 @@ while true; do
             ;;
         -b|--bw)
             bw="$2"
-            shift 2
-            ;;
-        -l|--loss)
-            loss="$2"
             shift 2
             ;;
         -q|--qlen)
