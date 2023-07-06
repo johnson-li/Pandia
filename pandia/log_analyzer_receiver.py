@@ -16,9 +16,17 @@ class Frame:
         self.decoding_at = None
 
 
+class Packet:
+    def __init__(self, rtp_id, seq, ts) -> None:
+        self.rtp_id = rtp_id
+        self.seq = seq
+        self.recv_ts = ts
+
+
 class Stream:
     def __init__(self) -> None:
         self.frames = {}
+        self.packets = {}
 
 
 def parse_line(line, stream: Stream) -> None:
@@ -46,6 +54,14 @@ def parse_line(line, stream: Stream) -> None:
         frame = Frame(frame_id)
         frame.received_at = ts
         stream.frames[frame_id] = frame
+    elif 'Rtp packet received' in line:
+        m = re.match(re.compile(
+            '.*\\[(\\d+)\\] Rtp packet received, id: (\\d+), sequence number: (\\d+).*'), line)
+        ts = int(m[1]) / 1000
+        seq = int(m[2])
+        rtp_id = int(m[3])
+        packet = Packet(rtp_id, seq, ts)
+        stream.packets[rtp_id] = packet
     elif line.startswith('(libvpx_vp8_decoder.cc') and 'Start decoding' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Start decoding, frame first rtp: (\\d+).*'), line)
@@ -64,7 +80,7 @@ def parse_line(line, stream: Stream) -> None:
             frame.decoding_at = ts
 
 def analyze(stream: Stream, output_dir=OUTPUT_DIR) -> None:
-    print("==========statistics==========")
+    print("========== STATISTICS [RECEIVER] ==========")
     if not stream.frames:
         return
     ids = list(sorted(stream.frames.keys()))

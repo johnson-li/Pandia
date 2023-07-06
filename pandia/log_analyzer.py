@@ -23,6 +23,8 @@ class PacketContext(object):
         self.rtp_id = rtp_id
         self.payload_type = payload_type
         self.size = size
+        self.retrans_ref = None
+        self.rtx = False
         self.received = None  # The reception is reported by RTCP transport feedback, which is biased because the feedback may be lost.
         self.nack_retransmitted = False 
 
@@ -60,6 +62,14 @@ class FrameContext(object):
         self.dropped_by_encoder = False
         self.is_key_frame = False
         self.qp = 0
+        self.retrans_record = {}
+
+    def last_rtp_send_ts_including_rtx(self):
+        last_retrans_list = [self.rtp_packets[r[-1]] for r in self.retrans_record.values()]
+        if last_retrans_list:
+            return max([l.sent_at for l in last_retrans_list])
+        return self.last_rtp_send_ts()
+
 
     def last_rtp_send_ts(self):
         last_ts = -1
@@ -84,6 +94,9 @@ class FrameContext(object):
 
     def pacing_delay(self):
         return self.last_rtp_send_ts() - self.captured_at if self.last_rtp_send_ts() else -1
+
+    def pacing_delay_including_rtx(self):
+        return self.last_rtp_send_ts_including_rtx() - self.captured_at if self.last_rtp_send_ts_including_rtx() else -1
 
     def decoding_queue_delay(self):
         return self.decoding_at - self.captured_at if self.decoding_at > 0 else -1
@@ -124,6 +137,9 @@ class StreamingContext(object):
         self.last_egress_packet_id = 0
         self.last_acked_packet_id = 0
         self.action_context = ActionContext()
+        self.packet_frame_map = {}
+        self.padding_rtps = set()
+        self.packet_retrans_map = {}
 
     def reset_action_context(self):
         self.action_context = ActionContext()
@@ -293,15 +309,26 @@ def parse_line(line, context: StreamingContext) -> dict:
         frame.encoded_size = encoded_size
     elif 'Assign RTP id' in line:
         m = re.match(re.compile(
-            '.*\\[(\\d+)\\] .*Assign RTP id, id: (\\d+), frame id: (\\d+).*'), line)
+            '.*\\[(\\d+)\\] .*Assign RTP id, id: (\\d+), frame id: (\\d+), type: (\\d+), retrans seq num: (\\d+), allow retrans: (\\d+).*'), line)
         ts = int(m[1]) / 1000
         rtp_id = int(m[2])
         frame_id = int(m[3])
-        if frame_id in context.frames:
+        rtp_type = int(m[4])  # 0: audio, 1: video, 2: rtx, 3: fec, 4: padding
+        retrans_seq_num = int(m[5])
+        allow_retrans = int(m[6]) == 1
+        context.packet_frame_map[rtp_id] = frame_id
+        if rtp_type == 4:
+            context.padding_rtps.add(rtp_id)
+        elif frame_id > 0 and frame_id in context.frames:
             frame: FrameContext = context.frames[frame_id]
             frame.rtp_packets[rtp_id] = None
-            frame.rtp_id_range[0] = min(frame.rtp_id_range[0], rtp_id)
-            frame.rtp_id_range[1] = max(frame.rtp_id_range[1], rtp_id)
+            if rtp_type == 2:
+                original_rtp_id = context.packet_id_map[retrans_seq_num]
+                frame.retrans_record.setdefault(original_rtp_id, []).append(rtp_id)
+                context.packet_retrans_map[rtp_id] = original_rtp_id
+            elif rtp_type == 1:
+                frame.rtp_id_range[0] = min(frame.rtp_id_range[0], rtp_id)
+                frame.rtp_id_range[1] = max(frame.rtp_id_range[1], rtp_id)
     elif 'NVENC Start encoding' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] NVENC Start encoding, frame id: (\\d+), shape: (\\d+) x (\\d+), bitrate: (\\d+) kbps.*'), line)
@@ -364,11 +391,11 @@ def parse_line(line, context: StreamingContext) -> dict:
             packet.sent_at_utc = utc
             if packet.payload_type == 1:
                 context.packets[packet.rtp_id] = packet
-                for i in range(context.last_captured_frame_id, 0, -1):
-                    if i in context.frames:
-                        frame = context.frames[i]
-                        if rtp_id in frame.rtp_packets:
-                            frame.rtp_packets[rtp_id] = packet
+                frame_id = context.packet_frame_map[packet.rtp_id]
+                if frame_id in context.frames:
+                    frame: FrameContext = context.frames[frame_id]
+                    if rtp_id in frame.rtp_packets:
+                        frame.rtp_packets[rtp_id] = packet
             context.last_egress_packet_id = max(
                 rtp_id, context.last_egress_packet_id)
     elif 'RTCP feedback, packet acked' in line:
@@ -480,6 +507,7 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
                                      'ts': frame.captured_at,
                                      'encoded by': frame.encoding_delay(),
                                      'paced by': frame.pacing_delay(),
+                                     'paced by (rtx)': frame.pacing_delay_including_rtx(),
                                      'assembled by': frame.assemble_delay(),
                                      'queued by': frame.decoding_queue_delay(),
                                      'decoded by': frame.decoding_delay(),})
@@ -488,18 +516,19 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.close()
     ylim = 0
     colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
-    for i, k in enumerate(['decoded by', 'queued by', 'assembled by', 'paced by', 'encoded by'][::-1]):
+    for i, k in enumerate(['decoded by', 'queued by', 'assembled by', 'paced by (rtx)', 'paced by', 'encoded by']):
         x = np.array([d['ts'] - context.start_ts for d in data_frame_delay])
         y = np.array([d[k] for d in data_frame_delay]) * 1000
         print(f'Median: {k} {np.median(y)} ms')
-        ylim = np.percentile(y, 50)
+        if ylim == 0:
+            ylim = np.percentile(y, 90)
         indexes = (y > 0).nonzero()
         plt.plot(x[indexes], y[indexes], colors[i])
     # plt.plot(lost_frames, [10 for _ in lost_frames], 'x')
-    plt.legend(['Decoding', 'Queue', 'Transmission', 'Pacing', 'Encoding'][::-1])
+    plt.legend(['Decoding', 'Queue', 'Transmission', 'Pacing (RTX)', 'Pacing', 'Encoding'])
     plt.xlabel('Timestamp (s)')
     plt.ylabel('Delay (ms)')
-    plt.ylim([0, ylim * 1.8])
+    plt.ylim([0, ylim])
     plt.savefig(os.path.join(output_dir, 'mea-delay-frame.pdf'))
     x = []
     y = []
@@ -524,6 +553,32 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     ax2.plot(x, bitrates, 'r')
     ax2.set_ylabel('Bitrate (Kbps)')
     plt.savefig(os.path.join(output_dir, 'mea-size-frame.pdf'))
+
+    plt.close()
+    x = []
+    y = []
+    yy = []
+    for frame in context.frames.values():
+        count_all = 0
+        count_lost = len(frame.retrans_record)
+        x.append(frame.captured_at - context.start_ts)
+        for i in range(frame.rtp_id_range[0], frame.rtp_id_range[1] + 1):
+            if i in context.padding_rtps or i in context.packet_retrans_map:
+                continue
+            count_all += 1
+        yy.append(count_lost)
+        y.append(count_lost / count_all * 100 if count_all > 0 else 0)
+    fig, ax1 = plt.subplots()
+    ax2 = ax1.twinx()
+    ax1.plot(x, y, 'b')
+    x = np.array(x)
+    yy = np.array(yy)
+    # ax2.plot(x[yy > 0], yy[yy > 0], 'r.')
+    ax2.plot(x, yy, 'r.')
+    plt.xlabel('Timestamp (s)')
+    ax1.set_ylabel('Packet loss rate per frame (%)')
+    ax2.set_ylabel('Number of lost packets per frame')
+    plt.savefig(os.path.join(output_dir, 'mea-loss-packet-frame.pdf'))
 
     plt.close()
     fig, ax1 = plt.subplots()
@@ -698,13 +753,18 @@ def analyze_network(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
 
 
 def print_statistics(context: StreamingContext) -> None:
-    print("==========statistics==========")
-    frame_ids = list(sorted(
-        filter(lambda k: context.frames[k].codec, context.frames.keys())))
-    frames_total = (max(frame_ids) - min(frame_ids) + 1) if frame_ids else 0
-    frames_recvd = len(frame_ids)
-    loss_rate = ((frames_total - frames_recvd) / frames_total) if frames_total else 0
-    print(f"Total frames: {frames_total}, loss rate: {loss_rate:.2%}")
+    print("========== STATISTICS [SENDER] ==========")
+    frame_ids = list(filter(lambda k: context.frames[k].codec, context.frames.keys()))
+    id_min = min(frame_ids) if frame_ids else 0
+    id_max = max(frame_ids) if frame_ids else 0
+    frames_total = (id_max - id_min + 1) if frame_ids else 0
+    frames_sent = len(frame_ids)
+    frame_ids = list(filter(lambda f: id_min <= f.frame_id <= id_max and f.decoded_at > 0, context.frames.values()))
+    frames_decoded = len(frame_ids)
+    loss_rate_encoding = ((frames_total - frames_sent) / frames_total) if frames_total else 0
+    loss_rate_decoding = ((frames_total - frames_decoded) / frames_total) if frames_total else 0
+    print(f"Total frames: {frames_total}, encoding loss rate: {loss_rate_encoding:.2%}, "
+          f"decoding loss rate: {loss_rate_decoding:.2%}")
 
 
 def analyze_codec(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
