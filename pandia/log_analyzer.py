@@ -23,7 +23,8 @@ class PacketContext(object):
         self.rtp_id = rtp_id
         self.payload_type = payload_type
         self.size = size
-        self.received = False
+        self.received = None  # The reception is reported by RTCP transport feedback, which is biased because the feedback may be lost.
+        self.nack_retransmitted = False 
 
     def ack_delay(self):
         return self.acked_at - self.sent_at if self.acked_at > 0 else -1
@@ -342,6 +343,14 @@ def parse_line(line, context: StreamingContext) -> dict:
         ts = int(m[1]) / 1000
         rtt = int(m[2]) / 1000
         context.rtt_data.append((ts, rtt))
+    elif 'ReSendPacket' in line:
+        m = re.match(re.compile('.*\\[(\\d+)\\] ReSendPacket, id: (\\d+).*'), line)
+        ts = int(m[1]) / 1000
+        sequence_number = int(m[2])
+        if sequence_number in context.packet_id_map:
+            rtp_id = context.packet_id_map[sequence_number]
+            packet = context.packets[rtp_id]
+            packet.nack_retransmitted = True
     elif 'OnSentPacket' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] OnSentPacket, id: (-?\\d+), type: (\\d+), size: (\\d+), utc: (\\d+) ms.*'), line)
@@ -612,7 +621,7 @@ def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     bucks_lost = np.zeros(int((packets[-1].sent_at - packets[0].sent_at) / duration + 1))
     for p in packets:
         i = int((p.sent_at - packets[0].sent_at) / duration)
-        if p.rtp_id >= 0:
+        if p.rtp_id >= 0 and p.received is not None:
             bucks_sent[i] += 1
             if not p.received:
                 bucks_lost[i] += 1
@@ -623,6 +632,24 @@ def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.xlabel('Timestamp (s)')
     plt.ylabel('Packet loss rate (%)')
     plt.savefig(os.path.join(output_dir, 'mea-loss-packet.pdf'))
+
+    duration = 1
+    packets = sorted(context.packets.values(), key=lambda x: x.sent_at)
+    bucks_sent = np.zeros(int((packets[-1].sent_at - packets[0].sent_at) / duration + 1))
+    bucks_retrans = np.zeros(int((packets[-1].sent_at - packets[0].sent_at) / duration + 1))
+    for p in packets:
+        i = int((p.sent_at - packets[0].sent_at) / duration)
+        if p.rtp_id >= 0:
+            bucks_sent[i] += 1
+            if p.nack_retransmitted:
+                bucks_retrans[i] += 1
+    x = [i * duration for i in range(len(bucks_sent))]
+    y = bucks_retrans / bucks_sent * 100
+    plt.close()
+    plt.plot(x, y)
+    plt.xlabel('Timestamp (s)')
+    plt.ylabel('Packet retransmission ratio (%)')
+    plt.savefig(os.path.join(output_dir, 'mea-retrans-packet.pdf'))
 
     plt.close()
     x = [i[0] - context.start_ts for i in context.packet_loss_data]

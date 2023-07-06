@@ -13,7 +13,7 @@ from pandia.log_analyzer_receiver import Stream, parse_line as parse_line_receiv
 CLIENT_ID = 18
 PORT = 7000 + CLIENT_ID
 SHM_NAME = f'pandia_{PORT}'
-DURATION = 30
+DURATION = 15
 NETWORK = {
     'bw': 1024 * 1024,
     'delay': 5,
