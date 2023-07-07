@@ -113,13 +113,14 @@ def main() -> None:
     # receiver_log = "/tmp/test_receiver.log"
     receiver_log = os.path.join(RESULTS_PATH, 'eval_static', 'eval_receiver.log') 
     stream = Stream()
-    for line in open(receiver_log).readlines():
+    for line in open(receiver_log).readlines()[:-1]:  # Ignore the last line because it may be incomplete
         line = line.strip()
         if line:
             try:
                 parse_line(line, stream)
             except Exception as e:
-                print(e)
+                print(f"Error parsing line: {line}")
+                raise e
     analyze(stream)
 
 

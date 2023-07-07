@@ -14,19 +14,27 @@ kBaseTimeTick=kDeltaTick*(1<<8)  # In ms
 kTimeWrapPeriod=kBaseTimeTick * (1 << 24)  # In ms
 
 
+PACKET_TYPES = ['audio', 'video', 'rtx', 'fec', 'padding']
+
+
+def divide(a: np.ndarray, b: np.ndarray):
+    return np.divide(a, b, out=np.zeros_like(a), where=b != 0)
+
+
 class PacketContext(object):
-    def __init__(self, rtp_id, payload_type, size, sent_at) -> None:
-        self.sent_at = sent_at
-        self.sent_at_utc = -1.0
-        self.acked_at = -1
-        self.received_at = -1  # Remote ts
-        self.rtp_id = rtp_id
-        self.payload_type = payload_type
-        self.size = size
-        self.retrans_ref = None
-        self.rtx = False
+    def __init__(self, rtp_id) -> None:
+        self.sent_at: float = -1
+        self.sent_at_utc: float = -1
+        self.acked_at: float = -1
+        self.received_at: float = -1  # Remote ts
+        self.rtp_id: int = rtp_id
+        self.payload_type = -1
+        self.frame_id = -1
+        self.size = -1
+        self.allow_retrans: bool = None
+        self.retrans_ref: int = None
+        self.packet_type: str
         self.received = None  # The reception is reported by RTCP transport feedback, which is biased because the feedback may be lost.
-        self.nack_retransmitted = False 
 
     def ack_delay(self):
         return self.acked_at - self.sent_at if self.acked_at > 0 else -1
@@ -58,33 +66,37 @@ class FrameContext(object):
         self.encoded_size = 0
         self.encoded_shape = (0, 0)
         self.rtp_packets: dict = {}
-        self.rtp_id_range = [1000000, 0]
         self.dropped_by_encoder = False
         self.is_key_frame = False
         self.qp = 0
         self.retrans_record = {}
 
     def last_rtp_send_ts_including_rtx(self):
-        last_retrans_list = [self.rtp_packets[r[-1]] for r in self.retrans_record.values()]
-        if last_retrans_list:
-            return max([l.sent_at for l in last_retrans_list])
-        return self.last_rtp_send_ts()
-
+        packets = list(filter(lambda p: p.packet_type in ['video', 'fec', 'rtx'], self.rtp_packets.values()))
+        return max([p.sent_at for p in packets]) if packets else -1
 
     def last_rtp_send_ts(self):
-        last_ts = -1
-        for i in range(self.rtp_id_range[1], self.rtp_id_range[0] - 1, -1):
-            pkt = self.rtp_packets.get(i, None)
-            if pkt and pkt.sent_at > 0:
-                return pkt.sent_at
+        packets = list(filter(lambda p: p.packet_type in ['video', 'fec'], self.rtp_packets.values()))
+        return max([p.sent_at for p in packets]) if packets else -1
 
-    def last_rtp_recv_ts(self):
-        last_ts = -1
-        for i in range(self.rtp_id_range[1], self.rtp_id_range[0] - 1, -1):
-            pkt = self.rtp_packets.get(i, None)
-            if pkt and pkt.acked_at > 0:
-                return pkt.acked_at
-        return last_ts
+    def packets_sent(self):
+        return self.rtp_packets
+
+    def packets_video(self):
+        return list(filter(lambda p: p.packet_type in ['video'], self.rtp_packets.values()))
+
+    def packets_rtx(self):
+        return list(filter(lambda p: p.packet_type in ['rtx'], self.rtp_packets.values()))
+
+    def packets_fec(self):
+        return list(filter(lambda p: p.packet_type in ['fec'], self.rtp_packets.values()))
+
+    def packets_padding(self):
+        return list(filter(lambda p: p.packet_type in ['padding'], self.rtp_packets.values()))
+
+    def last_rtp_recv_ts_including_rtx(self):
+        packets = list(filter(lambda p: p.packet_type in ['video', 'fec', 'rtx'], self.rtp_packets.values()))
+        return max([p.acked_at for p in packets]) if packets else -1
 
     def encoding_delay(self):
         return self.encoded_at - self.captured_at if self.encoded_at > 0 else -1
@@ -137,9 +149,6 @@ class StreamingContext(object):
         self.last_egress_packet_id = 0
         self.last_acked_packet_id = 0
         self.action_context = ActionContext()
-        self.packet_frame_map = {}
-        self.padding_rtps = set()
-        self.packet_retrans_map = {}
 
     def reset_action_context(self):
         self.action_context = ActionContext()
@@ -313,22 +322,23 @@ def parse_line(line, context: StreamingContext) -> dict:
         ts = int(m[1]) / 1000
         rtp_id = int(m[2])
         frame_id = int(m[3])
-        rtp_type = int(m[4])  # 0: audio, 1: video, 2: rtx, 3: fec, 4: padding
+        rtp_type = PACKET_TYPES[int(m[4])]  # 0: audio, 1: video, 2: rtx, 3: fec, 4: padding
         retrans_seq_num = int(m[5])
-        allow_retrans = int(m[6]) == 1
-        context.packet_frame_map[rtp_id] = frame_id
-        if rtp_type == 4:
-            context.padding_rtps.add(rtp_id)
-        elif frame_id > 0 and frame_id in context.frames:
+        allow_retrans = int(m[6]) != 0
+        packet = PacketContext(rtp_id)
+        context.packets[rtp_id] = packet
+        packet.packet_type = rtp_type
+        packet.frame_id = frame_id
+        packet.allow_retrans = allow_retrans
+        packet.retrans_ref = retrans_seq_num
+        if rtp_type == 'rtx':
+            packet.frame_id = context.packets[context.packet_id_map[retrans_seq_num]].frame_id
+        if packet.frame_id > 0 and frame_id in context.frames:
             frame: FrameContext = context.frames[frame_id]
-            frame.rtp_packets[rtp_id] = None
-            if rtp_type == 2:
+            frame.rtp_packets[rtp_id] = packet
+            if rtp_type == 'rtx':
                 original_rtp_id = context.packet_id_map[retrans_seq_num]
                 frame.retrans_record.setdefault(original_rtp_id, []).append(rtp_id)
-                context.packet_retrans_map[rtp_id] = original_rtp_id
-            elif rtp_type == 1:
-                frame.rtp_id_range[0] = min(frame.rtp_id_range[0], rtp_id)
-                frame.rtp_id_range[1] = max(frame.rtp_id_range[1], rtp_id)
     elif 'NVENC Start encoding' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] NVENC Start encoding, frame id: (\\d+), shape: (\\d+) x (\\d+), bitrate: (\\d+) kbps.*'), line)
@@ -370,32 +380,27 @@ def parse_line(line, context: StreamingContext) -> dict:
         ts = int(m[1]) / 1000
         rtt = int(m[2]) / 1000
         context.rtt_data.append((ts, rtt))
-    elif 'ReSendPacket' in line:
-        m = re.match(re.compile('.*\\[(\\d+)\\] ReSendPacket, id: (\\d+).*'), line)
-        ts = int(m[1]) / 1000
-        sequence_number = int(m[2])
-        if sequence_number in context.packet_id_map:
-            rtp_id = context.packet_id_map[sequence_number]
-            packet = context.packets[rtp_id]
-            packet.nack_retransmitted = True
+    # elif 'ReSendPacket' in line:
+    #     m = re.match(re.compile('.*\\[(\\d+)\\] ReSendPacket, id: (\\d+).*'), line)
+    #     ts = int(m[1]) / 1000
+    #     sequence_number = int(m[2])
+    #     if sequence_number in context.packet_id_map:
+    #         rtp_id = context.packet_id_map[sequence_number]
+    #         packet = context.packets[rtp_id]
     elif 'OnSentPacket' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] OnSentPacket, id: (-?\\d+), type: (\\d+), size: (\\d+), utc: (\\d+) ms.*'), line)
         ts = int(m[1]) / 1000
         rtp_id = int(m[2])
-        rtp_type = int(m[3])
+        payload_type = int(m[3])
         size = int(m[4])
         utc = int(m[5]) / 1000
         if rtp_id >= 0:
-            packet = PacketContext(rtp_id, rtp_type, size, ts)
+            packet: PacketContext = context.packets[rtp_id]
+            packet.payload_type = payload_type
+            packet.size = size
+            packet.sent_at = ts 
             packet.sent_at_utc = utc
-            if packet.payload_type == 1:
-                context.packets[packet.rtp_id] = packet
-                frame_id = context.packet_frame_map[packet.rtp_id]
-                if frame_id in context.frames:
-                    frame: FrameContext = context.frames[frame_id]
-                    if rtp_id in frame.rtp_packets:
-                        frame.rtp_packets[rtp_id] = packet
             context.last_egress_packet_id = max(
                 rtp_id, context.last_egress_packet_id)
     elif 'RTCP feedback, packet acked' in line:
@@ -407,8 +412,8 @@ def parse_line(line, context: StreamingContext) -> dict:
         # The fixed value 1570 should be calculated according to the current time.
         offset = int(time.time() * 1000 / kTimeWrapPeriod) - 1
         received_at = (int(m[3]) + offset * kTimeWrapPeriod) / 1000
-        packet = context.packets.get(rtp_id, None)
-        if packet:
+        if rtp_id in context.packets:
+            packet = context.packets[rtp_id]
             packet.received_at = received_at
     elif 'Packet acked' in line:
         m = re.match(re.compile(
@@ -528,7 +533,7 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.legend(['Decoding', 'Queue', 'Transmission', 'Pacing (RTX)', 'Pacing', 'Encoding'])
     plt.xlabel('Timestamp (s)')
     plt.ylabel('Delay (ms)')
-    plt.ylim([0, ylim])
+    # plt.ylim([0, ylim])
     plt.savefig(os.path.join(output_dir, 'mea-delay-frame.pdf'))
     x = []
     y = []
@@ -544,14 +549,16 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.close()
     fig, ax1 = plt.subplots()
     ax1.plot(x, y)
-    ax1.plot(lost_frames, [10 for _ in lost_frames], 'x')
+    ax1.plot(lost_frames, [10 for _ in lost_frames], 'xb')
     ax1.plot([f[0] for f in key_frames], [f[1] for f in key_frames], 'o')
+    ax1.tick_params(axis='y', labelcolor='b')
     ax1.set_xlabel('Timestamp (s)')
     ax1.set_ylabel('Encoded size (KB)')
     ax1.legend(['Encoded size', 'Lost frames', 'Key frames'])
     ax2 = ax1.twinx()
     ax2.plot(x, bitrates, 'r')
     ax2.set_ylabel('Bitrate (Kbps)')
+    ax2.tick_params(axis='y', labelcolor='r')
     plt.savefig(os.path.join(output_dir, 'mea-size-frame.pdf'))
 
     plt.close()
@@ -559,18 +566,15 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     y = []
     yy = []
     for frame in context.frames.values():
-        count_all = 0
-        count_lost = len(frame.retrans_record)
+        count_all = len(frame.packets_sent())
+        count_lost = len(frame.packets_rtx())
         x.append(frame.captured_at - context.start_ts)
-        for i in range(frame.rtp_id_range[0], frame.rtp_id_range[1] + 1):
-            if i in context.padding_rtps or i in context.packet_retrans_map:
-                continue
-            count_all += 1
-        yy.append(count_lost)
         y.append(count_lost / count_all * 100 if count_all > 0 else 0)
+        yy.append(count_lost)
     fig, ax1 = plt.subplots()
     ax2 = ax1.twinx()
     ax1.plot(x, y, 'b')
+    ax1.tick_params(axis='y', labelcolor='b')
     x = np.array(x)
     yy = np.array(yy)
     # ax2.plot(x[yy > 0], yy[yy > 0], 'r.')
@@ -578,6 +582,7 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.xlabel('Timestamp (s)')
     ax1.set_ylabel('Packet loss rate per frame (%)')
     ax2.set_ylabel('Number of lost packets per frame')
+    ax2.tick_params(axis='y', labelcolor='r')
     plt.savefig(os.path.join(output_dir, 'mea-loss-packet-frame.pdf'))
 
     plt.close()
@@ -594,12 +599,14 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
         count += y[i]
         fps.append(i - start + 1)
         accu.append(count)
-    ax1.plot(x, accu)
+    ax1.plot(x, accu, 'b')
+    ax1.tick_params(axis='y', labelcolor='b')
     ax1.set_xlabel('Timestamp (s)')
     ax1.set_ylabel('Accumulated frame size (KB)')
     ax2 = ax1.twinx()
     ax2.plot(x, fps, 'r')
     ax2.set_ylabel('FPS')
+    ax1.tick_params(axis='y', labelcolor='r')
     plt.savefig(os.path.join(output_dir, 'mea-size-frame-accu.pdf'))
 
     plt.close()
@@ -634,7 +641,7 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
 def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     data_ack = []
     data_recv = []
-    offset = -0.00335956
+    offset = -0.00516224
     for pkt in sorted(context.packets.values(), key=lambda x: x.sent_at):
         pkt: PacketContext = pkt
         if pkt.ack_delay() > 0:
@@ -681,7 +688,7 @@ def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
             if not p.received:
                 bucks_lost[i] += 1
     x = [i * duration for i in range(len(bucks_sent))]
-    y = bucks_lost / bucks_sent * 100
+    y = divide(bucks_lost, bucks_sent) * 100
     plt.close()
     plt.plot(x, y)
     plt.xlabel('Timestamp (s)')
@@ -696,10 +703,10 @@ def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
         i = int((p.sent_at - packets[0].sent_at) / duration)
         if p.rtp_id >= 0:
             bucks_sent[i] += 1
-            if p.nack_retransmitted:
+            if p.packet_type == 'rtx':
                 bucks_retrans[i] += 1
     x = [i * duration for i in range(len(bucks_sent))]
-    y = bucks_retrans / bucks_sent * 100
+    y = divide(bucks_retrans, bucks_sent) * 100
     plt.close()
     plt.plot(x, y)
     plt.xlabel('Timestamp (s)')
@@ -812,7 +819,11 @@ def main() -> None:
     sender_log = os.path.join(working_dir, 'eval_sender.log')
     context = StreamingContext()
     for line in open(sender_log).readlines():
-        parse_line(line, context)
+        try:
+            parse_line(line, context)
+        except Exception as e:
+            print(f"Error parsing line: {line}")
+            raise e
     analyze_stream(context, output_dir=working_dir)
 
 

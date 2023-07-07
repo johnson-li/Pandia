@@ -16,27 +16,21 @@ def get_pkt_recv(rtp_id, frame: FrameContext, context_sender: StreamingContext, 
 def analyze_frame(frame: FrameContext, context_sender: StreamingContext, context_receiver: Stream) -> tuple:
     recv_ts = []
     rtx_recv_ts = []
-    rtp_first, rtp_last = frame.rtp_id_range
-    rtp_pkts_num = rtp_last - rtp_first + 1 if rtp_last > 0 else 0
-    for rtp_id in range(rtp_first, rtp_last + 1):
-        if rtp_id in context_sender.padding_rtps or rtp_id in context_sender.packet_retrans_map:
-            continue
-        pkt_send = context_sender.packets[rtp_id]
-        pkt_recv = get_pkt_recv(rtp_id, frame, context_sender, context_receiver)
+    packets = frame.packets_video()
+    rtp_pkts_num = len(packets)
+    for pkt in packets:
+        pkt_recv = context_receiver.packets.get(pkt.rtp_id, None)
+        if not pkt_recv:
+            rtx_packets = [context_receiver.packets[i] for i in frame.retrans_record.get(pkt.rtp_id, []) if i in context_receiver.packets]
+            if rtx_packets:
+                pkt_recv = rtx_packets[0]
         if pkt_recv:
-            if pkt_recv.rtp_id == rtp_id:
+            if pkt_recv.rtp_id == pkt.rtp_id:
                 recv_ts.append(pkt_recv.recv_ts)
             else:
                 rtx_recv_ts.append(pkt_recv.recv_ts)
         else:
-            print(f'ERROR {rtp_id} not received nor retransmitted, frame {frame.frame_id}')
-            # pkt_recv = context_receiver.packets.get(rtp_id, None)
-            # if pkt_recv:
-            #     break
-            # if not pkt_recv:
-            #     print(frame.rtp_id_range, rtp_id, frame.retrans_record)
-
-    # print(f'Frame {frame.frame_id}, rtp pkts num: {rtp_pkts_num}')
+            print(f'ERROR {pkt.rtp_id} not received nor retransmitted, frame {frame.frame_id}')
     return recv_ts, rtx_recv_ts
 
 
@@ -59,6 +53,7 @@ def analyze(output_dir, context_sender: StreamingContext, context_receiver: Stre
     plt.xlabel('Frame captured time (s)')
     plt.ylabel('RTP reception time (ms)')
     plt.legend(['RTP', 'Retransmitted RTP'])    
+    plt.ylim([0, 500])
     plt.savefig(os.path.join(output_dir, 'mea-rtp-recv-ts.pdf'))
 
 
