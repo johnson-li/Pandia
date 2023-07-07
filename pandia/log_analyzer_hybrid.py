@@ -30,7 +30,7 @@ def analyze_frame(frame: FrameContext, context_sender: StreamingContext, context
             else:
                 rtx_recv_ts.append(pkt_recv.recv_ts)
         else:
-            print(f'ERROR {pkt.rtp_id} not received nor retransmitted, frame {frame.frame_id}')
+            print(f'WARNING {pkt.rtp_id} not received nor retransmitted, frame {frame.frame_id}')
     return recv_ts, rtx_recv_ts
 
 
@@ -57,10 +57,9 @@ def analyze(output_dir, context_sender: StreamingContext, context_receiver: Stre
     plt.savefig(os.path.join(output_dir, 'mea-rtp-recv-ts.pdf'))
 
 
-def main():
-    path = os.path.join(RESULTS_PATH, 'eval_static') 
-    sender_log = os.path.join(path, 'eval_sender.log')
-    receiver_log = os.path.join(path, 'eval_receiver.log')
+def main(result_path=os.path.join(RESULTS_PATH, 'eval_static')):
+    sender_log = os.path.join(result_path, 'eval_sender.log')
+    receiver_log = os.path.join(result_path, 'eval_receiver.log')
     context = StreamingContext()
     for line in open(sender_log).readlines():
         try:
@@ -75,7 +74,7 @@ def main():
                 parse_line_receiver(line, stream)
             except Exception as e:
                 print(e)
-    analyze(path, context, stream)
+    analyze(result_path, context, stream)
     
 
 

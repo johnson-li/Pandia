@@ -34,7 +34,7 @@ class PacketContext(object):
         self.allow_retrans: bool = None
         self.retrans_ref: int = None
         self.packet_type: str
-        self.received = None  # The reception is reported by RTCP transport feedback, which is biased because the feedback may be lost.
+        self.received: bool = None  # The reception is reported by RTCP transport feedback, which is biased because the feedback may be lost.
 
     def ack_delay(self):
         return self.acked_at - self.sent_at if self.acked_at > 0 else -1
@@ -422,8 +422,8 @@ def parse_line(line, context: StreamingContext) -> dict:
         rtp_id = int(m[2])
         received = int(m[3])
         delta = int(m[4]) / 1000
-        packet: PacketContext = context.packets.get(rtp_id, None)
-        if packet:
+        if rtp_id in context.packets:
+            packet: PacketContext = context.packets[rtp_id]
             packet.acked_at = ts - delta
             packet.received = received == 1
             context.last_acked_packet_id = max(
@@ -443,34 +443,26 @@ def parse_line(line, context: StreamingContext) -> dict:
         rtp_sequence = int(m[2])
         recving_offset = int(m[3]) / 1000
         decoding_offset = int(m[4]) / 1000
-        rtp_id = context.packet_id_map.get(rtp_sequence, None)
-        if rtp_id:
-            for i in range(context.last_captured_frame_id, 0, -1):
-                if i in context.frames:
-                    frame: FrameContext = context.frames[i]
-                    if frame.rtp_id_range[0] == rtp_id:
-                        frame.decoded_at = ts
-                        frame.decoding_at = ts - decoding_offset
-                        frame.assembled0_at = ts - recving_offset
-                        context.last_decoded_frame_id = max(
-                            frame.frame_id, context.last_decoded_frame_id)
-                        break
-                    if frame.rtp_id_range[0] < rtp_id:
-                        break
+        rtp_id = context.packet_id_map.get(rtp_sequence, -1)
+        if rtp_id > 0 and rtp_id in context.packets:
+            frame_id = context.packets[rtp_id].frame_id
+            if frame_id in context.frames:
+                frame: FrameContext = context.frames[frame_id]
+                frame.decoded_at = ts
+                frame.decoding_at = ts - decoding_offset
+                frame.assembled0_at = ts - recving_offset
+                context.last_decoded_frame_id = \
+                        max(frame.frame_id, context.last_decoded_frame_id)
     elif 'Frame reception acked' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Frame reception acked, id: (\\d+).*'), line)
         ts = int(m[1]) / 1000
         rtp_sequence = int(m[2])
         rtp_id = context.packet_id_map[rtp_sequence]
-        for i in range(context.last_captured_frame_id, 0, -1):
-            if i in context.frames:
-                frame: FrameContext = context.frames[i]
-                if frame.rtp_id_range[0] == rtp_id:
-                    frame.assembled_at = ts
-                    break
-                if frame.rtp_id_range[0] < rtp_id:
-                    break
+        if rtp_id in context.packets:
+            frame_id = context.packets[rtp_id].frame_id
+            if frame_id in context.frames:
+                context.frames[frame_id].assembled_at = ts
     elif 'SetPacingRates' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] SetPacingRates, pacing rate: (\\d+) kbps, pading rate: (\\d+) kbps.*'), line)
@@ -812,11 +804,8 @@ def analyze_stream(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     analyze_fec(context, output_dir)
 
 
-def main() -> None:
-    # sender_log = '/tmp/eval_sender_log.txt'
-    # sender_log = '/tmp/test_sender.log'
-    working_dir = os.path.join(RESULTS_PATH, 'eval_static')
-    sender_log = os.path.join(working_dir, 'eval_sender.log')
+def main(result_path=os.path.join(RESULTS_PATH, 'eval_static')) -> None:
+    sender_log = os.path.join(result_path, 'eval_sender.log')
     context = StreamingContext()
     for line in open(sender_log).readlines():
         try:
@@ -824,7 +813,7 @@ def main() -> None:
         except Exception as e:
             print(f"Error parsing line: {line}")
             raise e
-    analyze_stream(context, output_dir=working_dir)
+    analyze_stream(context, output_dir=result_path)
 
 
 if __name__ == "__main__":

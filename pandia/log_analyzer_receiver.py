@@ -106,12 +106,11 @@ def analyze(stream: Stream, output_dir=OUTPUT_DIR) -> None:
     plt.xlabel('Frame receiving time (s)')
     plt.ylabel('Delay (ms)')
     plt.legend(['Queuing Delay', 'Decoding Delay'])
-    plt.savefig(os.path.join(output_dir, 'delay-frame-receiver.pdf'))
+    plt.savefig(os.path.join(output_dir, 'mea-delay-frame-receiver.pdf'))
 
 
-def main() -> None:
-    # receiver_log = "/tmp/test_receiver.log"
-    receiver_log = os.path.join(RESULTS_PATH, 'eval_static', 'eval_receiver.log') 
+def main(result_path=os.path.join(RESULTS_PATH, 'eval_static')) -> None:
+    receiver_log = os.path.join(result_path, 'eval_receiver.log')
     stream = Stream()
     for line in open(receiver_log).readlines()[:-1]:  # Ignore the last line because it may be incomplete
         line = line.strip()
