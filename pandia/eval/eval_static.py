@@ -6,7 +6,8 @@ import time
 
 import numpy as np
 from pandia import BIN_PATH, RESULTS_PATH, SCRIPTS_PATH
-from pandia.log_analyzer import StreamingContext, analyze_stream, parse_line, main as main_sender
+from pandia.log_analyzer import main as main_analyzer
+from pandia.log_analyzer_sender import StreamingContext, analyze_stream, parse_line, main as main_sender
 from pandia.log_analyzer_receiver import Stream, parse_line as parse_line_receiver, analyze as analyze_receiver, main as main_receiver
 from pandia.log_analyzer_hybrid import main as main_hybrid
 
@@ -107,9 +108,7 @@ def run_exp(action=ACTION, result_dir=RESULT_DIR, duration=DURATION):
 
 def analyze(result_dir=RESULT_DIR):
     print(f'Analyzing logs...')
-    main_sender(result_dir)
-    main_receiver(result_dir)
-    main_hybrid(result_dir)
+    main_analyzer(result_dir)
 
 
 def main():

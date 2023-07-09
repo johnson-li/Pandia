@@ -4,29 +4,34 @@ import re
 from matplotlib import pyplot as plt
 import numpy as np
 from pandia import RESULTS_PATH
-
-from pandia.log_analyzer import OUTPUT_DIR
+from pandia.log_analyzer_sender import OUTPUT_DIR
 
 
 class Frame:
     def __init__(self, frame_id) -> None:
         self.frame_id = frame_id
-        self.received_at = None
-        self.decoded_at = None
-        self.decoding_at = None
+        self.received_at: float = -1
+        self.decoded_at: float = -1
+        self.decoding_at: float = -1
+        self.first_seq = -1
+        self.last_seq = -1
+        self.size = -1
 
 
 class Packet:
-    def __init__(self, rtp_id, seq, ts) -> None:
-        self.rtp_id = rtp_id
-        self.seq = seq
-        self.recv_ts = ts
+    def __init__(self, seq) -> None:
+        self.seq: int = seq
+        self.rtp_id: int = -1
+        self.recv_ts: float = -1
+        self.recovered = False
+        self.recovery_ts: float = -1
+        self.rtx_ts: float = -1
 
 
 class Stream:
     def __init__(self) -> None:
         self.frames = {}
-        self.packets = {}
+        self.packets = {}  # Unlike log_analyzer_sender, this is a dict of seq_num -> Packet
 
 
 def parse_line(line, stream: Stream) -> None:
@@ -48,20 +53,43 @@ def parse_line(line, stream: Stream) -> None:
             frame.decoded_at = ts
     elif 'Frame received' in line:
         m = re.match(re.compile(
-            '.*\\[(\\d+)\\] Frame received, id: (\\d+), first rtp seq: (\\d+).*'), line)
+            '.*\\[(\\d+)\\] Frame received, id: (\\d+), first rtp seq: (\\d+), last rtp seq: (\\d+), size: (\\d+).*'), line)
         ts = int(m[1]) / 1000
         frame_id = int(m[3])
         frame = Frame(frame_id)
         frame.received_at = ts
+        frame.first_seq = int(m[3])
+        frame.last_seq = int(m[4])
+        frame.size = int(m[5])
         stream.frames[frame_id] = frame
+    elif 'Recovered packet' in line:
+        m = re.match(re.compile(
+            '.*\\[(\\d+)\\] Recovered packet (\\d+).*'), line)
+        ts = int(m[1]) / 1000
+        seq_num = int(m[2])
+        if seq_num in stream.packets:
+            pkt: Packet = stream.packets[seq_num]
+        else:
+            pkt = Packet(seq_num)
+            stream.packets[seq_num] = pkt
+        if pkt.recovery_ts < 0:
+            pkt.recovery_ts = ts
     elif 'Rtp packet received' in line:
         m = re.match(re.compile(
-            '.*\\[(\\d+)\\] Rtp packet received, id: (\\d+), sequence number: (\\d+).*'), line)
+            '.*\\[(\\d+)\\] Rtp packet received, id: (\\d+), sequence number: (\\d+), recovered: (\\d+).*'), line)
         ts = int(m[1]) / 1000
         seq = int(m[2])
         rtp_id = int(m[3])
-        packet = Packet(rtp_id, seq, ts)
-        stream.packets[rtp_id] = packet
+        recovered = int(m[4]) == 1
+        if seq in stream.packets:
+            packet = stream.packets[seq]
+        else:
+            packet = Packet(seq)
+            stream.packets[seq] = packet
+        if packet.recv_ts < 0:
+            packet.recv_ts = ts
+            packet.rtp_id = rtp_id
+            packet.recovered = recovered
     elif line.startswith('(libvpx_vp8_decoder.cc') and 'Start decoding' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Start decoding, frame first rtp: (\\d+).*'), line)

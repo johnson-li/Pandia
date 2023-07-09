@@ -3,8 +3,8 @@ import os
 from matplotlib import pyplot as plt
 
 from pandia import DIAGRAMS_PATH, RESULTS_PATH
-from pandia.log_analyzer import FrameContext, StreamingContext, parse_line
-from pandia.log_analyzer_receiver import Stream, parse_line as parse_line_receiver
+from pandia.log_analyzer_sender import FrameContext, StreamingContext, parse_line
+from pandia.log_analyzer_receiver import Packet, Stream, parse_line as parse_line_receiver
 
 
 def get_pkt_recv(rtp_id, frame: FrameContext, context_sender: StreamingContext, context_receiver: Stream):
@@ -16,45 +16,68 @@ def get_pkt_recv(rtp_id, frame: FrameContext, context_sender: StreamingContext, 
 def analyze_frame(frame: FrameContext, context_sender: StreamingContext, context_receiver: Stream) -> tuple:
     recv_ts = []
     rtx_recv_ts = []
+    recovery_ts = []
     packets = frame.packets_video()
-    rtp_pkts_num = len(packets)
-    for pkt in packets:
-        pkt_recv = context_receiver.packets.get(pkt.rtp_id, None)
-        if not pkt_recv:
-            rtx_packets = [context_receiver.packets[i] for i in frame.retrans_record.get(pkt.rtp_id, []) if i in context_receiver.packets]
-            if rtx_packets:
-                pkt_recv = rtx_packets[0]
-        if pkt_recv:
-            if pkt_recv.rtp_id == pkt.rtp_id:
-                recv_ts.append(pkt_recv.recv_ts)
+    for seq_num in range(frame.sequence_range[0], frame.sequence_range[1] + 1):
+        if seq_num in context_receiver.packets:
+            pkt: Packet = context_receiver.packets[seq_num]
+            if seq_num == 30520:
+                print(pkt.recv_ts, pkt.recovery_ts)
+            if pkt.recovered:
+                # The recovered packet is either received by FEC decoding or rtx retransmission
+                if pkt.recv_ts > 0 and (pkt.recv_ts < pkt.recovery_ts or pkt.recovery_ts < 0):
+                    rtx_recv_ts.append(pkt.recv_ts)
+                elif pkt.recovery_ts > 0 and (pkt.recovery_ts < pkt.recv_ts or pkt.recv_ts < 0):
+                    recovery_ts.append(pkt.recovery_ts)
             else:
-                rtx_recv_ts.append(pkt_recv.recv_ts)
+                assert pkt.recv_ts > 0
+                recv_ts.append(pkt.recv_ts) 
         else:
-            print(f'WARNING {pkt.rtp_id} not received nor retransmitted, frame {frame.frame_id}')
-    return recv_ts, rtx_recv_ts
+            print(f'WARNING RTP {seq_num} from frame {frame.frame_id} not received')
+    return recv_ts, rtx_recv_ts, recovery_ts
+
+
+def summarize(frames):
+    for frame in frames:
+        if not frame.packets_video():
+            continue
+        if frame.packets_video():
+            rtp_id_range = [min([p.rtp_id for p in frame.packets_video()]), max([p.rtp_id for p in frame.packets_video()])]
+            rtp_sequence_range = [min([p.seq_num for p in frame.packets_video()]), max([p.seq_num for p in frame.packets_video()])]
+        else:
+            rtp_id_range = [0, 0]
+            rtp_sequence_range = [0, 0]
+        # print(f'Frame {frame.frame_id} RTP packets, rtp id: {rtp_id_range}, seq num: {frame.sequence_range}')
+        assert frame.sequence_range == rtp_sequence_range
 
 
 def analyze(output_dir, context_sender: StreamingContext, context_receiver: Stream) -> None:
     frames = list(sorted(context_sender.frames.values(), key=lambda x: x.frame_id))
-    data1 = [[], []]
-    data2 = [[], []]
+    video_pacets = [[], []]
+    rtx_packets = [[], []]
+    recovered_packets = [[], []]
     print(f'Last frame id: {frames[-1].frame_id}')
     for frame in frames[:-2]:  # skip the last frame because it may not be complete
-        recv_ts, rtx_recv_ts = analyze_frame(frame, context_sender, context_receiver)
+        recv_ts, rtx_recv_ts, recovery_ts = analyze_frame(frame, context_sender, context_receiver)
         if recv_ts:
-            data1[0] += [frame.captured_at - context_sender.start_ts] * len(recv_ts)
-            data1[1] += [(t - min(recv_ts)) * 1000 for t in recv_ts]
+            video_pacets[0] += [frame.captured_at - context_sender.start_ts] * len(recv_ts)
+            video_pacets[1] += [(t - min(recv_ts)) * 1000 for t in recv_ts]
         if rtx_recv_ts:
-            data2[0] += [frame.captured_at - context_sender.start_ts] * len(rtx_recv_ts)
-            data2[1] += [(t - min(recv_ts)) * 1000 for t in rtx_recv_ts]
+            rtx_packets[0] += [frame.captured_at - context_sender.start_ts] * len(rtx_recv_ts)
+            rtx_packets[1] += [(t - min(recv_ts)) * 1000 for t in rtx_recv_ts]
+        if recovery_ts:
+            recovered_packets[0] += [frame.captured_at - context_sender.start_ts] * len(recovery_ts)
+            recovered_packets[1] += [(t - min(recv_ts)) * 1000 for t in recovery_ts]
     plt.close()
-    plt.plot(data1[0], data1[1], '.')
-    plt.plot(data2[0], data2[1], '.')
+    plt.plot(video_pacets[0], video_pacets[1], '.')
+    plt.plot(rtx_packets[0], rtx_packets[1], '8')
+    plt.plot(recovered_packets[0], recovered_packets[1], '^')
     plt.xlabel('Frame captured time (s)')
     plt.ylabel('RTP reception time (ms)')
-    plt.legend(['RTP', 'Retransmitted RTP'])    
-    plt.ylim([0, 500])
+    plt.legend(['RTP', 'Retransmitted RTP', 'FEC recovered RTP'])    
+    # plt.ylim([0, 500])
     plt.savefig(os.path.join(output_dir, 'mea-rtp-recv-ts.pdf'))
+    summarize(frames)
 
 
 def main(result_path=os.path.join(RESULTS_PATH, 'eval_static')):
@@ -74,6 +97,7 @@ def main(result_path=os.path.join(RESULTS_PATH, 'eval_static')):
                 parse_line_receiver(line, stream)
             except Exception as e:
                 print(e)
+    print("========== STATISTICS [HYBRID] ==========")
     analyze(result_path, context, stream)
     
 

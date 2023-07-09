@@ -3,6 +3,13 @@ Milestone
 
 Track the development of new features
 
+### 8th July
+- [ ] Figure out why the decoding may fail all the time
+- [ ] Figure out why the decoding may success even if some RTP video packets are missing
+
+### 7th July
+- [x] Understand the logic of FEC encoding/decoding and log which packets are recovered by FEC.
+
 ### 3rd July
 - [x] Many packets will be lost if the encoded image is much larger than the bitrate / FPS, causing high frame loss rate.
 - [ ] The RTCP reported decoding/assmbly delay is a little larger than the real delay.
