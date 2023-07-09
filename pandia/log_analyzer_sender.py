@@ -1,6 +1,7 @@
 import os
 import re
 import time
+from typing import List
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -72,6 +73,12 @@ class FrameContext(object):
         self.is_key_frame = False
         self.qp = 0
         self.retrans_record = {}
+
+    def seq_len(self):
+        if self.sequence_range[1] > 0:
+            return self.sequence_range[1] - self.sequence_range[0] + 1
+        else:
+            return 0
 
     def last_rtp_send_ts_including_rtx(self):
         packets = list(filter(lambda p: p.packet_type in ['video', 'fec', 'rtx'], self.rtp_packets.values()))
@@ -720,6 +727,27 @@ def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.xlabel('Timestamp (s)')
     plt.ylabel('Packet loss rate (%)')
     plt.savefig(os.path.join(output_dir, 'rep-loss-packet.pdf'))
+
+    plt.close()
+    data = [[[], []], [[], []], [[], []]]  # [rtp_video, rtp_rtx, rtp_fec]
+    for f in context.frames.values():
+        for pkt in f.rtp_packets.values():
+            d = None
+            if pkt.packet_type == 'video':
+                d = data[0]
+            elif pkt.packet_type == 'rtx':
+                d = data[1]
+            elif pkt.packet_type == 'fec':
+                d = data[2]
+            if d and pkt.sent_at > 0:
+                d[0].append(f.captured_at - context.start_ts)
+                d[1].append((pkt.sent_at - f.encoded_at) * 1000)
+    for d, m in zip(data, ['.', '8', '^']):
+        plt.plot(d[0], d[1], m)
+    plt.xlabel('Frame timestamp (s)')
+    plt.ylabel('RTP pacing timestamp, with respect to frame encoding timestamp (ms)')
+    plt.legend(['Video', 'RTX', 'FEC'])
+    plt.savefig(os.path.join(output_dir, 'mea-rtp-pacing-ts.pdf'))
 
 
 def analyze_network(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:

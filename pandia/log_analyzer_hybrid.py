@@ -25,10 +25,12 @@ def analyze_frame(frame: FrameContext, context_sender: StreamingContext, context
                 print(pkt.recv_ts, pkt.recovery_ts)
             if pkt.recovered:
                 # The recovered packet is either received by FEC decoding or rtx retransmission
-                if pkt.recv_ts > 0 and (pkt.recv_ts < pkt.recovery_ts or pkt.recovery_ts < 0):
-                    rtx_recv_ts.append(pkt.recv_ts)
-                elif pkt.recovery_ts > 0 and (pkt.recovery_ts < pkt.recv_ts or pkt.recv_ts < 0):
+                if pkt.recovery_ts > 0 and (pkt.recovery_ts <= pkt.recv_ts or pkt.recv_ts < 0):
                     recovery_ts.append(pkt.recovery_ts)
+                elif pkt.recv_ts > 0 and (pkt.recv_ts <= pkt.recovery_ts or pkt.recovery_ts < 0):
+                    rtx_recv_ts.append(pkt.recv_ts)
+                else:
+                    print(f'WARNING wrong RTP timestamp {seq_num}, recv: {pkt.recv_ts}, recovery: {pkt.recovery_ts}')
             else:
                 assert pkt.recv_ts > 0
                 recv_ts.append(pkt.recv_ts) 
@@ -37,7 +39,7 @@ def analyze_frame(frame: FrameContext, context_sender: StreamingContext, context
     return recv_ts, rtx_recv_ts, recovery_ts
 
 
-def summarize(frames):
+def summarize(frames, context_receiver: Stream):
     for frame in frames:
         if not frame.packets_video():
             continue
@@ -49,7 +51,21 @@ def summarize(frames):
             rtp_sequence_range = [0, 0]
         # print(f'Frame {frame.frame_id} RTP packets, rtp id: {rtp_id_range}, seq num: {frame.sequence_range}')
         assert frame.sequence_range == rtp_sequence_range
-
+    recv_pkts = 0
+    recovery_pkts = 0
+    retrans_pkts = 0
+    for pkt in context_receiver.packets.values():
+        if pkt.recovered:
+            if pkt.recovery_ts > 0 and (pkt.recovery_ts <= pkt.recv_ts or pkt.recv_ts < 0):
+                recovery_pkts += 1
+            elif pkt.recv_ts > 0 and (pkt.recv_ts <= pkt.recovery_ts or pkt.recovery_ts < 0):
+                retrans_pkts += 1
+        else:
+            recv_pkts += 1
+    all_pkts = recv_pkts + recovery_pkts + retrans_pkts
+    print(f'RTP trans report, original: {recv_pkts / all_pkts * 100:.02f}, '
+          f'rtx: {retrans_pkts / all_pkts * 100:.02f}, '
+          f'recovery: {recovery_pkts / all_pkts * 100:.02f}')
 
 def analyze(output_dir, context_sender: StreamingContext, context_receiver: Stream) -> None:
     frames = list(sorted(context_sender.frames.values(), key=lambda x: x.frame_id))
@@ -77,7 +93,23 @@ def analyze(output_dir, context_sender: StreamingContext, context_receiver: Stre
     plt.legend(['RTP', 'Retransmitted RTP', 'FEC recovered RTP'])    
     # plt.ylim([0, 500])
     plt.savefig(os.path.join(output_dir, 'mea-rtp-recv-ts.pdf'))
-    summarize(frames)
+
+    frame_completion_data = [[], []]
+    for frame in frames[:-2]:
+        if not frame.seq_len():
+            continue
+        recv_count = 0
+        for seq_num in range(frame.sequence_range[0], frame.sequence_range[1] + 1):
+            if seq_num in context_receiver.packets:
+                recv_count += 1
+        frame_completion_data[0].append(frame.captured_at - context_sender.start_ts)
+        frame_completion_data[1].append(recv_count / frame.seq_len())
+    plt.close()
+    plt.plot(frame_completion_data[0], frame_completion_data[1], '.')
+    plt.xlabel('Frame capture time (s)')
+    plt.ylabel('Frame packets reception percentile (%)')
+    plt.savefig(os.path.join(output_dir, 'mea-frame-packet-recv-p.pdf'))
+    summarize(frames, context_receiver)
 
 
 def main(result_path=os.path.join(RESULTS_PATH, 'eval_static')):

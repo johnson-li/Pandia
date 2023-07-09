@@ -26,10 +26,12 @@ SOURCE = {
     'fps': 30,
 }
 ACTION = {
-    # 'pacing_rate': 1024 * 1024,
+    'pacing_rate': 1024 * 1024,
     'bitrate': 3 * 1024,
     # 'width': 1080,
     # 'fps': 30,
+    # 'fec_key': 255,
+    'fec_delta': 255,
 }
 RESULT_DIR = os.path.join(RESULTS_PATH, "eval_static")
 SENDER_LOG = 'eval_sender.log'
@@ -81,8 +83,8 @@ def write_shm(shm, action=ACTION) -> None:
     write_int(action.get('bitrate', 0), 0)
     write_int(action.get('pacing_rate', 0), 1)
     write_int(action.get('fps', 0), 2)
-    # write_int(fec_rate_key, 3)
-    # write_int(fec_rate_delta, 4)
+    write_int(action.get('fec_key', 256), 3) # Unlike the other actions, fec values larger than 255 are regarded as invalid
+    write_int(action.get('fec_delta', 256), 4)
     # write_int(padding_rate, 5)
     write_int(action.get('width', 0), 6)
 

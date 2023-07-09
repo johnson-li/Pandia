@@ -3,6 +3,9 @@ Milestone
 
 Track the development of new features
 
+### 9th July
+- [x] Issue of FEC. In pacing_controller.cc, the FEC packets are sent after all video packets are sent. The lost video packets will trigger retransmission via NACK before the arrival of the FEC packets. So, some of the FEC packets are not used before the completion of the rtx, which is a waste of bandwidth. 
+
 ### 8th July
 - [ ] Figure out why the decoding may fail all the time
 - [ ] Figure out why the decoding may success even if some RTP video packets are missing
