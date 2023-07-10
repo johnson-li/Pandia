@@ -1,4 +1,5 @@
 import os
+from typing import List
 
 from matplotlib import pyplot as plt
 
@@ -39,9 +40,9 @@ def analyze_frame(frame: FrameContext, context_sender: StreamingContext, context
     return recv_ts, rtx_recv_ts, recovery_ts
 
 
-def summarize(frames, context_receiver: Stream):
+def summarize(frames: List[FrameContext], context_receiver: Stream):
     for frame in frames:
-        if not frame.packets_video():
+        if frame.seq_len() <= 0:
             continue
         if frame.packets_video():
             rtp_id_range = [min([p.rtp_id for p in frame.packets_video()]), max([p.rtp_id for p in frame.packets_video()])]

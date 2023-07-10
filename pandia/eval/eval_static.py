@@ -30,7 +30,7 @@ ACTION = {
     'bitrate': 3 * 1024,
     # 'width': 1080,
     # 'fps': 30,
-    # 'fec_key': 255,
+    'fec_key': 255,
     'fec_delta': 255,
 }
 RESULT_DIR = os.path.join(RESULTS_PATH, "eval_static")
@@ -116,10 +116,12 @@ def analyze(result_dir=RESULT_DIR):
 def main():
     parser = argparse.ArgumentParser(description="Evaluate WebRTC with static actions")
     parser.add_argument('-d', '--dry', action='store_true', help='If set, reuse existing logs')
+    parser.add_argument('-r', '--repeat', type=int, default=1, help='Repeat the run of N times')
     args = parser.parse_args()
-    if not args.dry:
-        run_exp(action=ACTION, result_dir=RESULT_DIR, duration=DURATION)
-    analyze(RESULT_DIR)
+    for i in range(args.repeat):
+        if not args.dry:
+            run_exp(action=ACTION, result_dir=RESULT_DIR, duration=DURATION)
+        analyze(RESULT_DIR)
 
 
 if __name__ == "__main__":

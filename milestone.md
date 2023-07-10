@@ -3,26 +3,32 @@ Milestone
 
 Track the development of new features
 
+### 10th July
+- [x] The first RTP packet (RTP id = 2) may be dropped, causing H264 decoding failure. (never happen again)
+- [x] For some reason, the first encoded frame from NVENC may be dropped by the decoder. (not a big issue. it also happens in OpenH264)
+- [x] NVENC has two key frames at first. (OpenH264 is the same) 
+- [ ] The pacing rate of the first frame is much lower than the value set by DRL
+
 ### 9th July
 - [x] Issue of FEC. In pacing_controller.cc, the FEC packets are sent after all video packets are sent. The lost video packets will trigger retransmission via NACK before the arrival of the FEC packets. So, some of the FEC packets are not used before the completion of the rtx, which is a waste of bandwidth. 
 
 ### 8th July
-- [ ] Figure out why the decoding may fail all the time
-- [ ] Figure out why the decoding may success even if some RTP video packets are missing
+- [x] Figure out why the decoding may fail all the time. (Issue 1: delayed encoding return [solved]. Issue 2: SPS is missing in the second IDR frame)
+- [x] Figure out why the decoding may success even if some RTP video packets are missing (It does not happen. The wrong observation is caused by the bug in the analyzer)
 
 ### 7th July
 - [x] Understand the logic of FEC encoding/decoding and log which packets are recovered by FEC.
 
 ### 3rd July
 - [x] Many packets will be lost if the encoded image is much larger than the bitrate / FPS, causing high frame loss rate.
-- [ ] The RTCP reported decoding/assmbly delay is a little larger than the real delay.
+- [ ] The RTCP reported decoding/assmbly delay is a little larger than the delay caused by the RTT.
 
 ### 29th Jun
 - [x] Find out the root cause of the decoding queue delay. It is not caused by the decoding delay. (It is caused by the VCMTiming)
 - [x] Find out the causes of frame drop. (pacing delay, encoded size too large)
 
 ### 28th Jun
-- [ ] NVDEC deocding does not return any frame on the first input. The reason is not clear. But it is not a big problem since we can anyway calculate the frame decoding delay. 
+- [x] NVDEC deocding retruns after 3 API calls. It causes issue because the required key frame is generated under delay. So, the higher layer may get an outdated delta frame even if it is requesting a key frame, causing decoding failure. The best solution is to ensure that the API call returns imediately, instead of delayed. A workaround is to detect the delayed key frame in the higher layer, discarding the outdated delta frames. (m_nExtraOutputDelay in NvEncoder.h)
 
 ### 21th Jun
 - [x] Support nvenc/nvdec

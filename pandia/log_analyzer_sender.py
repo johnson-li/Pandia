@@ -142,7 +142,7 @@ class ActionContext(object):
 
 class StreamingContext(object):
     def __init__(self) -> None:
-        self.start_ts = 0
+        self.start_ts: float = 0
         self.frames: dict[int, FrameContext] = {}
         self.packets: dict[int, PacketContext] = {}
         self.packet_id_map = {}
@@ -309,8 +309,9 @@ def parse_line(line, context: StreamingContext) -> dict:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] SetupCodec.*'), line)
         ts = int(m[1]) / 1000
-        context.codec_initiated = True
-        context.start_ts = ts
+        if not context.codec_initiated:
+            context.codec_initiated = True
+            context.start_ts = ts
     elif 'Frame encoded' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] Frame encoded, id: (\\d+), codec: (\\d+), size: (\\d+), width: (\\d+), height: (\\d+), .*'), line)
@@ -348,9 +349,9 @@ def parse_line(line, context: StreamingContext) -> dict:
             if rtp_type == 'rtx':
                 original_rtp_id = context.packet_id_map[retrans_seq_num]
                 frame.retrans_record.setdefault(original_rtp_id, []).append(rtp_id)
-    elif 'NVENC Start encoding' in line:
+    elif 'Start encoding' in line:
         m = re.match(re.compile(
-            '.*\\[(\\d+)\\] NVENC Start encoding, frame id: (\\d+), shape: (\\d+) x (\\d+), bitrate: (\\d+) kbps.*'), line)
+            '.*\\[(\\d+)\\].*Start encoding, frame id: (\\d+), shape: (\\d+) x (\\d+), bitrate: (\\d+) kbps.*'), line)
         ts = int(m[1]) / 1000
         frame_id = int(m[2])
         width = int(m[3])
@@ -745,7 +746,7 @@ def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     for d, m in zip(data, ['.', '8', '^']):
         plt.plot(d[0], d[1], m)
     plt.xlabel('Frame timestamp (s)')
-    plt.ylabel('RTP pacing timestamp, with respect to frame encoding timestamp (ms)')
+    plt.ylabel('RTP egress timestamp (ms)')
     plt.legend(['Video', 'RTX', 'FEC'])
     plt.savefig(os.path.join(output_dir, 'mea-rtp-pacing-ts.pdf'))
 
@@ -765,7 +766,7 @@ def analyze_network(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     ts_min = context.start_ts
     ts_max = max([p.sent_at for p in context.packets.values()])
     ts_range = ts_max - ts_min
-    period = .005
+    period = .001
     buckets = np.zeros(int(ts_range / period + 1))
     for p in context.packets.values():
         ts = (p.sent_at - ts_min)
