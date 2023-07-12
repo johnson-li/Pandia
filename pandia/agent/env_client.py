@@ -1,66 +1,90 @@
+from io import IOBase
 from multiprocessing import Pool, Process, shared_memory
 import os
 import subprocess
 import time
 import gymnasium as gym
-from typing import Optional, TextIO
+from typing import List, Optional, TextIO
 
 import numpy as np
 from pandia import BIN_PATH, SCRIPTS_PATH
 from pandia.agent.env import Action, Observation
 from ray.rllib.env.policy_client import PolicyClient
 from pandia.agent.env_server import SERVER_PORT
-from pandia.log_analyzer import StreamingContext, parse_line
+from pandia.log_analyzer_sender import StreamingContext, parse_line
+from pandia.ntp.ntpclient import ntp_sync
+
+
+class ActionHistory():
+    def __init__(self) -> None:
+        pass
+
+    def append(self, action: Action) -> None:
+        pass
 
 
 class WebRTCEnv0(gym.Env):
-    def __init__(self, client_id=1, duration=30, width=720, fps=10,
-                 step_duration=1, enable_shm=True, bw=1024 * 1024, delay=0,
-                 sender_log=None, receiver_log='/dev/null') -> None:
+    def __init__(self, client_id=1, duration=30, # Exp settings
+                 width=1080, fps=30, # Source settings
+                 bw=1024 * 1024, delay=5, loss=0, # Network settings
+                 working_dir=None, # Logging settings
+                 step_duration=1, # RL settings
+                 ) -> None:
+        super().__init__() 
+        # Exp settings
         self.client_id = client_id
         self.port = 7000 + client_id
         self.duration = duration
+        # Source settings
         self.width = width
-        self.bw = bw
         self.fps = fps
+        # Network settings
+        self.bw = bw
         self.delay = delay
-        self.enable_shm = enable_shm
-        self.sender_log = sender_log
-        self.receiver_log = receiver_log
+        self.loss = loss
+        # Logging settings
+        self.working_dir = working_dir
+        self.sender_log = os.path.join(working_dir, self.log_name('sender')) if working_dir else None
+        # RL settings
+        self.step_duration = step_duration
         self.init_timeout = 5
         self.hisory_size = 10
-        self.step_duration = step_duration
-        self.last_ts = time.time()
+        # RL state
         self.step_count = 0
-        self.shm = None
+        self.shm: shared_memory.SharedMemory
         self.context: StreamingContext
         self.observation: Observation
         self.process_sender: Optional[subprocess.Popen] = None
+        # ENV state
+        self.action_space = Action.action_space(legacy_api=False) # type: ignore
+        self.observation_space = Observation.observation_space(legacy_api=False) # type: ignore
+        # Tracking
+        self.last_ts = time.time()
         self.stdout: TextIO 
-        self.previous_action: Optional[Action] = None
-        self.resolution_change_record = np.zeros(10)
-        self.action_space = Action.action_space(legacy_api=False)
-        self.observation_space = Observation.observation_space(legacy_api=False)
+        self.action_history = ActionHistory()
 
     @property
     def shm_name(self):
         return f"pandia_{self.port}"
+    
+    def log_name(self, role='sender'):
+        return f"eval_{role}_{self.port}.log"
 
     def init_webrtc(self):
         shm_size = Action.shm_size()
-        if self.enable_shm:
-            print(f"[{self.client_id}] Initializing shm {self.shm_name} for WebRTC")
-            try:
-                self.shm = \
-                    shared_memory.SharedMemory(name=self.shm_name, 
-                                            create=True, size=shm_size)
-            except FileExistsError:
-                self.shm = \
-                    shared_memory.SharedMemory(name=self.shm_name, 
-                                            create=False, size=shm_size)
+        print(f"[{self.client_id}] Initializing shm {self.shm_name} for WebRTC")
+        try:
+            self.shm = \
+                shared_memory.SharedMemory(name=self.shm_name, 
+                                        create=True, size=shm_size)
+        except FileExistsError:
+            self.shm = \
+                shared_memory.SharedMemory(name=self.shm_name, 
+                                        create=False, size=shm_size)
+        receiver_log = f'/tmp/{self.log_name("receiver")}' if self.working_dir else '/dev/null'
         process = subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'), 
                           '-p', str(self.port), '-d', str(self.duration + 3), 
-                          '-l', str(self.receiver_log)], shell=False)
+                          '-l', receiver_log], shell=False)
         process.wait()
         time.sleep(1)
 
@@ -75,7 +99,7 @@ class WebRTCEnv0(gym.Env):
                                                 '--width', str(self.width), '--fps', str(self.fps), '--autocall', 'true',
                                                 '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/'],
                                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
-        return self.process_sender.stderr
+        return self.process_sender.stdout
 
     def stop_webrtc(self):
         process = subprocess.Popen([os.path.join(SCRIPTS_PATH, 'stop_webrtc_receiver_remote.sh'), '-p', str(self.port)],
@@ -90,22 +114,19 @@ class WebRTCEnv0(gym.Env):
             return -10
         delay_score = self.observation.frame_g2g_delay[0] / 100
         quality_score = self.observation.frame_bitrate[0] / 1000
-        resolution_penalty = np.sum(self.resolution_change_record)
-        # Donot penalize if the resolution is changed less than 1 time during the last 10 steps
-        if resolution_penalty <= 1:
-            resolution_penalty = 0
+        resolution_penalty = 0
+        # # Donot penalize if the resolution is changed less than 1 time during the last 10 steps
+        # if resolution_penalty <= 1:
+        #     resolution_penalty = 0
 
         return quality_score - delay_score - resolution_penalty
 
     def reset(self, seed=None, options=None):
-        if self.sender_log:
-            if os.path.exists(self.sender_log):
-                os.remove(self.sender_log)
-        self.previous_action = None
-        self.resolution_change_record.fill(0)
         self.stop_webrtc()
+        self.action_history = ActionHistory()
         self.step_count = 0
         self.context = StreamingContext()
+        self.context.utc_offset = ntp_sync().offset
         self.observation = Observation()
         self.init_webrtc()
         return self.observation.array(), {}
@@ -115,15 +136,8 @@ class WebRTCEnv0(gym.Env):
         # Write action
         self.context.reset_action_context()
         act = Action.from_array(action)
-        if self.enable_shm:
-            act.write(self.shm)
-
-        self.resolution_change_record[1:] = self.resolution_change_record[:-1]
-        if self.previous_action and self.previous_action.resolution != act.resolution:
-            self.resolution_change_record[0] = 1
-        else:
-            self.resolution_change_record[0] = 0
-        self.previous_action = act
+        self.action_history.append(act)
+        act.write(self.shm)
 
         # Start WebRTC at the first step
         if self.step_count == 0:

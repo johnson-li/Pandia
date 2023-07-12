@@ -174,12 +174,15 @@ class StreamingContext(object):
     def reset_action_context(self):
         self.action_context = ActionContext()
 
-    def codec_name(self) -> int:
+    def codec(self) -> int:
         for i in range(self.last_captured_frame_id, -1, -1):
             frame = self.frames.get(i, None)
             if frame and frame.codec:
-                return CODEC_NAMES.index(frame.codec)
+                return frame.codec
         return 0
+    
+    def codec_name(self) -> str:
+        return CODEC_NAMES[self.codec()]
 
     def fps(self):
         res = 0

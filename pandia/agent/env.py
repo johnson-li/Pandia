@@ -3,13 +3,13 @@ import subprocess
 import threading
 from threading import Event, Thread
 import time
-from typing import List
+from typing import List, Optional
 import numpy as np
 import gymnasium
 from gymnasium import Env, spaces
 from multiprocessing import shared_memory, current_process
 from pandia import RESULTS_PATH, SCRIPTS_PATH, BIN_PATH
-from pandia.log_analyzer_sender import CODEC_NAMES, ActionContext, FrameContext, StreamingContext, parse_line
+from pandia.log_analyzer_sender import CODEC_NAMES, ActionContext, FrameContext, PacketContext, StreamingContext, parse_line
 from pandia.agent.normalization import nml, dnml, NORMALIZATION_RANGE
 from gym.spaces.box import Box
 import gym
@@ -247,14 +247,14 @@ class Observation(object):
 
 class Action():
     def __init__(self) -> None:
-        self.bitrate = np.array([100, ], dtype=np.int32)
-        self.pacing_rate = np.array([500 * 1024, ], dtype=np.int32)
-        self.resolution = np.array([720, ], dtype=np.int32)
-
-        self.fps = np.array([30, ], dtype=np.int32)
+        # Initiation values are invalid values so that WebRTC will not use DRL actions 
+        self.bitrate = np.array([0, ], dtype=np.int32)
+        self.pacing_rate = np.array([0, ], dtype=np.int32)
+        self.resolution = np.array([0, ], dtype=np.int32)
+        self.fps = np.array([0, ], dtype=np.int32)
         self.padding_rate = np.array([0, ], dtype=np.int32)
-        self.fec_rate_key = np.array([0, ], dtype=np.int32)
-        self.fec_rate_delta = np.array([0, ], dtype=np.int32)
+        self.fec_rate_key = np.array([256, ], dtype=np.int32)
+        self.fec_rate_delta = np.array([256, ], dtype=np.int32)
 
     @staticmethod
     def boundary() -> dict:
@@ -346,17 +346,16 @@ class WebRTCEnv(Env):
         self.frame_history_size = 10
         self.packet_history_size = 10
         self.packet_history_duration = 10
-        self.step_duration = 1
+        self.step_duration = .01
         self.start_ts = time.time()
         self.step_count = 0
-        self.monitor_thread: Thread = None
-        self.stop_event: Event = None
-        self.context: StreamingContext = None
-        self.observation: Observation = None
+        self.monitor_thread: Thread
+        self.stop_event: Optional[Event] = None
+        self.context: StreamingContext
+        self.observation: Observation
         self.observation_space = Observation.observation_space(self.legacy_api)
         self.action_space = Action.action_space(self.legacy_api)
-        self.process_sender = None
-        self.process_receiver = None
+        self.process_sender: subprocess.Popen
 
     def seed(self, s):
         s = int(s)
