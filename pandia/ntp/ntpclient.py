@@ -5,6 +5,13 @@ from time import ctime
 from pandia.ntp.ntpserver import system_to_ntp_time
 
 
+def ntp_sync(server='195.148.127.230', port='8123'):
+    c = ntplib.NTPClient()
+    ts = time.time()
+    response = c.request(server, port=port)
+    return response
+
+
 def main():
     c = ntplib.NTPClient()
     # response = c.request('pool.ntp.org')

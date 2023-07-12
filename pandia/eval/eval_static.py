@@ -1,6 +1,7 @@
 import argparse
 from multiprocessing import shared_memory
 import os
+from pathlib import Path
 import subprocess
 import time
 
@@ -10,28 +11,29 @@ from pandia.log_analyzer import main as main_analyzer
 from pandia.log_analyzer_sender import StreamingContext, analyze_stream, parse_line, main as main_sender
 from pandia.log_analyzer_receiver import Stream, parse_line as parse_line_receiver, analyze as analyze_receiver, main as main_receiver
 from pandia.log_analyzer_hybrid import main as main_hybrid
+from pandia.ntp.ntpclient import ntp_sync
 
 
 CLIENT_ID = 18
 PORT = 7000 + CLIENT_ID
 SHM_NAME = f'pandia_{PORT}'
-DURATION = 15
+DURATION = 30
 NETWORK = {
     'bw': 1024 * 1024,
     'delay': 5,
     'loss': 5,
 }
 SOURCE = {
-    'width': 1080,
-    'fps': 30,
+    'width': 2160,
+    'fps': 60,
 }
 ACTION = {
-    'pacing_rate': 1024 * 1024,
-    'bitrate': 3 * 1024,
-    # 'width': 1080,
+    # 'pacing_rate': 1000 * 1024,  # in kbps
+    # 'bitrate': 10 * 1024,  # in kbps
+    # 'width': 1440,
     # 'fps': 30,
-    'fec_key': 255,
-    'fec_delta': 255,
+    # 'fec_key': int(255 * .5),
+    # 'fec_delta': int(255 * .5),
 }
 RESULT_DIR = os.path.join(RESULTS_PATH, "eval_static")
 SENDER_LOG = 'eval_sender.log'
@@ -72,6 +74,10 @@ def start_webrtc():
     return process_sender
 
 
+def sync_clock():
+    return ntp_sync()
+
+
 # Copied from env.py
 def write_shm(shm, action=ACTION) -> None:
     def write_int(value, offset):
@@ -90,15 +96,17 @@ def write_shm(shm, action=ACTION) -> None:
 
 
 def run_exp(action=ACTION, result_dir=RESULT_DIR, duration=DURATION):
-    if not os.path.exists(result_dir):
-        os.mkdir(result_dir)
+    Path(result_dir).mkdir(parents=True, exist_ok=True)
     shm = init_webrtc(duration)
     write_shm(shm, action)
+    ntp_resp = sync_clock()
     process_sender = start_webrtc()
     std_out = process_sender.stdout
     start_ts = time.time()
     print(f'Running sender, wait for {duration} seconds')
     with open(os.path.join(result_dir, SENDER_LOG), 'w') as f:
+        f.write(f'NTP response: precision: {ntp_resp.precision}'
+                f', offset: {ntp_resp.offset}, rtt: {ntp_resp.delay}\n')
         while time.time() - start_ts < duration:
             line = std_out.readline().decode().strip()
             if line:

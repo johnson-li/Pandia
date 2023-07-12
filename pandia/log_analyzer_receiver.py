@@ -1,5 +1,6 @@
 import os
 import re
+from typing import Dict
 
 from matplotlib import pyplot as plt
 import numpy as np
@@ -31,7 +32,7 @@ class Packet:
 class Stream:
     def __init__(self) -> None:
         self.frames = {}
-        self.packets = {}  # Unlike log_analyzer_sender, this is a dict of seq_num -> Packet
+        self.packets: Dict[int, Packet] = {}  # Unlike log_analyzer_sender, this is a dict of seq_num -> Packet
 
 
 def parse_line(line, stream: Stream) -> None:
@@ -135,6 +136,20 @@ def analyze(stream: Stream, output_dir=OUTPUT_DIR) -> None:
     plt.ylabel('Delay (ms)')
     plt.legend(['Queuing Delay', 'Decoding Delay'])
     plt.savefig(os.path.join(output_dir, 'mea-delay-frame-receiver.pdf'))
+
+
+def get_stream(result_path=os.path.join(RESULTS_PATH, 'eval_static')) -> Stream:
+    receiver_log = os.path.join(result_path, 'eval_receiver.log')
+    stream = Stream()
+    for line in open(receiver_log).readlines()[:-1]:  # Ignore the last line because it may be incomplete
+        line = line.strip()
+        if line:
+            try:
+                parse_line(line, stream)
+            except Exception as e:
+                print(f"Error parsing line: {line}")
+                raise e
+    return stream
 
 
 def main(result_path=os.path.join(RESULTS_PATH, 'eval_static')) -> None:

@@ -3,11 +3,14 @@ Milestone
 
 Track the development of new features
 
+### 12th July
+- [ ] Transfer frame-related metrics along with the packet RTCP feedback.
+
 ### 10th July
 - [x] The first RTP packet (RTP id = 2) may be dropped, causing H264 decoding failure. (never happen again)
 - [x] For some reason, the first encoded frame from NVENC may be dropped by the decoder. (not a big issue. it also happens in OpenH264)
 - [x] NVENC has two key frames at first. (OpenH264 is the same) 
-- [ ] The pacing rate of the first frame is much lower than the value set by DRL
+- [x] The pacing rate of the first frame is much lower than the value set by DRL. (It is because probing is in effect, which is controlled by GCC)
 
 ### 9th July
 - [x] Issue of FEC. In pacing_controller.cc, the FEC packets are sent after all video packets are sent. The lost video packets will trigger retransmission via NACK before the arrival of the FEC packets. So, some of the FEC packets are not used before the completion of the rtx, which is a waste of bandwidth. 

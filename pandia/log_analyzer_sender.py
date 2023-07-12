@@ -1,20 +1,17 @@
 import os
 import re
 import time
-from typing import List
+from typing import Dict, List
 import matplotlib.pyplot as plt
 import numpy as np
-
 from pandia import RESULTS_PATH, DIAGRAMS_PATH
+
 
 CODEC_NAMES = ['Generic', 'VP8', 'VP9', 'AV1', 'H264', 'Multiplex']
 OUTPUT_DIR = DIAGRAMS_PATH
-
 kDeltaTick=.25  # In ms
 kBaseTimeTick=kDeltaTick*(1<<8)  # In ms
 kTimeWrapPeriod=kBaseTimeTick * (1 << 24)  # In ms
-
-
 PACKET_TYPES = ['audio', 'video', 'rtx', 'fec', 'padding']
 
 
@@ -61,6 +58,9 @@ class FrameContext(object):
         self.encoded_at = .0
         self.assembled_at = .0
         self.assembled0_at = .0
+        self.assembled_at_utc = .0
+        self.decoding_at_utc = .0
+        self.decoded_at_utc = .0
         self.decoded_at = .0
         self.decoding_at = .0
         self.bitrate = 0
@@ -110,8 +110,12 @@ class FrameContext(object):
     def encoding_delay(self):
         return self.encoded_at - self.captured_at if self.encoded_at > 0 else -1
 
-    def assemble_delay(self):
-        return self.assembled_at - self.captured_at if self.assembled_at > 0 else -1
+    def assemble_delay(self, utc_offset=.0):
+        # return self.assembled0_at - self.captured_at if self.assembled0_at > 0 else -1
+        if self.assembled_at_utc > 0:
+            return self.assembled_at_utc - self.captured_at_utc - utc_offset
+        else:
+            return -1
 
     def pacing_delay(self):
         return self.last_rtp_send_ts() - self.captured_at if self.last_rtp_send_ts() else -1
@@ -119,18 +123,25 @@ class FrameContext(object):
     def pacing_delay_including_rtx(self):
         return self.last_rtp_send_ts_including_rtx() - self.captured_at if self.last_rtp_send_ts_including_rtx() else -1
 
-    def decoding_queue_delay(self):
-        return self.decoding_at - self.captured_at if self.decoding_at > 0 else -1
+    def decoding_queue_delay(self, utc_offset=.0):
+        # return self.decoding_at - self.captured_at if self.decoding_at > 0 else -1
+        if self.decoding_at_utc > 0:
+            return self.decoding_at_utc - self.captured_at_utc - utc_offset
+        else:
+            return -1
 
-    def decoding_delay(self):
-        return self.decoded_at - self.captured_at if self.decoded_at > 0 else -1
+    def decoding_delay(self, utc_offset=.0):
+        # return self.decoded_at - self.captured_at if self.decoded_at > 0 else -1
+        if self.decoded_at_utc > 0:
+            return self.decoded_at_utc - self.captured_at_utc - utc_offset 
+        else:
+            return -1
 
-    def g2g_delay(self):
-        return self.decoding_delay()
+    def g2g_delay(self, utc_offset=.0):
+        return self.decoding_delay(utc_offset)
 
     def received(self):
         return self.assembled_at >= 0
-
 
 class ActionContext(object):
     def __init__(self) -> None:
@@ -143,8 +154,8 @@ class ActionContext(object):
 class StreamingContext(object):
     def __init__(self) -> None:
         self.start_ts: float = 0
-        self.frames: dict[int, FrameContext] = {}
-        self.packets: dict[int, PacketContext] = {}
+        self.frames: Dict[int, FrameContext] = {}
+        self.packets: Dict[int, PacketContext] = {}
         self.packet_id_map = {}
         self.networking = NetworkContext()
         self.fec = FecContext()
@@ -158,6 +169,7 @@ class StreamingContext(object):
         self.last_egress_packet_id = 0
         self.last_acked_packet_id = 0
         self.action_context = ActionContext()
+        self.utc_offset: float = 0  # The difference between the sender UTC and the receiver UTC
 
     def reset_action_context(self):
         self.action_context = ActionContext()
@@ -294,7 +306,7 @@ def parse_line(line, context: StreamingContext) -> dict:
         frame_id = int(m[2])
         width = int(m[3])
         height = int(m[4])
-        utc_ts = int(m[6])
+        utc_ts = int(m[6]) / 1000
         frame = FrameContext(frame_id, ts)
         frame.captured_at_utc = utc_ts
         context.last_captured_frame_id = frame_id
@@ -452,21 +464,32 @@ def parse_line(line, context: StreamingContext) -> dict:
         fec_key = int(m[3])
         context.fec.fec_key_data.append((ts, fec_key))
         context.fec.fec_delta_data.append((ts, fec_delta))
+    elif 'NTP response' in line:
+        m = re.match(re.compile(
+            '.*NTP response: precision: (-?[.0-9]+), offset: (-?[.0-9]+), rtt: (-?[.0-9]+).*'), line)
+        precision = float(m[1])
+        offset = float(m[2])
+        rtt = float(m[3])
+        context.utc_offset = offset
     elif 'Frame decoding acked' in line:
         m = re.match(re.compile(
-            '.*\\[(\\d+)\\] Frame decoding acked, id: (\\d+), receiving offset: (\\d+), decoding offset: (\\d+).*'), line)
+            '.*\\[(\\d+)\\] Frame decoding acked, id: (\\d+), receiving ts: (\\d+), decoding ts: (\\d+), decoded ts: (\\d+).*'), line)
         ts = int(m[1]) / 1000
         rtp_sequence = int(m[2])
-        recving_offset = int(m[3]) / 1000
-        decoding_offset = int(m[4]) / 1000
+        received_ts_utc = int(m[3]) / 1000
+        decoding_ts_utc = int(m[4]) / 1000
+        decoded_ts_utc = int(m[5]) / 1000
         rtp_id = context.packet_id_map.get(rtp_sequence, -1)
         if rtp_id > 0 and rtp_id in context.packets:
             frame_id = context.packets[rtp_id].frame_id
             if frame_id in context.frames:
                 frame: FrameContext = context.frames[frame_id]
+                frame.assembled_at_utc = received_ts_utc
+                frame.decoding_at_utc = decoding_ts_utc
+                frame.decoded_at_utc = decoded_ts_utc
                 frame.decoded_at = ts
-                frame.decoding_at = ts - decoding_offset
-                frame.assembled0_at = ts - recving_offset
+                frame.decoding_at = ts - (decoded_ts_utc - decoding_ts_utc) / 1000
+                frame.assembled0_at = ts - (decoded_ts_utc - received_ts_utc) / 1000
                 context.last_decoded_frame_id = \
                         max(frame.frame_id, context.last_decoded_frame_id)
     elif 'Frame reception acked' in line:
@@ -521,9 +544,9 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
                                      'encoded by': frame.encoding_delay(),
                                      'paced by': frame.pacing_delay(),
                                      'paced by (rtx)': frame.pacing_delay_including_rtx(),
-                                     'assembled by': frame.assemble_delay(),
-                                     'queued by': frame.decoding_queue_delay(),
-                                     'decoded by': frame.decoding_delay(),})
+                                     'assembled by': frame.assemble_delay(context.utc_offset),
+                                     'queued by': frame.decoding_queue_delay(context.utc_offset),
+                                     'decoded by': frame.decoding_delay(context.utc_offset),})
         elif started:
             lost_frames.append(frame.captured_at - context.start_ts)
     plt.close()
@@ -649,13 +672,12 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
 def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     data_ack = []
     data_recv = []
-    offset = -0.00516224
     for pkt in sorted(context.packets.values(), key=lambda x: x.sent_at):
         pkt: PacketContext = pkt
         if pkt.ack_delay() > 0:
             data_ack.append((pkt.sent_at, pkt.ack_delay()))
         if pkt.recv_delay() != -1:
-            data_recv.append((pkt.sent_at, pkt.recv_delay() - offset))
+            data_recv.append((pkt.sent_at, pkt.recv_delay() - context.utc_offset))
     plt.close()
     x = [(d[0] - context.start_ts) for d in data_recv]
     y = [d[1] * 1000 for d in data_recv]
@@ -747,6 +769,7 @@ def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
         plt.plot(d[0], d[1], m)
     plt.xlabel('Frame timestamp (s)')
     plt.ylabel('RTP egress timestamp (ms)')
+    plt.ylim([0, 150])
     plt.legend(['Video', 'RTX', 'FEC'])
     plt.savefig(os.path.join(output_dir, 'mea-rtp-pacing-ts.pdf'))
 
@@ -839,6 +862,18 @@ def analyze_stream(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     analyze_network(context, output_dir)
     analyze_codec(context, output_dir)
     analyze_fec(context, output_dir)
+
+
+def get_stream_context(result_path=os.path.join(RESULTS_PATH, 'eval_static')) -> StreamingContext:
+    sender_log = os.path.join(result_path, 'eval_sender.log')
+    context = StreamingContext()
+    for line in open(sender_log).readlines():
+        try:
+            parse_line(line, context)
+        except Exception as e:
+            print(f"Error parsing line: {line}")
+            raise e
+    return context
 
 
 def main(result_path=os.path.join(RESULTS_PATH, 'eval_static')) -> None:

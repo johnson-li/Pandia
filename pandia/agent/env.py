@@ -9,7 +9,7 @@ import gymnasium
 from gymnasium import Env, spaces
 from multiprocessing import shared_memory, current_process
 from pandia import RESULTS_PATH, SCRIPTS_PATH, BIN_PATH
-from pandia.log_analyzer import CODEC_NAMES, ActionContext, FrameContext, StreamingContext, parse_line
+from pandia.log_analyzer_sender import CODEC_NAMES, ActionContext, FrameContext, StreamingContext, parse_line
 from pandia.agent.normalization import nml, dnml, NORMALIZATION_RANGE
 from gym.spaces.box import Box
 import gym

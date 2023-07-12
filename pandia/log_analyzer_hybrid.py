@@ -31,16 +31,42 @@ def analyze_frame(frame: FrameContext, context_sender: StreamingContext, context
                 elif pkt.recv_ts > 0 and (pkt.recv_ts <= pkt.recovery_ts or pkt.recovery_ts < 0):
                     rtx_recv_ts.append(pkt.recv_ts)
                 else:
-                    print(f'WARNING wrong RTP timestamp {seq_num}, recv: {pkt.recv_ts}, recovery: {pkt.recovery_ts}')
+                    # print(f'WARNING wrong RTP timestamp {seq_num}, recv: {pkt.recv_ts}, recovery: {pkt.recovery_ts}')
+                    pass
             else:
                 assert pkt.recv_ts > 0
                 recv_ts.append(pkt.recv_ts) 
         else:
-            print(f'WARNING RTP {seq_num} from frame {frame.frame_id} not received')
+            # print(f'WARNING RTP {seq_num} from frame {frame.frame_id} not received')
+            pass
     return recv_ts, rtx_recv_ts, recovery_ts
 
 
-def summarize(frames: List[FrameContext], context_receiver: Stream):
+def count_rtp_distribution(context_sender: StreamingContext, context_receiver: Stream) -> tuple:
+    recv_pkts = 0
+    recovery_pkts = 0
+    retrans_pkts = 0
+    for pkt in context_receiver.packets.values():
+        if pkt.seq <= 0 or pkt.seq not in context_sender.packet_id_map or \
+                context_sender.packet_id_map[pkt.seq] not in context_sender.packets:
+            continue
+        pkt_sender = context_sender.packets[context_sender.packet_id_map[pkt.seq]]
+        if pkt_sender.frame_id not in context_sender.frames:
+            continue
+        frame = context_sender.frames[pkt_sender.frame_id]
+        if frame.is_key_frame:
+            continue
+        if pkt.recovered:
+            if pkt.recovery_ts > 0 and (pkt.recovery_ts <= pkt.recv_ts or pkt.recv_ts < 0):
+                recovery_pkts += 1
+            elif pkt.recv_ts > 0 and (pkt.recv_ts <= pkt.recovery_ts or pkt.recovery_ts < 0):
+                retrans_pkts += 1
+        else:
+            recv_pkts += 1
+    return recv_pkts, recovery_pkts, retrans_pkts
+
+
+def summarize(frames: List[FrameContext], context_sender: StreamingContext, context_receiver: Stream):
     for frame in frames:
         if frame.seq_len() <= 0:
             continue
@@ -52,21 +78,13 @@ def summarize(frames: List[FrameContext], context_receiver: Stream):
             rtp_sequence_range = [0, 0]
         # print(f'Frame {frame.frame_id} RTP packets, rtp id: {rtp_id_range}, seq num: {frame.sequence_range}')
         assert frame.sequence_range == rtp_sequence_range
-    recv_pkts = 0
-    recovery_pkts = 0
-    retrans_pkts = 0
-    for pkt in context_receiver.packets.values():
-        if pkt.recovered:
-            if pkt.recovery_ts > 0 and (pkt.recovery_ts <= pkt.recv_ts or pkt.recv_ts < 0):
-                recovery_pkts += 1
-            elif pkt.recv_ts > 0 and (pkt.recv_ts <= pkt.recovery_ts or pkt.recovery_ts < 0):
-                retrans_pkts += 1
-        else:
-            recv_pkts += 1
+
+    recv_pkts, recovery_pkts, retrans_pkts = count_rtp_distribution(context_sender, context_receiver)
     all_pkts = recv_pkts + recovery_pkts + retrans_pkts
     print(f'RTP trans report, original: {recv_pkts / all_pkts * 100:.02f}, '
           f'rtx: {retrans_pkts / all_pkts * 100:.02f}, '
           f'recovery: {recovery_pkts / all_pkts * 100:.02f}')
+
 
 def analyze(output_dir, context_sender: StreamingContext, context_receiver: Stream) -> None:
     frames = list(sorted(context_sender.frames.values(), key=lambda x: x.frame_id))
@@ -110,7 +128,7 @@ def analyze(output_dir, context_sender: StreamingContext, context_receiver: Stre
     plt.xlabel('Frame capture time (s)')
     plt.ylabel('Frame packets reception percentile (%)')
     plt.savefig(os.path.join(output_dir, 'mea-frame-packet-recv-p.pdf'))
-    summarize(frames, context_receiver)
+    summarize(frames, context_sender, context_receiver)
 
 
 def main(result_path=os.path.join(RESULTS_PATH, 'eval_static')):
