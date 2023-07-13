@@ -4,6 +4,7 @@ from pandia import MODELS_PATH
 from pandia.agent.env import Observation, Action
 from ray import air, tune
 from ray.rllib.algorithms.sac import SACConfig
+from ray.rllib.algorithms.ppo import PPOConfig 
 from ray.rllib.env.policy_server_input import PolicyServerInput
 from ray.rllib.offline import IOContext, InputReader
 from ray.air.config import CheckpointConfig
@@ -18,7 +19,7 @@ TUNE = True
 
 def main():
     ray.init()
-    run='SAC'
+    run='PPO'
     if os.path.exists(CHECKPOINT_FILE):
         checkpoint_path = open(CHECKPOINT_FILE).read().strip()
     else:
@@ -36,7 +37,7 @@ def main():
             return None
     
     config = (
-        SACConfig()
+        PPOConfig()
         .environment(
             env=None,
             observation_space=Observation.observation_space(legacy_api=False),
@@ -54,17 +55,17 @@ def main():
     config.training(_enable_learner_api=False)
     config.update_from_dict(
             {
-                "num_steps_sampled_before_learning_starts": 100,
+                # "num_steps_sampled_before_learning_starts": 100,
                 "min_sample_timesteps_per_iteration": 200,
                 "n_step": 3,
-                "rollout_fragment_length": 4,
-                "train_batch_size": 8,
+                "rollout_fragment_length": 'auto',
+                "train_batch_size": 128,
             }
         )
     stop = {
-        "training_iteration": 2000,
-        "timesteps_total": 1000000,
-        "episode_reward_mean": 200,
+        "training_iteration": 200000,
+        "timesteps_total": 100000000,
+        "episode_reward_mean": 20000000,
     }
     if TUNE:
         checkpoint_config = CheckpointConfig()

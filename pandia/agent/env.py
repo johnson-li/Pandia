@@ -117,7 +117,6 @@ class Observation(object):
         return f'Dly.: {delays}, ' \
                f'{self.frame_height[0]}p/{self.frame_encoded_height[0]}p, ' \
                f'FPS: {self.fps[0]}, ' \
-               f'Codec: {CODEC_NAMES[self.codec[0]]}, ' \
                f'size: {self.frame_size[0]} bytes, ' \
                f'B.r.: {self.frame_bitrate[0]} kbps, ' \
                f'QP: {self.frame_qp[0]}, '
@@ -259,13 +258,13 @@ class Action():
     @staticmethod
     def boundary() -> dict:
         return {
-            'bitrate': [10, 2500], # When 2500 is the max bitrate set by WebRTC for 720p video
+            'bitrate': [10, 10 * 1024], 
             # 'fps': [1, 60],
-            'pacing_rate': [10, 800 * 1024],
+            # 'pacing_rate': [10, 800 * 1024],
             # 'padding_rate': [0, 500 * 1024],
             # 'fec_rate_key': [0, 255],
             # 'fec_rate_delta': [0, 255],
-            'resolution': [0, 1],
+            # 'resolution': [0, 1],
         }
 
     def __str__(self) -> str:
@@ -284,20 +283,20 @@ class Action():
         return res
 
 
-    def write(self, shm) -> None:
+    def write(self, shm, no_action=False) -> None:
         def write_int(value, offset):
             if isinstance(value, np.ndarray):
                 value = value[0]
             value = int(value)
             bytes = value.to_bytes(4, byteorder='little')
             shm.buf[offset * 4:offset * 4 + 4] = bytes
-        write_int(self.bitrate, 0)
-        write_int(self.pacing_rate, 1)
-        write_int(self.fps, 2)
-        write_int(self.fec_rate_key, 3)
-        write_int(self.fec_rate_delta, 4)
-        write_int(self.padding_rate, 5)
-        write_int(self.resolution, 6)
+        write_int(self.bitrate, 0) if not no_action else write_int(0, 0)
+        write_int(self.pacing_rate, 1) if not no_action else write_int(0, 1)
+        write_int(self.fps, 2) if not no_action else write_int(0, 2)
+        write_int(self.fec_rate_key, 3) if not no_action else write_int(256, 3)
+        write_int(self.fec_rate_delta, 4) if not no_action else write_int(256, 4)
+        write_int(self.padding_rate, 5) if not no_action else write_int(0, 5)
+        write_int(self.resolution, 6) if not no_action else write_int(0, 6)
 
     def array(self) -> np.ndarray:
         boundary = Action.boundary()
@@ -487,8 +486,12 @@ class WebRTCEnv(Env):
         if self.observation.fps[0] == 0:
             return -10
         delay_score = self.observation.frame_g2g_delay[0] / 100
+        print(delay_score)
+        penalty = 0
+        if delay_score < 0:
+            penalty = 10
         quality_score = self.observation.frame_bitrate[0] / 1000
-        return quality_score - delay_score
+        return quality_score - delay_score - penalty
 
 
 gymnasium.register(

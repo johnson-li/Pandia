@@ -4,13 +4,14 @@ from ray import tune
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.algorithms.sac import SACConfig
 from ray.tune.logger import pretty_print
-from pandia.agent.env import WebRTCEnv
+from pandia.agent.env_client import WebRTCEnv0
 
 
 def main():
-    config = SACConfig()\
-        .environment(env=WebRTCEnv)\
-            .rollouts(num_rollout_workers=1)
+    tune.register_env('pandia', lambda config: WebRTCEnv0(**config))
+    config = PPOConfig()\
+        .environment(env=WebRTCEnv0)\
+            .rollouts(num_rollout_workers=3)
     algo = config.build()
 
     for i in range(1000):

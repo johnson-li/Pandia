@@ -271,7 +271,7 @@ class StreamingContext(object):
                     sent_count += 1
             else:
                 break
-        return received_count / sent_count
+        return received_count / sent_count if sent_count > 0 else 0
 
     def latest_egress_packets(self, duration=1):
         res = []
@@ -567,7 +567,7 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.legend(['Decoding', 'Queue', 'Transmission', 'Pacing (RTX)', 'Pacing', 'Encoding'])
     plt.xlabel('Timestamp (s)')
     plt.ylabel('Delay (ms)')
-    # plt.ylim([0, ylim])
+    plt.ylim([0, 100])
     plt.savefig(os.path.join(output_dir, 'mea-delay-frame.pdf'))
     x = []
     y = []

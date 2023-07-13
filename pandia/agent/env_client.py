@@ -24,17 +24,18 @@ class ActionHistory():
 
 
 class WebRTCEnv0(gym.Env):
-    def __init__(self, client_id=1, duration=30, # Exp settings
-                 width=1080, fps=30, # Source settings
+    def __init__(self, client_id=1, duration=30, no_action=False, # Exp settings
+                 width=2160, fps=60, # Source settings
                  bw=1024 * 1024, delay=5, loss=0, # Network settings
                  working_dir=None, # Logging settings
-                 step_duration=1, # RL settings
+                 step_duration=.01, # RL settings
                  ) -> None:
         super().__init__() 
         # Exp settings
         self.client_id = client_id
         self.port = 7000 + client_id
         self.duration = duration
+        self.no_action = no_action
         # Source settings
         self.width = width
         self.fps = fps
@@ -86,7 +87,7 @@ class WebRTCEnv0(gym.Env):
                           '-p', str(self.port), '-d', str(self.duration + 3), 
                           '-l', receiver_log], shell=False)
         process.wait()
-        time.sleep(1)
+        # time.sleep(1)
 
     def start_webrtc(self):
         self.process_traffic_control = \
@@ -112,17 +113,22 @@ class WebRTCEnv0(gym.Env):
     def reward(self):
         if self.observation.fps[0] == 0:
             return -10
+        penalty = 0 
         delay_score = self.observation.frame_g2g_delay[0] / 100
+        if delay_score < 0:
+            penalty = 10
         quality_score = self.observation.frame_bitrate[0] / 1000
         resolution_penalty = 0
         # # Donot penalize if the resolution is changed less than 1 time during the last 10 steps
         # if resolution_penalty <= 1:
         #     resolution_penalty = 0
 
-        return quality_score - delay_score - resolution_penalty
+        return quality_score - delay_score - resolution_penalty - penalty
 
     def reset(self, seed=None, options=None):
         self.stop_webrtc()
+        if self.sender_log and os.path.exists(self.sender_log):
+            os.remove(self.sender_log)
         self.action_history = ActionHistory()
         self.step_count = 0
         self.context = StreamingContext()
@@ -137,7 +143,7 @@ class WebRTCEnv0(gym.Env):
         self.context.reset_action_context()
         act = Action.from_array(action)
         self.action_history.append(act)
-        act.write(self.shm)
+        act.write(self.shm, self.no_action)
 
         # Start WebRTC at the first step
         if self.step_count == 0:
