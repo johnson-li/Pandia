@@ -4,7 +4,7 @@ Milestone
 Track the development of new features
 
 ### 12th July
-- [ ] Transfer frame-related metrics along with the packet RTCP feedback.
+- [x] Transfer frame-related metrics along with the packet RTCP feedback. (it is over dedicated rtcp packet)
 
 ### 10th July
 - [x] The first RTP packet (RTP id = 2) may be dropped, causing H264 decoding failure. (never happen again)

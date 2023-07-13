@@ -11,7 +11,7 @@ from pandia.log_analyzer import main as analyzer_main
 
 
 def run(bitrate=0, pacing_rate=0, working_dir=os.path.join(RESULTS_PATH, 'eval_rllib'), 
-        duration=30, delay=0):
+        duration=30, delay=0, drl_path=None):
     Path(working_dir).mkdir(parents=True, exist_ok=True)
     bw = 1024 * 1024
     tune.register_env('pandia', lambda config: WebRTCEnv0(**config))
@@ -23,17 +23,19 @@ def run(bitrate=0, pacing_rate=0, working_dir=os.path.join(RESULTS_PATH, 'eval_r
         .environment(env='pandia', env_config=env_config)
     algo = config.build()
 
-    path = '~/ray_results/PPO/PPO_None_97ccd_00000_0_2023-07-12_23-56-37/checkpoint_003600'
-    algo.restore(os.path.expanduser(path))
+    if drl_path:
+        algo.restore(os.path.expanduser(drl_path))
     env: WebRTCEnv0 = algo.workers.local_worker().env
     obs, info = env.reset()
     rewards = []
     for i in range(1000):
-        # action = Action()
-        # action.bitrate[0] = bitrate
-        # action.pacing_rate[0] = pacing_rate
-        # action = action.array()
-        action = algo.compute_single_action(obs, explore=False)
+        if drl_path:
+            action = algo.compute_single_action(obs, explore=False)
+        else:
+            action = Action()
+            action.bitrate[0] = bitrate
+            action.pacing_rate[0] = pacing_rate
+            action = action.array()
         obs, reward, done, truncated, info = env.step(action)
         rewards.append(reward)
         if done or truncated:
@@ -48,8 +50,10 @@ def main():
     bitrate = 1024 * 5
     pacing_rate = 1024 * 200
     working_dir = os.path.join(RESULTS_PATH, "eval_rllib")
+    # path = '~/ray_results/PPO/PPO_None_97ccd_00000_0_2023-07-12_23-56-37/checkpoint_003600'
+    path = None
     run(bitrate=bitrate, pacing_rate=pacing_rate, working_dir=working_dir, 
-        duration=15, delay=5)
+        duration=15, delay=5, drl_path=path)
 
 
 if __name__ == "__main__":

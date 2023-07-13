@@ -91,7 +91,7 @@ class FrameContext(object):
     def packets_sent(self):
         return self.rtp_packets
 
-    def packets_video(self):
+    def packets_video(self) -> List[PacketContext]:
         return list(filter(lambda p: p.packet_type in ['video'], self.rtp_packets.values()))
 
     def packets_rtx(self):
@@ -530,143 +530,89 @@ def parse_line(line, context: StreamingContext) -> dict:
 
 def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     frame_id_list = list(sorted(context.frames.keys()))
-    data_frame_delay = []
-    lost_frames = []
-    key_frames = []
-    started = False
-    last_frame_id = -1
-    for frame_id in frame_id_list:
-        frame: FrameContext = context.frames[frame_id]
-        if frame.is_key_frame:
-            key_frames.append((frame.captured_at - context.start_ts, frame.encoded_size / 1024))
-        if frame.codec and frame.encoded_at > 0:
-            started = True
-            last_frame_id = frame_id
-            data_frame_delay.append({'id': frame_id,
-                                     'ts': frame.captured_at,
-                                     'encoded by': frame.encoding_delay(),
-                                     'paced by': frame.pacing_delay(),
-                                     'paced by (rtx)': frame.pacing_delay_including_rtx(),
-                                     'assembled by': frame.assemble_delay(context.utc_offset),
-                                     'queued by': frame.decoding_queue_delay(context.utc_offset),
-                                     'decoded by': frame.decoding_delay(context.utc_offset),})
-        elif started:
-            lost_frames.append(frame.captured_at - context.start_ts)
+    frames = [context.frames[i] for i in frame_id_list]
+    frames_encoded: List[FrameContext] = list(filter(lambda f: f.encoded_size > 0, frames))
+    frames_encoded_ts = [f.captured_at - context.start_ts for f in frames_encoded]
+    frames_dropped = list(filter(lambda f: f.encoded_size <= 0, frames))
+    frames_key = list(filter(lambda f: f.is_key_frame, frames))
+
     plt.close()
-    ylim = 0
-    colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
-    for i, k in enumerate(['decoded by', 'queued by', 'assembled by', 'paced by (rtx)', 'paced by', 'encoded by']):
-        x = np.array([d['ts'] - context.start_ts for d in data_frame_delay])
-        y = np.array([d[k] for d in data_frame_delay]) * 1000
-        print(f'Median: {k} {np.median(y)} ms')
-        if ylim == 0:
-            ylim = np.percentile(y, 90)
-        indexes = (y > 0).nonzero()
-        plt.plot(x[indexes], y[indexes], colors[i])
-    # plt.plot(lost_frames, [10 for _ in lost_frames], 'x')
-    plt.legend(['Decoding', 'Queue', 'Transmission', 'Pacing (RTX)', 'Pacing', 'Encoding'])
+    plt.plot([f.captured_at - context.start_ts for f in frames], [f.frame_id for f in frames], '.')
+    plt.xlabel('Frame capture time (s)')
+    plt.ylabel('Frame ID')
+    plt.savefig(os.path.join(output_dir, 'mea-frame-id.pdf'))
+
+    plt.close()
+    plt.plot(frames_encoded_ts, [f.decoding_delay(context.utc_offset) * 1000 for f in frames_encoded], 'b')
+    plt.plot(frames_encoded_ts, [f.decoding_queue_delay(context.utc_offset) * 1000 for f in frames_encoded], 'g')
+    plt.plot(frames_encoded_ts, [f.assemble_delay(context.utc_offset) * 1000 for f in frames_encoded], 'r')
+    plt.plot(frames_encoded_ts, [f.pacing_delay_including_rtx() * 1000 for f in frames_encoded], 'c')
+    plt.plot(frames_encoded_ts, [f.pacing_delay() * 1000 for f in frames_encoded], 'm')
+    plt.plot(frames_encoded_ts, [f.encoding_delay() * 1000 for f in frames_encoded], 'y')
+    plt.legend(['Decoding', 'Decoding queue', 'Transmission', 'Pacing (RTX)', 'Pacing', 'Encoding'])
     plt.xlabel('Timestamp (s)')
     plt.ylabel('Delay (ms)')
-    plt.ylim([0, 100])
+    plt.xlim([0, 10])
+    plt.ylim([0, 600])
     plt.savefig(os.path.join(output_dir, 'mea-delay-frame.pdf'))
-    x = []
-    y = []
-    bitrates = []
-    for frame_id in frame_id_list:
-        frame: FrameContext = context.frames[frame_id]
-        if (frame.encoded_size):
-            x.append(frame.captured_at - context.start_ts)
-            y.append(frame.encoded_size / 1024)
-            bitrates.append(frame.bitrate)
-    qp_data = [(context.frames[frame_id].captured_at - context.start_ts, context.frames[frame_id].qp)
-               for frame_id in frame_id_list if context.frames[frame_id].encoded_size > 0]
+
     plt.close()
     fig, ax1 = plt.subplots()
-    ax1.plot(x, y)
-    ax1.plot(lost_frames, [10 for _ in lost_frames], 'xb')
-    ax1.plot([f[0] for f in key_frames], [f[1] for f in key_frames], 'o')
+    ax1.plot(frames_encoded_ts, [f.encoded_size / 1024 for f in frames_encoded], 'b.')
+    ax1.plot([f.captured_at - context.start_ts for f in frames_dropped], [10 for _ in frames_dropped], 'xb')
+    ax1.plot([f.captured_at - context.start_ts for f in frames_key], [f.encoded_size / 1024 for f in frames_key], 'o')
     ax1.tick_params(axis='y', labelcolor='b')
     ax1.set_xlabel('Timestamp (s)')
     ax1.set_ylabel('Encoded size (KB)')
-    ax1.legend(['Encoded size', 'Lost frames', 'Key frames'])
+    ax1.legend(['Encoded size', 'Dropped frames', 'Key frames'])
     ax2 = ax1.twinx()
-    ax2.plot(x, bitrates, 'r')
+    ax2.plot([f.captured_at - context.start_ts for f in frames_encoded], [f.bitrate for f in frames_encoded], 'r.')
     ax2.set_ylabel('Bitrate (Kbps)')
     ax2.tick_params(axis='y', labelcolor='r')
+    plt.xlim([0, frames_encoded[-1].captured_at - context.start_ts])
     plt.savefig(os.path.join(output_dir, 'mea-size-frame.pdf'))
 
     plt.close()
-    x = []
-    y = []
-    yy = []
-    for frame in context.frames.values():
-        count_all = len(frame.packets_sent())
-        count_lost = len(frame.packets_rtx())
-        x.append(frame.captured_at - context.start_ts)
-        y.append(count_lost / count_all * 100 if count_all > 0 else 0)
-        yy.append(count_lost)
+    frame_rtp_num_list = np.array([len(f.packets_video()) for f in frames_encoded])
+    frame_rtp_lost_num_list = np.array([len([p for p in f.packets_video() if p.received is False]) for f in frames_encoded])
     fig, ax1 = plt.subplots()
     ax2 = ax1.twinx()
-    ax1.plot(x, y, 'b')
+    ax1.plot(frames_encoded_ts, frame_rtp_lost_num_list / frame_rtp_num_list * 100, 'b')
     ax1.tick_params(axis='y', labelcolor='b')
-    x = np.array(x)
-    yy = np.array(yy)
-    # ax2.plot(x[yy > 0], yy[yy > 0], 'r.')
-    ax2.plot(x, yy, 'r.')
+    ax2.plot(frames_encoded_ts, frame_rtp_lost_num_list, 'r.')
     plt.xlabel('Timestamp (s)')
     ax1.set_ylabel('Packet loss rate per frame (%)')
     ax2.set_ylabel('Number of lost packets per frame')
     ax2.tick_params(axis='y', labelcolor='r')
+    plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'mea-loss-packet-frame.pdf'))
 
     plt.close()
-    fig, ax1 = plt.subplots()
-    duration = 1
-    start = 0
-    count = y[0]
-    accu = [count]
-    fps = [1]
-    for i in range(1, len(x)):
-        while start < i and x[i] - x[start] > duration:
-            start += 1
-            count -= y[start]
-        count += y[i]
-        fps.append(i - start + 1)
-        accu.append(count)
-    ax1.plot(x, accu, 'b')
-    ax1.tick_params(axis='y', labelcolor='b')
-    ax1.set_xlabel('Timestamp (s)')
-    ax1.set_ylabel('Accumulated frame size (KB)')
-    ax2 = ax1.twinx()
-    ax2.plot(x, fps, 'r')
-    ax2.set_ylabel('FPS')
-    ax2.tick_params(axis='y', labelcolor='r')
-    plt.savefig(os.path.join(output_dir, 'mea-size-frame-accu.pdf'))
-
-    plt.close()
-    accu = np.array(accu)
-    plt.plot(x, accu * 8 / duration)
+    duration = .1
+    bucks = int((frames_encoded[-1].encoding_at - context.start_ts) / duration + 1)
+    data = np.zeros((bucks, 1))
+    for frame in frames_encoded:
+        if frame.encoded_size > 0:
+            i = int((frame.encoding_at - context.start_ts) / duration)
+            data[i] += frame.encoded_size
+    plt.plot(np.arange(bucks) * duration, data * 8 / duration / 1024, '.')
     plt.xlabel('Timestamp (s)')
     plt.ylabel('Bitrate (Kbps)')
     plt.savefig(os.path.join(output_dir, 'mea-bitrate.pdf'))
 
     plt.close()
-    plt.plot([f[0] for f in qp_data], [f[1] for f in qp_data])
+    plt.plot([f.encoded_at - context.start_ts for f in frames_encoded], [f.qp for f in frames_encoded], '.')
     plt.xlabel('Timestamp (s)')
     plt.ylabel('QP')
     plt.savefig(os.path.join(output_dir, 'rep-qp-frame.pdf'))
 
     plt.close()
-    frames = filter(lambda x: x.encoded_at > 0, context.frames.values())
-    ts_list = [f.encoded_at for f in frames]
-    ts_list = sorted(ts_list)
-    duration = 1
-    bucks = (ts_list[-1] - ts_list[0]) / duration + 1
-    data = np.zeros((int(bucks), 1))
-    for t in ts_list:
-        data[int((t - ts_list[0]) / duration)] += 1
-    x = [i * duration for i in range(len(data))]
-    plt.plot(x, data)
+    duration = .2
+    bucks = int((frames_encoded[-1].captured_at - context.start_ts) / duration + 1)
+    data = np.zeros(bucks)
+    for f in frames_encoded:
+        data[int((f.captured_at - context.start_ts) / duration)] += 1
+    plt.plot(np.arange(bucks) * duration, data / duration, '.')
     plt.xlabel('Timestamp (s)')
     plt.ylabel('FPS')
     plt.savefig(os.path.join(output_dir, 'mea-fps.pdf'))
@@ -749,7 +695,7 @@ def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.close()
     x = [i[0] - context.start_ts for i in context.packet_loss_data]
     y = [i[1] * 100 for i in context.packet_loss_data]
-    plt.plot(x, y)
+    plt.plot(x, y, '.')
     plt.xlabel('Timestamp (s)')
     plt.ylabel('Packet loss rate (%)')
     plt.savefig(os.path.join(output_dir, 'rep-loss-packet.pdf'))
@@ -783,8 +729,8 @@ def analyze_network(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     y = [d[1] / 1024 for d in data]
     yy = [d[2] / 1024 for d in data]
     plt.close()
-    plt.plot(x, y)
-    plt.plot(x, yy)
+    plt.plot(x, y, '.')
+    plt.plot(x, yy, '.')
     plt.xlabel("Timestamp (s)")
     plt.ylabel("Rate (Mbps)")
     plt.legend(["Pacing rate", "Padding rate"])
@@ -806,9 +752,9 @@ def analyze_network(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.savefig(os.path.join(output_dir, 'mea-sending-rate.pdf'))
 
     plt.close()
-    x = [r[0] for r in context.rtt_data]
+    x = [r[0] - context.start_ts for r in context.rtt_data]
     y = [r[1] * 1000 for r in context.rtt_data]
-    plt.plot(x, y)
+    plt.plot(x, y, '.')
     plt.xlabel("Timestamp (s)")
     plt.ylabel("RTT (ms)")
     plt.savefig(os.path.join(output_dir, 'rep-rtt.pdf'))
@@ -825,7 +771,7 @@ def print_statistics(context: StreamingContext) -> None:
     frames_decoded = len(frame_ids)
     loss_rate_encoding = ((frames_total - frames_sent) / frames_total) if frames_total else 0
     loss_rate_decoding = ((frames_total - frames_decoded) / frames_total) if frames_total else 0
-    print(f"Total frames: {frames_total}, encoding loss rate: {loss_rate_encoding:.2%}, "
+    print(f"Total frames: {frames_total}, encoding drop rate: {loss_rate_encoding:.2%}, "
           f"decoding loss rate: {loss_rate_decoding:.2%}")
 
 
