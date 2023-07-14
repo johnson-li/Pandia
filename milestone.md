@@ -3,6 +3,9 @@ Milestone
 
 Track the development of new features
 
+### 14th July
+- [ ] Log the cause of frame drop and downscale
+
 ### 12th July
 - [x] Transfer frame-related metrics along with the packet RTCP feedback. (it is over dedicated rtcp packet)
 

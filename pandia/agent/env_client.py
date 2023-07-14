@@ -175,7 +175,7 @@ class WebRTCEnv0(gym.Env):
         truncated = self.process_sender.poll() is not None
         reward = self.reward()
 
-        print(f'[{self.client_id}] #{self.step_count} R.w.: {reward:.02f}, Act.: {act}, Obs.: {self.observation}')
+        print(f'[{self.client_id}] #{self.step_count} R.w.: {reward:.02f}, Act.: {"Fake" if self.no_action else act}, Obs.: {self.observation}')
         self.step_count += 1
         return self.observation.array(), reward, False, truncated, {}
 

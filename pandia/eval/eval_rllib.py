@@ -1,3 +1,4 @@
+import argparse
 import os
 from pathlib import Path
 from pandia import DIAGRAMS_PATH, RESULTS_PATH
@@ -16,8 +17,9 @@ def run(bitrate=0, pacing_rate=0, working_dir=os.path.join(RESULTS_PATH, 'eval_r
     bw = 1024 * 1024
     tune.register_env('pandia', lambda config: WebRTCEnv0(**config))
     env_config={'bw': bw, 'delay': delay, 'no_action': True,
+                'fps': 30, 'width': 1080,
                 'client_id': 18, 'duration': duration,
-                'working_dir': working_dir,}
+                'working_dir': working_dir, 'no_action': True}
     config = PPOConfig()\
         .rollouts(num_rollout_workers=0)\
         .environment(env='pandia', env_config=env_config)
@@ -28,7 +30,7 @@ def run(bitrate=0, pacing_rate=0, working_dir=os.path.join(RESULTS_PATH, 'eval_r
     env: WebRTCEnv0 = algo.workers.local_worker().env
     obs, info = env.reset()
     rewards = []
-    for i in range(1000):
+    for i in range(100000):
         if drl_path:
             action = algo.compute_single_action(obs, explore=False)
         else:
@@ -47,13 +49,16 @@ def run(bitrate=0, pacing_rate=0, working_dir=os.path.join(RESULTS_PATH, 'eval_r
     analyzer_main(working_dir)
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-d', '--duration', type=int, default=10)
+    args = parser.parse_args()
     bitrate = 1024 * 5
     pacing_rate = 1024 * 200
     working_dir = os.path.join(RESULTS_PATH, "eval_rllib")
     # path = '~/ray_results/PPO/PPO_None_97ccd_00000_0_2023-07-12_23-56-37/checkpoint_003600'
     path = None
     run(bitrate=bitrate, pacing_rate=pacing_rate, working_dir=working_dir, 
-        duration=15, delay=5, drl_path=path)
+        duration=args.duration, delay=5, drl_path=path)
 
 
 if __name__ == "__main__":

@@ -119,6 +119,7 @@ class Observation(object):
                f'FPS: {self.fps[0]}, ' \
                f'size: {self.frame_size[0]} bytes, ' \
                f'B.r.: {self.frame_bitrate[0]} kbps, ' \
+               f'P.r.: {self.pacing_rate[0]} kbps, ' \
                f'QP: {self.frame_qp[0]}, '
 
     def calculate_statistics(self, data):
