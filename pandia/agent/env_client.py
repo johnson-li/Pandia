@@ -2,13 +2,16 @@ from io import IOBase
 from multiprocessing import Pool, Process, shared_memory
 import os
 import subprocess
+from threading import Thread
+import threading
 import time
 import gymnasium as gym
-from typing import List, Optional, TextIO
+from typing import List, Optional, TextIO, Union
 
 import numpy as np
 from pandia import BIN_PATH, SCRIPTS_PATH
-from pandia.agent.env import Action, Observation
+from pandia.agent.action import Action
+from pandia.agent.observation import Observation
 from ray.rllib.env.policy_client import PolicyClient
 from pandia.agent.env_server import SERVER_PORT
 from pandia.log_analyzer_sender import StreamingContext, parse_line
@@ -21,6 +24,29 @@ class ActionHistory():
 
     def append(self, action: Action) -> None:
         pass
+
+
+class ReadingThread(threading.Thread):
+    def __init__(self, context: StreamingContext, log_file: Optional[str], stop_event: threading.Event):
+        super().__init__()
+        self.stdout = None
+        self.context = context
+        self.log_file = log_file
+        self.stop_event = stop_event
+
+
+    def run(self) -> None:
+        buf = []
+        while not self.stop_event.is_set():
+            if self.stdout:
+                line = self.stdout.readline().decode().strip()
+                if line:
+                    parse_line(line, self.context)
+                    if self.log_file:
+                        buf.append(line)
+        if self.log_file:
+            with open(self.log_file, 'w+') as f:
+                f.write('\n'.join(buf))
 
 
 class WebRTCEnv0(gym.Env):
@@ -46,9 +72,12 @@ class WebRTCEnv0(gym.Env):
         # Logging settings
         self.working_dir = working_dir
         self.sender_log = os.path.join(working_dir, self.log_name('sender')) if working_dir else None
+        self.stop_event: threading.Event = None
+        self.reading_thread: ReadingThread = None
+        self.logging_buf = []
         # RL settings
         self.step_duration = step_duration
-        self.init_timeout = 5
+        self.init_timeout = 10
         self.hisory_size = 10
         # RL state
         self.step_count = 0
@@ -60,8 +89,7 @@ class WebRTCEnv0(gym.Env):
         self.action_space = Action.action_space(legacy_api=False) # type: ignore
         self.observation_space = Observation.observation_space(legacy_api=False) # type: ignore
         # Tracking
-        self.last_ts = time.time()
-        self.stdout: TextIO 
+        self.start_ts = 0
         self.action_history = ActionHistory()
 
     @property
@@ -109,6 +137,12 @@ class WebRTCEnv0(gym.Env):
         time.sleep(1)
         if self.process_sender:
             self.process_sender.kill()
+        if self.sender_log and self.logging_buf:
+            with open(self.sender_log, 'w+') as f:
+                f.write('\n'.join(self.logging_buf))
+        if self.stop_event is not None:
+            self.stop_event.set()
+            self.reading_thread.join()
 
     def reward(self):
         if self.observation.fps[0] == 0:
@@ -129,61 +163,58 @@ class WebRTCEnv0(gym.Env):
         self.stop_webrtc()
         if self.sender_log and os.path.exists(self.sender_log):
             os.remove(self.sender_log)
+        self.context = StreamingContext()
+        self.stop_event = threading.Event()
+        self.reading_thread = ReadingThread(self.context, self.sender_log, self.stop_event)
+        self.reading_thread.start()
         self.action_history = ActionHistory()
         self.step_count = 0
-        self.context = StreamingContext()
         self.context.utc_offset = ntp_sync().offset
         self.observation = Observation()
         self.init_webrtc()
+        self.start_ts = time.time()
         return self.observation.array(), {}
-
-
-    def step(self, action: np.ndarray):
-        # Write action
-        self.context.reset_action_context()
-        act = Action.from_array(action)
-        self.action_history.append(act)
-        act.write(self.shm, self.no_action)
-
-        # Start WebRTC at the first step
-        if self.step_count == 0:
-            self.stdout = self.start_webrtc()
-            self.last_ts = time.time()
-
-        # Process logs and wait for step duration.
-        # The first step may last longer than 
-        # step duration until the codec is initiated.
-        while not self.context.codec_initiated or \
-            time.time() - self.last_ts < self.step_duration:
-            if time.time() - self.last_ts > self.init_timeout:
-                print(f"[{self.client_id}] WebRTC start timeout. Startover.")
-                self.reset()
-                return self.step(action)
-            line = self.stdout.readline().decode().strip()
-            if line:
-                if self.sender_log:
-                    with open(self.sender_log, 'a+') as f:
-                        f.write(line + '\n')
-                codec_initiated = self.context.codec_initiated
-                parse_line(line, self.context)
-                if not codec_initiated and self.context.codec_initiated:
-                    self.last_ts = time.time()
-        self.last_ts = time.time()
-
-        # Collection rollouts
-        self.observation.append(self.context, act)
-        truncated = self.process_sender.poll() is not None
-        reward = self.reward()
-
-        print(f'[{self.client_id}] #{self.step_count} R.w.: {reward:.02f}, Act.: {"Fake" if self.no_action else act}, Obs.: {self.observation}')
-        self.step_count += 1
-        return self.observation.array(), reward, False, truncated, {}
 
     def close(self):
         self.stop_webrtc()
         if self.shm:
             self.shm.close()
             self.shm.unlink()
+
+    def step(self, action: np.ndarray):
+        # Write action
+        self.context.reset_step_context()
+        act = Action.from_array(action)
+        act.bitrate[0] = 0
+        act.pacing_rate[0] = 1000 * 1024
+        # act.bitrate[0] = 10 * 1024
+        self.action_history.append(act)
+        act.write(self.shm, self.no_action)
+
+        # Start WebRTC at the first step
+        if self.step_count == 0:
+            self.reading_thread.stdout = self.start_webrtc()
+            print(f"[{self.client_id}] Wait for WebRTC to start.")
+
+        ts = time.time()
+        while not self.context.codec_initiated:
+            if time.time() - ts > self.init_timeout:
+                print(f"[{self.client_id}] WebRTC start timeout. Startover.")
+                self.reset()
+                return self.step(action)
+        ts = time.time()
+        if self.step_count == 0:
+            self.start_ts = ts
+        time.sleep(self.step_duration)
+
+        # Collecting rollouts
+        # self.observation.append(self.context, act)
+        truncated = self.process_sender.poll() is not None or time.time() - self.start_ts > self.duration
+        reward = self.reward()
+
+        print(f'[{self.client_id}] #{self.step_count}@{int((time.time() - self.start_ts) * 1000)}ms R.w.: {reward:.02f}, Act.: {"Fake" if self.no_action else act}, Obs.: {self.observation}')
+        self.step_count += 1
+        return self.observation.array(), reward, False, truncated, {}
 
 
 def run(client_id=1):

@@ -12,14 +12,15 @@ from pandia.log_analyzer import main as analyzer_main
 
 
 def run(bitrate=0, pacing_rate=0, working_dir=os.path.join(RESULTS_PATH, 'eval_rllib'), 
-        duration=30, delay=0, drl_path=None):
-    Path(working_dir).mkdir(parents=True, exist_ok=True)
+        duration=30, delay=0, drl_path=None, no_action=False):
+    if working_dir:
+        Path(working_dir).mkdir(parents=True, exist_ok=True)
     bw = 1024 * 1024
     tune.register_env('pandia', lambda config: WebRTCEnv0(**config))
     env_config={'bw': bw, 'delay': delay, 'no_action': True,
                 'fps': 30, 'width': 1080,
                 'client_id': 18, 'duration': duration,
-                'working_dir': working_dir, 'no_action': True}
+                'working_dir': working_dir, 'no_action': no_action}
     config = PPOConfig()\
         .rollouts(num_rollout_workers=0)\
         .environment(env='pandia', env_config=env_config)
@@ -37,8 +38,8 @@ def run(bitrate=0, pacing_rate=0, working_dir=os.path.join(RESULTS_PATH, 'eval_r
             action = Action()
             action.bitrate[0] = bitrate
             action.pacing_rate[0] = pacing_rate
-            action = action.array()
-        obs, reward, done, truncated, info = env.step(action)
+            act = action.array()
+        obs, reward, done, truncated, info = env.step(act)
         rewards.append(reward)
         if done or truncated:
             break
@@ -55,10 +56,11 @@ def main():
     bitrate = 1024 * 5
     pacing_rate = 1024 * 200
     working_dir = os.path.join(RESULTS_PATH, "eval_rllib")
+    working_dir = None
     # path = '~/ray_results/PPO/PPO_None_97ccd_00000_0_2023-07-12_23-56-37/checkpoint_003600'
     path = None
     run(bitrate=bitrate, pacing_rate=pacing_rate, working_dir=working_dir, 
-        duration=args.duration, delay=5, drl_path=path)
+        duration=args.duration, delay=5, drl_path=path, no_action=False)
 
 
 if __name__ == "__main__":

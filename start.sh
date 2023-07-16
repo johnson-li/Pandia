@@ -1,6 +1,6 @@
 #!/bin/bash
 
-duration=10
+duration=30
 port=7018
 width=1080
 fps=30
@@ -57,13 +57,13 @@ rm /tmp/dump/* 2> /dev/null || true
 ~/Workspace/Pandia/scripts/start_webrtc_receiver_remote.sh -p $port -d $duration -l /tmp/test_receiver.log -u /tmp/dump
 
 # Init traffic control
-~/Workspace/Pandia/scripts/start_traffic_control_remote.sh -p $port -b 1000000 -d 0
+~/Workspace/Pandia/scripts/start_traffic_control_remote.sh -p $port -b 1000000 -d 5
 
 # Start sender
 echo "Runnig... Will last for $duration s"
-rm /tmp/test_sender.log 2> /dev/null
+rm /tmp/test_sender.log 2> /dev/null || true
 # /Workspace/Pandia/bin/peerconnection_client_headless --server 195.148.127.230 --port $port --width $width --fps $fps --name sender --autocall true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ > /tmp/test_sender.log 2>&1
-~/Workspace/webrtc/src/out/Default/peerconnection_client_headless --server 195.148.127.230 --port $port --width $width --fps $fps --name sender --autocall true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ > /tmp/test_sender.log 2>&1
+~/Workspace/Pandia/bin/peerconnection_client_headless --server 195.148.127.230 --port $port --width $width --fps $fps --name sender --autocall true --force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/ > /tmp/test_sender.log 2>&1
 
 # Copy receiver log
 scp mobix:/tmp/test_receiver.log /tmp

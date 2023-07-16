@@ -36,7 +36,7 @@ def dnml(name, value: np.ndarray, value_range, normalized_range=NORMALIZATION_RA
         indexes = np.clip(res, 0, len(RESOLUTION_LIST) - 1).astype(np.int32)
         res = [RESOLUTION_LIST[i] for i in indexes]
         res = np.array(res, dtype=np.int32)
-    return res.astype(np.int32)
+    return res.astype(np.float32)
 
 
 def test_resolution():

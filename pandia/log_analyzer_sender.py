@@ -1,7 +1,7 @@
 import os
 import re
 import time
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple, Union
 import matplotlib.pyplot as plt
 import numpy as np
 from pandia import RESULTS_PATH, DIAGRAMS_PATH
@@ -30,6 +30,8 @@ class PacketContext(object):
         self.payload_type = -1
         self.frame_id = -1
         self.size = -1
+        self.first_packet_in_frame = False
+        self.last_packet_in_frame = False
         self.allow_retrans: bool = None
         self.retrans_ref: int = None
         self.packet_type: str
@@ -51,7 +53,7 @@ class FrameContext(object):
     def __init__(self, frame_id, captured_at) -> None:
         self.frame_id = frame_id
         self.captured_at = captured_at
-        self.captured_at_utc = 0
+        self.captured_at_utc = .0
         self.width = 0
         self.height = 0
         self.encoding_at = .0
@@ -64,15 +66,19 @@ class FrameContext(object):
         self.decoded_at = .0
         self.decoding_at = .0
         self.bitrate = 0
-        self.codec = 0
         self.encoded_size = 0
         self.sequence_range = [10000000, 0]
         self.encoded_shape: tuple = (0, 0)
         self.rtp_packets: dict = {}
+        self.packets_size = 0
         self.dropped_by_encoder = False
         self.is_key_frame = False
         self.qp = 0
         self.retrans_record = {}
+
+    @property
+    def encoded(self):
+        return self.encoded_at > 0
 
     def seq_len(self):
         if self.sequence_range[1] > 0:
@@ -152,7 +158,7 @@ class ActionContext(object):
 
 
 class StreamingContext(object):
-    def __init__(self) -> None:
+    def __init__(self, monitor_durations=[1]) -> None:
         self.start_ts: float = 0
         self.frames: Dict[int, FrameContext] = {}
         self.packets: Dict[int, PacketContext] = {}
@@ -163,135 +169,196 @@ class StreamingContext(object):
         self.rtt_data = []
         self.packet_loss_data = []
         self.fps_data = []
-        self.codec_initiated = False
+        self.pacing_queue_data = []
+        self.codec: Optional[int] = None
         self.last_captured_frame_id = 0
         self.last_decoded_frame_id = 0
         self.last_egress_packet_id = 0
         self.last_acked_packet_id = 0
         self.action_context = ActionContext()
+        self.utc_local_offset: float = 0 # The difference between the sender local time and thesender UTC time 
         self.utc_offset: float = 0  # The difference between the sender UTC and the receiver UTC
+        self.monitor_blocks = {d: MonitorBlock(d) for d in monitor_durations}
+        self.last_ts = .0
 
-    def reset_action_context(self):
+    def update_utc_local_offset(self, offset):
+        self.utc_local_offset = offset
+        for mb in self.monitor_blocks.values():
+            mb.update_utc_local_offset(offset)
+
+    def update_ts(self, ts: float):
+        self.last_ts = ts
+        for mb in self.monitor_blocks.values():
+            mb.ts = ts
+
+    def reset_step_context(self):
         self.action_context = ActionContext()
 
-    def codec(self) -> int:
-        for i in range(self.last_captured_frame_id, -1, -1):
-            frame = self.frames.get(i, None)
-            if frame and frame.codec:
-                return frame.codec
-        return 0
-    
-    def codec_name(self) -> str:
-        return CODEC_NAMES[self.codec()]
+    @property
+    def codec_initiated(self):
+        return self.codec is not None
 
-    def fps(self):
-        res = 0
-        for i in range(self.last_captured_frame_id, 0, -1):
-            diff = self.frames[self.last_captured_frame_id].captured_at - \
-                self.frames[i].captured_at
-            if diff <= 1:
-                if self.frames[i].encoded_at > 0 and self.frames[i].encoded_size > 0:
-                    res += 1
-            else:
-                break
-        return res
 
-    def latest_frames(self, duration=1):
-        res = []
-        for i in range(self.last_captured_frame_id, 0, -1):
-            if self.frames[i].captured_at >= self.frames[self.last_captured_frame_id].captured_at - duration:
-                res.append(self.frames[i])
-            else:
-                break
-        return res
+class MonitorBlockData(object):
+    def __init__(self, ts_fn, val_fn, duration=1, val_checker=lambda v: v >= 0, ts_offset=0) -> None:
+        self.duration = duration
+        self.data = []
+        self.num = 0
+        self.sum = 0
+        self.ts_fn = ts_fn
+        self.val_fn = val_fn
+        self.val_checker = val_checker
+        self.ts_offset = ts_offset
 
-    def latest_packets(self, duration=1):
-        res = []
-        for i in range(self.last_egress_packet_id, 0, -1):
-            if self.packets[i].sent_at >= self.packets[self.last_egress_packet_id].sent_at - duration:
-                res.append(self.packets[i])
-            else:
-                break
-        return res
+    def ts(self, val: Union[FrameContext, PacketContext]):
+        return self.ts_fn(val) - self.ts_offset
 
-    def packet_delay(self, duration=1):
-        res = []
-        for i in range(self.last_egress_packet_id, 0, -1):
-            pkt = self.packets[i]
-            if pkt.sent_at >= self.packets[self.last_egress_packet_id].sent_at - duration:
-                if pkt.recv_delay() >= 0:
-                    res.append(pkt.recv_delay())
-            else:
-                break
-        return np.mean(res) if res else 0
+    def append(self, val: Union[FrameContext, PacketContext, Tuple], ts):
+        if self.val_checker(self.val_fn(val)):
+            self.data.append(val)
+            self.num += 1
+            self.sum += self.val_fn(val) 
+        while self.data and self.ts(self.data[0]) < ts - self.duration:
+            val = self.data.pop(0)
+            self.num -= 1
+            self.sum -= self.val_fn(val)
 
-    def packet_delay_interval(self, duration=1):
-        limit = 3
-        buf = []
-        res = []
-        for i in range(self.last_egress_packet_id, 0, -1):
-            pkt = self.packets[i]
-            if pkt.sent_at >= self.packets[self.last_egress_packet_id].sent_at - duration:
-                if pkt.received_at > 0:
-                    if buf:
-                        a = pkt.received_at - buf[0].received_at
-                        b = pkt.sent_at - buf[0].sent_at
-                        if b != 0:
-                            res.append(a / b)
-                    buf.append(pkt)
-                    if len(buf) > limit:
-                        buf.pop(0)
-            else:
-                break
-        return np.mean(res) if res else 0
+    def avg(self):
+        return self.sum / self.num if self.num > 0 else 0
 
-    def packet_rtt_measured(self, duration=1):
-        res = []
-        for i in range(len(self.rtt_data) - 1, -1, -1):
-            if self.rtt_data[i][0] >= self.rtt_data[-1][0] - duration:
-                res.append(self.rtt_data[i][1])
-            else:
-                break
-        if res:
-            return np.mean(res)
-        if self.rtt_data:
-            return self.rtt_data[-1][1]
+
+class MonitorBlock(object):
+    def __init__(self, duration=1) -> None:
+        self.ts: float = 0
+        self.duration: float = duration
+        # Frame statictics
+        self.frame_encoded_size = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.encoded_size, duration=duration)
+        self.frame_acked_size = MonitorBlockData(lambda f: f.acked_at, lambda f: f.encoded_size, duration=duration)
+        self.frame_qp_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.qp, duration=duration)
+        self.frame_height_data = MonitorBlockData(lambda f: f.encoding_at, lambda f: f.height, duration=duration)
+        self.frame_encoded_height_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.encoded_shape[1], duration=duration)
+        self.frame_encoding_delay_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.encoding_delay(), duration=duration)
+        self.frame_egress_delay_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.pacing_delay(), duration=duration)
+        self.frame_recv_delay_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.assembled_at_utc - f.captured_at_utc, duration=duration)
+        self.frame_decoding_delay_data = MonitorBlockData(lambda f: f.decoding_at, lambda f: f.decoding_at_utc - f.captured_at_utc, duration=duration)
+        self.frame_decoded_delay_data = MonitorBlockData(lambda f: f.decoded_at, lambda f: f.decoded_at_utc - f.captured_at_utc, duration=duration)
+        # Packet statistics
+        self.pkts_sent_size = MonitorBlockData(lambda p: p.sent_at, lambda p: p.size, duration=duration)
+        self.pkts_acked_size = MonitorBlockData(lambda p: p.received_at, lambda p: p.size, duration=duration)
+        self.pkts_trans_delay_data = MonitorBlockData(lambda p: p.sent_at, lambda p: p.recv_delay(), duration=duration)
+        self.pkts_lost_count = MonitorBlockData(lambda p: p.acked_at, lambda p: 1 if p.received else 0, duration=duration)
+        # Setting statistics
+        self.pacing_rate_data = MonitorBlockData(lambda p: p[0], lambda p: p[1], duration=duration)
+
+    def update_utc_local_offset(self, offset):
+        self.pkts_acked_size.ts_offset = offset
+
+    @property
+    def action_gap(self):
         return 0
 
+    @property
+    def pacing_rate(self):
+        return self.pacing_rate_data.avg()
 
-    def packet_loss_rate(self, duration=1):
-        # TODO: We currently do not count recently lost packets
-        sent_count = 0
-        received_count = 0
-        for i in range(self.last_egress_packet_id, 0, -1):
-            if self.packets[i].sent_at >= self.packets[self.last_egress_packet_id].sent_at - duration:
-                if self.packets[i].received_at > 0:
-                    received_count += 1
-                if received_count > 0:
-                    sent_count += 1
-            else:
-                break
-        return received_count / sent_count if sent_count > 0 else 0
+    @property
+    def frame_fps(self):
+        return self.frame_encoded_size.num / self.duration
 
-    def latest_egress_packets(self, duration=1):
-        res = []
-        for i in range(self.last_egress_packet_id, 0, -1):
-            if i in self.packets and \
-                self.packets[i].sent_at >= self.packets[self.last_egress_packet_id].sent_at - duration:
-                res.append(self.packets[i])
-            else:
-                break
-        return res
+    @property
+    def frame_bitrate(self):
+        return self.frame_encoded_size.sum * 8 / self.duration
 
-    def latest_acked_packets(self, duration=1):
-        res = []
-        for i in range(self.last_acked_packet_id, 0, -1):
-            if i in self.packets and \
-                self.packets[i].acked_at >= self.packets[self.last_acked_packet_id].acked_at - duration:
-                res.append(self.packets[i])
-            else:
-                break
-        return res
+    @property
+    def frame_encoding_delay(self):
+        return self.frame_encoding_delay_data.avg()
+
+    @property
+    def frame_decoded_delay(self):
+        return self.frame_decoded_delay_data.avg()
+
+    @property
+    def frame_decoding_delay(self):
+        return self.frame_decoding_delay_data.avg()
+
+    @property
+    def frame_encoded_height(self):
+        return self.frame_encoded_height_data.avg()
+
+    @property
+    def frame_height(self):
+        return self.frame_height_data.avg()
+
+    @property
+    def frame_qp(self):
+        return self.frame_qp_data.avg()
+
+    @property
+    def frame_recv_delay(self):
+        return self.frame_recv_delay_data.avg()
+
+    @property
+    def frame_egress_delay(self):
+        return self.frame_egress_delay_data.avg()
+
+    @property
+    def frame_size(self):
+        return self.frame_encoded_size.avg()
+
+    @property
+    def pkt_egress_rate(self):
+        return self.pkts_sent_size.sum * 8 / self.duration
+
+    @property
+    def pkt_trans_delay(self):
+        return self.pkts_trans_delay_data.avg()
+
+    @property
+    def pkt_ack_rate(self):
+        return self.pkts_acked_size.sum * 8 / self.duration
+
+    @property
+    def pkt_loss_rate(self):
+        return self.pkts_lost_count.sum / self.pkts_sent_size.num if self.pkts_sent_size.num > 0 else 0
+
+    @property
+    def pkt_delay_interval(self):
+        return 0
+
+    def on_packet_added(self, packet: PacketContext, ts: float):
+        pass
+
+    def on_packet_sent(self, packet: PacketContext, frame: Optional[FrameContext], ts: float):
+        self.pkts_sent_size.append(packet, ts)
+        if packet.last_packet_in_frame:
+            self.frame_egress_delay_data.append(frame, ts)
+
+    def on_packet_acked(self, packet: PacketContext, ts: float):
+        if packet.received:
+            self.pkts_acked_size.append(packet, ts)
+            self.pkts_trans_delay_data.append(packet, ts)
+        if packet.received is not None:
+            self.pkts_lost_count.append(packet, ts)
+
+    def on_frame_added(self, frame: FrameContext, ts: float):
+        pass
+
+    def on_frame_encoding(self, frame: FrameContext, ts: float):
+        self.frame_height_data.append(frame, ts)
+
+    def on_frame_encoded(self, frame: FrameContext, ts: float):
+        self.frame_encoded_size.append(frame, ts)
+        self.frame_qp_data.append(frame, ts)
+        self.frame_encoded_height_data.append(frame, ts)
+        self.frame_encoding_delay_data.append(frame, ts)
+
+    def on_frame_decoding_updated(self, frame: FrameContext, ts: float):
+        self.frame_recv_delay_data.append(frame, ts)
+        self.frame_decoding_delay_data.append(frame, ts)
+        self.frame_decoded_delay_data.append(frame, ts)
+
+    def on_pacing_rate_set(self, ts: float, rate: float):
+        self.pacing_rate_data.append((ts, rate), ts)
 
 
 class NetworkContext(object):
@@ -302,6 +369,7 @@ class NetworkContext(object):
 
 def parse_line(line, context: StreamingContext) -> dict:
     data = {}
+    ts = 0
     if 'FrameCaptured' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] FrameCaptured, id: (\\d+), width: (\\d+), height: (\\d+), ts: (\\d+), utc ts: (\\d+) ms.*'), line)
@@ -314,6 +382,9 @@ def parse_line(line, context: StreamingContext) -> dict:
         frame.captured_at_utc = utc_ts
         context.last_captured_frame_id = frame_id
         context.frames[frame_id] = frame
+        if context.utc_local_offset == 0:
+            context.update_utc_local_offset(utc_ts - ts)
+        [mb.on_frame_added(frame, ts) for mb in context.monitor_blocks.values()]
     elif 'UpdateFecRates' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] UpdateFecRates, fraction lost: ([0-9.]+).*'), line)
@@ -322,48 +393,55 @@ def parse_line(line, context: StreamingContext) -> dict:
         context.packet_loss_data.append((ts, loss_rate))
     elif 'SetupCodec' in line:
         m = re.match(re.compile(
-            '.*\\[(\\d+)\\] SetupCodec.*'), line)
+            '.*\\[(\\d+)\\] SetupCodec, config, codec type: (\\d+).*'), line)
         ts = int(m[1]) / 1000
-        if not context.codec_initiated:
-            context.codec_initiated = True
+        codec = int(m[2])
+        if context.codec is None:
+            context.codec = codec
             context.start_ts = ts
-    elif 'Frame encoded' in line:
+    elif 'Egress paused because of pacing rate constraint' in line:
         m = re.match(re.compile(
-            '.*\\[(\\d+)\\] Frame encoded, id: (\\d+), codec: (\\d+), size: (\\d+), width: (\\d+), height: (\\d+), .*'), line)
+            '.*\\[(\\d+)\\] Egress paused because of pacing rate constraint, left packets: (\\d+).*'), line)
         ts = int(m[1]) / 1000
-        frame_id = int(m[2])
-        codec = int(m[3])
-        encoded_size = int(m[4])
-        width = int(m[5])
-        height = int(m[6])
-        frame: FrameContext = context.frames[frame_id]
-        frame.encoded_at = ts
-        frame.codec = codec
-        frame.encoded_shape = (width, height)
-        frame.encoded_size = encoded_size
-    elif 'Assign RTP id' in line:
+        left_packets = int(m[2])
+        context.pacing_queue_data.append((ts, left_packets))
+    elif 'SendPacket' in line:
         m = re.match(re.compile(
-            '.*\\[(\\d+)\\] .*Assign RTP id, id: (\\d+), frame id: (\\d+), type: (\\d+), retrans seq num: (\\d+), allow retrans: (\\d+).*'), line)
+            '.*\\[(\\d+)\\] .*SendPacket, id: (\\d+), seq: (\\d+), fid: (\\d+), type: (\\d+), rtx seq: (\\d+), allow rtx: (\\d+), size: (\\d+).*'), line)
         ts = int(m[1]) / 1000
         rtp_id = int(m[2])
-        frame_id = int(m[3])
-        rtp_type = PACKET_TYPES[int(m[4])]  # 0: audio, 1: video, 2: rtx, 3: fec, 4: padding
-        retrans_seq_num = int(m[5])
-        allow_retrans = int(m[6]) != 0
+        seq_num = int(m[3])
+        frame_id = int(m[4])
+        rtp_type = PACKET_TYPES[int(m[5])]  # 0: audio, 1: video, 2: rtx, 3: fec, 4: padding
+        retrans_seq_num = int(m[6])
+        allow_retrans = int(m[7]) != 0
+        size = int(m[8])
         packet = PacketContext(rtp_id)
-        context.packets[rtp_id] = packet
+        packet.seq_num = seq_num
         packet.packet_type = rtp_type
         packet.frame_id = frame_id
         packet.allow_retrans = allow_retrans
         packet.retrans_ref = retrans_seq_num
+        packet.size = size
+        context.packets[rtp_id] = packet
+        context.packet_id_map[seq_num] = rtp_id
+        [mb.on_packet_added(packet, ts) for mb in context.monitor_blocks.values()]
         if rtp_type == 'rtx':
             packet.frame_id = context.packets[context.packet_id_map[retrans_seq_num]].frame_id
         if packet.frame_id > 0 and frame_id in context.frames:
             frame: FrameContext = context.frames[frame_id]
+            if not frame.rtp_packets:
+                packet.first_packet_in_frame = True
             frame.rtp_packets[rtp_id] = packet
             if rtp_type == 'rtx':
                 original_rtp_id = context.packet_id_map[retrans_seq_num]
                 frame.retrans_record.setdefault(original_rtp_id, []).append(rtp_id)
+            if rtp_type == 'video':
+                frame.sequence_range[0] = min(frame.sequence_range[0], seq_num)
+                frame.sequence_range[1] = max(frame.sequence_range[1], seq_num)
+                frame.packets_size += size
+                if frame.packets_size >= frame.encoded_size:
+                    packet.last_packet_in_frame = True
     elif 'Start encoding' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\].*Start encoding, frame id: (\\d+), shape: (\\d+) x (\\d+), bitrate: (\\d+) kbps.*'), line)
@@ -381,43 +459,30 @@ def parse_line(line, context: StreamingContext) -> dict:
             frame.width = width
             frame.height = height
             frame.encoding_at = ts
+            [mb.on_frame_encoding(frame, ts) for mb in context.monitor_blocks.values()]
     elif 'Finish encoding' in line:
         m = re.match(re.compile(
-            '.*Finish encoding, frame id: (\\d+), frame type: (\\d+), frame size: (\\d+), is key: (\\d+), qp: (-?\\d+).*'), line)
-        frame_id = int(m[1])
-        frame_type = int(m[2])
-        frame_size = int(m[3])
-        is_key = int(m[4])
-        qp = int(m[5])
-        if frame_id in context.frames:
-            frame = context.frames[frame_id]
-            frame.qp = qp
-            frame.is_key_frame = is_key != 0
-    elif 'Assign sequence number' in line:
-        m = re.match(re.compile(
-            '.*\\[(\\d+)\\] Assign sequence number, id: (\\d+), sequence number: (\\d+).*'), line)
+            '.*\\[(\\d+)\\] Finish encoding, frame id: (\\d+), frame type: (\\d+), frame shape: (\\d+)x(\\d+), frame size: (\\d+), is key: (\\d+), qp: (-?\\d+).*'), line)
         ts = int(m[1]) / 1000
-        rtp_id = int(m[2])
-        sequence_number = int(m[3])
-        context.packet_id_map[sequence_number] = rtp_id
-        assert context.packets[rtp_id].seq_num == -1
-        context.packets[rtp_id].seq_num = sequence_number
-        if context.packets[rtp_id].packet_type == 'video' and context.packets[rtp_id].frame_id in context.frames:
-            frame = context.frames[context.packets[rtp_id].frame_id]
-            frame.sequence_range[0] = min(frame.sequence_range[0], sequence_number)
-            frame.sequence_range[1] = max(frame.sequence_range[1], sequence_number)
+        frame_id = int(m[2])
+        frame_type = int(m[3])
+        width= int(m[4])
+        height = int(m[5])
+        frame_size = int(m[6])
+        is_key = int(m[7])
+        qp = int(m[8])
+        frame = context.frames[frame_id]
+        frame.encoded_at = ts
+        frame.encoded_shape = (width, height)
+        frame.encoded_size = frame_size
+        frame.qp = qp
+        frame.is_key_frame = is_key != 0
+        [mb.on_frame_encoded(frame, ts) for mb in context.monitor_blocks.values()]
     elif 'RTCP RTT' in line:
         m = re.match(re.compile('.*\\[(\\d+)\\] RTCP RTT: (\\d+) ms.*'), line)
         ts = int(m[1]) / 1000
         rtt = int(m[2]) / 1000
         context.rtt_data.append((ts, rtt))
-    # elif 'ReSendPacket' in line:
-    #     m = re.match(re.compile('.*\\[(\\d+)\\] ReSendPacket, id: (\\d+).*'), line)
-    #     ts = int(m[1]) / 1000
-    #     sequence_number = int(m[2])
-    #     if sequence_number in context.packet_id_map:
-    #         rtp_id = context.packet_id_map[sequence_number]
-    #         packet = context.packets[rtp_id]
     elif 'OnSentPacket' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] OnSentPacket, id: (-?\\d+), type: (\\d+), size: (\\d+), utc: (\\d+) ms.*'), line)
@@ -426,14 +491,14 @@ def parse_line(line, context: StreamingContext) -> dict:
         payload_type = int(m[3])
         size = int(m[4])
         utc = int(m[5]) / 1000
-        if rtp_id >= 0:
+        if rtp_id > 0:
             packet: PacketContext = context.packets[rtp_id]
             packet.payload_type = payload_type
             packet.size = size
             packet.sent_at = ts 
             packet.sent_at_utc = utc
-            context.last_egress_packet_id = max(
-                rtp_id, context.last_egress_packet_id)
+            context.last_egress_packet_id = max(rtp_id, context.last_egress_packet_id)
+            [mb.on_packet_sent(packet, context.frames.get(packet.frame_id, None), ts) for mb in context.monitor_blocks.values()]
     elif 'RTCP feedback, packet acked' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] RTCP feedback, packet acked: (\\d+) at (\\d+) ms.*'), line)
@@ -459,6 +524,7 @@ def parse_line(line, context: StreamingContext) -> dict:
             packet.received = received == 1
             context.last_acked_packet_id = max(
                 rtp_id, context.last_acked_packet_id)
+            [mb.on_packet_acked(packet, ts) for mb in context.monitor_blocks.values()]
     elif 'SetProtectionParameters' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] SetProtectionParameters, delta: (\\d+), key: (\\d+).*'), line)
@@ -495,16 +561,7 @@ def parse_line(line, context: StreamingContext) -> dict:
                 frame.assembled0_at = ts - (decoded_ts_utc - received_ts_utc) / 1000
                 context.last_decoded_frame_id = \
                         max(frame.frame_id, context.last_decoded_frame_id)
-    elif 'Frame reception acked' in line:
-        m = re.match(re.compile(
-            '.*\\[(\\d+)\\] Frame reception acked, id: (\\d+).*'), line)
-        ts = int(m[1]) / 1000
-        rtp_sequence = int(m[2])
-        rtp_id = context.packet_id_map[rtp_sequence]
-        if rtp_id in context.packets:
-            frame_id = context.packets[rtp_id].frame_id
-            if frame_id in context.frames:
-                context.frames[frame_id].assembled_at = ts
+                [mb.on_frame_decoding_updated(frame, ts) for mb in context.monitor_blocks.values()]
     elif 'SetPacingRates' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] SetPacingRates, pacing rate: (\\d+) kbps, pading rate: (\\d+) kbps.*'), line)
@@ -525,6 +582,9 @@ def parse_line(line, context: StreamingContext) -> dict:
         fps = int(m[5])
         context.bitrate_data.append([ts, bitrate, bitrate_max])
         context.fps_data.append([ts, fps])
+        [mb.on_pacing_rate_set(ts, bitrate * 1024) for mb in context.monitor_blocks.values()]
+    if ts:
+        context.update_ts(ts)
     return data
 
 
@@ -532,7 +592,7 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     frame_id_list = list(sorted(context.frames.keys()))
     frames = [context.frames[i] for i in frame_id_list]
     frames_encoded: List[FrameContext] = list(filter(lambda f: f.encoded_size > 0, frames))
-    frames_encoded_ts = [f.captured_at - context.start_ts for f in frames_encoded]
+    frames_encoded_ts = np.array([f.captured_at - context.start_ts for f in frames_encoded])
     frames_dropped = list(filter(lambda f: f.encoded_size <= 0, frames))
     frames_key = list(filter(lambda f: f.is_key_frame, frames))
 
@@ -543,17 +603,21 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.savefig(os.path.join(output_dir, 'mea-frame-id.pdf'))
 
     plt.close()
-    plt.plot(frames_encoded_ts, [f.decoding_delay(context.utc_offset) * 1000 for f in frames_encoded], 'b')
-    plt.plot(frames_encoded_ts, [f.decoding_queue_delay(context.utc_offset) * 1000 for f in frames_encoded], 'g')
-    plt.plot(frames_encoded_ts, [f.assemble_delay(context.utc_offset) * 1000 for f in frames_encoded], 'r')
-    plt.plot(frames_encoded_ts, [f.pacing_delay_including_rtx() * 1000 for f in frames_encoded], 'c')
-    plt.plot(frames_encoded_ts, [f.pacing_delay() * 1000 for f in frames_encoded], 'm')
-    plt.plot(frames_encoded_ts, [f.encoding_delay() * 1000 for f in frames_encoded], 'y')
+    decoding_delay = np.array([f.decoding_delay(context.utc_offset) * 1000 for f in frames_encoded])
+    decoding_queue_delay = np.array([f.decoding_queue_delay(context.utc_offset) * 1000 for f in frames_encoded])
+    assemble_delay = np.array([f.assemble_delay(context.utc_offset) * 1000 for f in frames_encoded])
+    pacing_delay = np.array([f.pacing_delay() * 1000 for f in frames_encoded])
+    encoding_delay = np.array([f.encoding_delay() * 1000 for f in frames_encoded])
+    plt.plot(frames_encoded_ts[decoding_delay >= 0], decoding_delay[decoding_delay >= 0], 'b')
+    plt.plot(frames_encoded_ts[decoding_queue_delay >= 0], decoding_queue_delay[decoding_queue_delay >= 0], 'g')
+    plt.plot(frames_encoded_ts[assemble_delay >= 0], assemble_delay[assemble_delay >= 0], 'r')
+    plt.plot(frames_encoded_ts[pacing_delay >= 0], pacing_delay[pacing_delay >= 0], 'c')
+    plt.plot(frames_encoded_ts[encoding_delay >= 0], encoding_delay[encoding_delay >= 0], 'y')
     plt.legend(['Decoding', 'Decoding queue', 'Transmission', 'Pacing (RTX)', 'Pacing', 'Encoding'])
     plt.xlabel('Timestamp (s)')
     plt.ylabel('Delay (ms)')
     # plt.xlim([0, 10])
-    # plt.ylim([0, 600])
+    plt.ylim([0, 50])
     plt.savefig(os.path.join(output_dir, 'mea-delay-frame.pdf'))
 
     plt.close()
@@ -576,6 +640,7 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     ax2.set_ylabel('Bitrate (Kbps)')
     ax2.tick_params(axis='y', labelcolor='r')
     plt.xlim([0, frames_encoded[-1].captured_at - context.start_ts])
+    plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'mea-size-frame.pdf'))
 
     plt.close()
@@ -601,9 +666,16 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
         if frame.encoded_size > 0:
             i = int((frame.encoding_at - context.start_ts) / duration)
             data[i] += frame.encoded_size
-    plt.plot(np.arange(bucks) * duration, data * 8 / duration / 1024, '.')
+    fig, ax1 = plt.subplots()
+    ax1.plot(np.arange(bucks) * duration, data * 8 / duration / 1024, '.b')
+    ax1.set_ylabel('Bitrate (Kbps)')
+    ax1.tick_params(axis='y', labelcolor='b')
+    ax2 = ax1.twinx()
+    ax2.plot([d[0] - context.start_ts for d in context.networking.pacing_rate_data], 
+             [d[1] / 1024 for d in context.networking.pacing_rate_data], '.r')
+    ax2.set_ylabel('Pacing rate (Kbps)')
+    ax2.tick_params(axis='y', labelcolor='r')
     plt.xlabel('Timestamp (s)')
-    plt.ylabel('Bitrate (Kbps)')
     plt.savefig(os.path.join(output_dir, 'mea-bitrate.pdf'))
 
     plt.close()
@@ -680,6 +752,18 @@ def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.ylabel('Packet loss rate (%)')
     plt.savefig(os.path.join(output_dir, 'mea-loss-packet.pdf'))
 
+    for duration in [1, .1, .01, .001]:
+        plt.close()
+        bucks = int((packets[-1].sent_at - context.start_ts) / duration + 1)
+        data = np.zeros(bucks)
+        for p in packets:
+            if p.sent_at >= context.start_ts:
+                data[int((p.sent_at - context.start_ts) / duration)] += p.size
+        plt.plot(np.arange(bucks) * duration, data / duration * 8 / 1024 / 1024, '.')
+        plt.xlabel('Timestamp (s)')
+        plt.ylabel('Egress rate (Mbps)')
+        plt.savefig(os.path.join(output_dir, f'mea-egress-rate-{int(duration * 1000)}.pdf'))
+
     duration = 1
     packets = sorted(context.packets.values(), key=lambda x: x.sent_at)
     bucks_sent = np.zeros(int((packets[-1].sent_at - packets[0].sent_at) / duration + 1))
@@ -744,7 +828,7 @@ def analyze_network(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     ts_min = context.start_ts
     ts_max = max([p.sent_at for p in context.packets.values()])
     ts_range = ts_max - ts_min
-    period = .001
+    period = .1
     buckets = np.zeros(int(ts_range / period + 1))
     for p in context.packets.values():
         ts = (p.sent_at - ts_min)
@@ -765,10 +849,18 @@ def analyze_network(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.ylabel("RTT (ms)")
     plt.savefig(os.path.join(output_dir, 'rep-rtt.pdf'))
 
+    plt.close()
+    x = [d[0] - context.start_ts for d in context.pacing_queue_data]
+    y = [d[1] for d in context.pacing_queue_data]
+    plt.plot(x, y)
+    plt.xlabel("Timestamp (s)")
+    plt.ylabel("Pacing queue size (packets)")
+    plt.savefig(os.path.join(output_dir, 'mea-pacing-queue.pdf'))
+
 
 def print_statistics(context: StreamingContext) -> None:
     print("========== STATISTICS [SENDER] ==========")
-    frame_ids = list(filter(lambda k: context.frames[k].codec, context.frames.keys()))
+    frame_ids = list(filter(lambda k: context.frames[k].encoded, context.frames.keys()))
     id_min = min(frame_ids) if frame_ids else 0
     id_max = max(frame_ids) if frame_ids else 0
     frames_total = (id_max - id_min + 1) if frame_ids else 0
