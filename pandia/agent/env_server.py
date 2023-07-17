@@ -1,7 +1,8 @@
 import os
 import ray
 from pandia import MODELS_PATH
-from pandia.agent.env import Observation, Action
+from pandia.agent.action import Action
+from pandia.agent.observation import Observation
 from ray import air, tune
 from ray.rllib.algorithms.sac import SACConfig
 from ray.rllib.algorithms.ppo import PPOConfig 
@@ -40,8 +41,8 @@ def main():
         PPOConfig()
         .environment(
             env=None,
-            observation_space=Observation.observation_space(legacy_api=False),
-            action_space=Action.action_space(legacy_api=False),
+            observation_space=Observation.observation_space(),
+            action_space=Action.action_space(),
         )
         .offline_data(input_=_input)
         .rollouts(

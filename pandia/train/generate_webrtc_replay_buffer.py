@@ -26,7 +26,6 @@ def run(bw=1024, delay=10, width=144, name=str(uuid.uuid4())):
     print(f"Starting exp, bw: {bw}, delay: {delay}")
     limit_network(bw, delay)
     env = WebRTCEnv(config={
-        'legacy_api': True,
         'enable_shm': False,
         'width': width,
         'sender_log': os.path.join(log_dir, f'{name}.log'),

@@ -2,25 +2,39 @@ import argparse
 import os
 from pathlib import Path
 from pandia import DIAGRAMS_PATH, RESULTS_PATH
-from pandia.agent.env import Action
+from pandia.agent.action import Action
 from pandia.agent.env_client import WebRTCEnv0
 from ray import tune
 import numpy as np
 from ray.rllib.algorithms.sac import SACConfig
-from ray.rllib.algorithms.ppo import PPOConfig  
+from ray.rllib.algorithms.ppo import PPOConfig
+from pandia.agent.observation import Observation  
 from pandia.log_analyzer import main as analyzer_main
+from pandia.log_analyzer_sender import analyze_stream
 
 
-def run(bitrate=0, pacing_rate=0, working_dir=os.path.join(RESULTS_PATH, 'eval_rllib'), 
-        duration=30, delay=0, drl_path=None, no_action=False):
+def run(bitrate=None, pacing_rate=None, working_dir=os.path.join(RESULTS_PATH, 'eval_rllib'), 
+        duration=30, delay=0, drl_path=None):
     if working_dir:
         Path(working_dir).mkdir(parents=True, exist_ok=True)
     bw = 1024 * 1024
     tune.register_env('pandia', lambda config: WebRTCEnv0(**config))
-    env_config={'bw': bw, 'delay': delay, 'no_action': True,
-                'fps': 30, 'width': 1080,
+    action_keys = []
+    if bitrate is not None:
+        action_keys.append('bitrate')
+    if pacing_rate is not None:
+        action_keys.append('pacing_rate')
+    if not action_keys:
+        action_keys = ['fake']
+    obs_keys = list(Observation.boundary().keys())
+    env_config={'bw': bw, 'delay': delay,
+                'fps': 30, 'width': 2160,
+                'action_keys': action_keys, 'obs_keys': obs_keys,
                 'client_id': 18, 'duration': duration,
-                'working_dir': working_dir, 'no_action': no_action}
+                'step_duration': 1,
+                'monitor_durations': [1, 2, 4],
+                'working_dir': working_dir,
+                }
     config = PPOConfig()\
         .rollouts(num_rollout_workers=0)\
         .environment(env='pandia', env_config=env_config)
@@ -35,9 +49,11 @@ def run(bitrate=0, pacing_rate=0, working_dir=os.path.join(RESULTS_PATH, 'eval_r
         if drl_path:
             action = algo.compute_single_action(obs, explore=False)
         else:
-            action = Action()
-            action.bitrate[0] = bitrate
-            action.pacing_rate[0] = pacing_rate
+            action = Action(action_keys)
+            if bitrate is not None:
+                action.bitrate = bitrate
+            if pacing_rate is not None:
+                action.pacing_rate = pacing_rate
             act = action.array()
         obs, reward, done, truncated, info = env.step(act)
         rewards.append(reward)
@@ -47,20 +63,21 @@ def run(bitrate=0, pacing_rate=0, working_dir=os.path.join(RESULTS_PATH, 'eval_r
     print(f'Average reward: {np.mean(rewards):.02f}')
     os.system(f'mv {working_dir}/{env.log_name("sender")} {working_dir}/eval_sender.log')
     os.system(f'scp mobix:/tmp/{env.log_name("receiver")} {working_dir}/eval_receiver.log > /dev/null')
-    analyzer_main(working_dir)
+    # analyzer_main(working_dir)
+    analyze_stream(env.context, working_dir)
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--duration', type=int, default=10)
     args = parser.parse_args()
-    bitrate = 1024 * 5
+    bitrate = 1024 * 50
+    # bitrate = None
     pacing_rate = 1024 * 200
     working_dir = os.path.join(RESULTS_PATH, "eval_rllib")
-    working_dir = None
     # path = '~/ray_results/PPO/PPO_None_97ccd_00000_0_2023-07-12_23-56-37/checkpoint_003600'
     path = None
     run(bitrate=bitrate, pacing_rate=pacing_rate, working_dir=working_dir, 
-        duration=args.duration, delay=5, drl_path=path, no_action=False)
+        duration=args.duration, delay=5, drl_path=path)
 
 
 if __name__ == "__main__":
