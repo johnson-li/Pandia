@@ -362,6 +362,8 @@ class MonitorBlock(object):
     def on_packet_acked(self, packet: PacketContext, packet_pre: Optional[PacketContext], ts: float):
         if packet.received:
             self.pkts_acked_size.append(packet, ts)
+            # if packet.recv_delay() > 1:
+            #     print(packet.recv_delay(), packet.sent_at_utc, packet.received_at_utc, packet.received_at_utc - packet.sent_at_utc, packet.rtp_id, packet.seq_num)
             self.pkts_trans_delay_data.append(packet, ts)
         if packet.received is not None:
             self.pkts_lost_count.append(packet, ts)
@@ -450,29 +452,30 @@ def parse_line(line, context: StreamingContext) -> dict:
         retrans_seq_num = int(m[8])
         allow_retrans = int(m[9]) != 0
         size = int(m[10])
-        packet = PacketContext(rtp_id)
-        packet.seq_num = seq_num
-        packet.packet_type = rtp_type
-        packet.frame_id = frame_id
-        packet.first_packet_in_frame = first_in_frame
-        packet.last_packet_in_frame = last_in_frame
-        packet.allow_retrans = allow_retrans
-        packet.retrans_ref = retrans_seq_num
-        packet.size = size
-        context.packets[rtp_id] = packet
-        context.packet_id_map[seq_num] = rtp_id
-        [mb.on_packet_added(packet, ts) for mb in context.monitor_blocks.values()]
-        if rtp_type == 'rtx':
-            packet.frame_id = context.packets[context.packet_id_map[retrans_seq_num]].frame_id
-        if packet.frame_id > 0 and frame_id in context.frames:
-            frame: FrameContext = context.frames[frame_id]
-            frame.rtp_packets[rtp_id] = packet
+        if rtp_id > 0:
+            packet = PacketContext(rtp_id)
+            packet.seq_num = seq_num
+            packet.packet_type = rtp_type
+            packet.frame_id = frame_id
+            packet.first_packet_in_frame = first_in_frame
+            packet.last_packet_in_frame = last_in_frame
+            packet.allow_retrans = allow_retrans
+            packet.retrans_ref = retrans_seq_num
+            packet.size = size
+            context.packets[rtp_id] = packet
+            context.packet_id_map[seq_num] = rtp_id
+            [mb.on_packet_added(packet, ts) for mb in context.monitor_blocks.values()]
             if rtp_type == 'rtx':
-                original_rtp_id = context.packet_id_map[retrans_seq_num]
-                frame.retrans_record.setdefault(original_rtp_id, []).append(rtp_id)
-            if rtp_type == 'video':
-                frame.sequence_range[0] = min(frame.sequence_range[0], seq_num)
-                frame.sequence_range[1] = max(frame.sequence_range[1], seq_num)
+                packet.frame_id = context.packets[context.packet_id_map[retrans_seq_num]].frame_id
+            if packet.frame_id > 0 and frame_id in context.frames:
+                frame: FrameContext = context.frames[frame_id]
+                frame.rtp_packets[rtp_id] = packet
+                if rtp_type == 'rtx':
+                    original_rtp_id = context.packet_id_map[retrans_seq_num]
+                    frame.retrans_record.setdefault(original_rtp_id, []).append(rtp_id)
+                if rtp_type == 'video':
+                    frame.sequence_range[0] = min(frame.sequence_range[0], seq_num)
+                    frame.sequence_range[1] = max(frame.sequence_range[1], seq_num)
     elif 'Start encoding' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\].*Start encoding, frame id: (\\d+), shape: (\\d+) x (\\d+), bitrate: (\\d+) kbps.*'), line)

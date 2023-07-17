@@ -6,6 +6,8 @@ from pandia.agent.normalization import NORMALIZATION_RANGE, dnml, nml
 from pandia.constants import K, M, G
 from typing import Dict, TYPE_CHECKING, List
 
+from pandia.ntp.ntpclient import NTP_OFFSET_PATH
+
 if TYPE_CHECKING:
     from pandia.agent.action import Action
     from pandia.log_analyzer_sender import MonitorBlock
@@ -31,7 +33,7 @@ class Observation(object):
         data = self.data[0][duration_index]
 
         def get_data(key):
-            res = dnml(key, data[self.obs_keys_map[key]], self.boundary()[key]) if key in self.obs_keys else '?'
+            res = dnml(key, data[self.obs_keys_map[key]], self.boundary()[key], log=False) if key in self.obs_keys else '?'
             if res != '?' and key in ['frame_bitrate', 'pkt_egress_rate', 'pkt_ack_rate', 'pacing_rate']:
                 res = int(res / 1024)
             if res != '?' and key in ['frame_encoding_delay', 'frame_egress_delay', 'frame_recv_delay', 
@@ -62,7 +64,7 @@ class Observation(object):
                     data = 0
                 else:
                     data = getattr(block, obs_key)
-                self.data[0, i, j] = nml(obs_key, np.array([data]), self.boundary()[obs_key])[0]
+                self.data[0, i, j] = nml(obs_key, np.array([data]), self.boundary()[obs_key], log=False)[0]
 
     def array(self) -> np.ndarray:
         return self.data.flatten()
@@ -115,6 +117,9 @@ def test(result_path=os.path.join(RESULTS_PATH, 'eval_rllib')):
     from pandia.log_analyzer_sender import StreamingContext, parse_line
     from pandia.agent.action import Action
     context = StreamingContext(monitor_durations=monitor_durations)
+    if os.path.isfile(NTP_OFFSET_PATH):
+        data = open(NTP_OFFSET_PATH, 'r').read().split(',')
+        context.update_utc_offset(float(data[0]))
     start_ts = 0
     step = 1
     action = Action(action_keys=Action.boundary().keys())

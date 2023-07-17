@@ -14,7 +14,7 @@ from pandia.log_analyzer_sender import analyze_stream
 
 
 def run(bitrate=None, pacing_rate=None, working_dir=os.path.join(RESULTS_PATH, 'eval_rllib'), 
-        duration=30, delay=0, drl_path=None):
+        duration=30, delay=5, loss=2, drl_path=None):
     if working_dir:
         Path(working_dir).mkdir(parents=True, exist_ok=True)
     bw = 1024 * 1024
@@ -27,7 +27,7 @@ def run(bitrate=None, pacing_rate=None, working_dir=os.path.join(RESULTS_PATH, '
     if not action_keys:
         action_keys = ['fake']
     obs_keys = list(Observation.boundary().keys())
-    env_config={'bw': bw, 'delay': delay,
+    env_config={'bw': bw, 'delay': delay, 'loss': loss,
                 'fps': 30, 'width': 2160,
                 'action_keys': action_keys, 'obs_keys': obs_keys,
                 'client_id': 18, 'duration': duration,

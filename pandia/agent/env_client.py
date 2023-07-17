@@ -128,7 +128,7 @@ class WebRTCEnv0(gym.Env):
     def start_webrtc(self):
         self.process_traffic_control = \
             subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_traffic_control_remote.sh'),
-                                '-p', str(self.port), '-b', str(self.bw), '-d', str(self.delay),])
+                                '-p', str(self.port), '-b', str(self.bw), '-d', str(self.delay), '-l', str(self.loss)])
         self.process_traffic_control.wait()
         self.process_sender = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'),
                                                 '--server', '195.148.127.230',
