@@ -16,8 +16,8 @@ def udp_echo_server(server_ip, server_port):
         # Send the data back to the client
         udp_socket.sendto(data, client_address)
 
-        # Close the socket (unreachable in this example)
-        udp_socket.close()
+    # Close the socket (unreachable in this example)
+    udp_socket.close()
 
 # Set the server IP and port
 server_ip = "0.0.0.0"  # Listen on all available network interfaces

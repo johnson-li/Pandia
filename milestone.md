@@ -49,7 +49,7 @@ Track the development of new features
 
 ### 15th Jun
 - [x] RTCP report frame deocding start time
-- [ ] Support qlen in traffic control so that we can simulate the router buffer size
+- [x] Support qlen in traffic control so that we can simulate the router buffer size
 
 ### 14th Jun
 - [ ] Add script of generating replay buffer from logs for offline training
