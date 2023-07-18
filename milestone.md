@@ -4,7 +4,7 @@ Milestone
 Track the development of new features
 
 ### 15th July
-- [ ] Refactor the env (observation, monitor block, action, etc.)
+- [x] Refactor the env (observation, monitor block, action, etc.)
 
 ### 14th July
 - [x] Log the cause of frame drop and downscale (The first few frames are dropped due to bitrate constraint, which trigers downscale. It takes a long time to recover from downscale.)
@@ -31,7 +31,7 @@ Track the development of new features
 
 ### 3rd July
 - [x] Many packets will be lost if the encoded image is much larger than the bitrate / FPS, causing high frame loss rate.
-- [ ] The RTCP reported decoding/assmbly delay is a little larger than the delay caused by the RTT.
+- [x] The RTCP reported decoding/assmbly delay is a little larger than the delay caused by the RTT. (The problem is solved by reporting the UTC time)
 
 ### 29th Jun
 - [x] Find out the root cause of the decoding queue delay. It is not caused by the decoding delay. (It is caused by the VCMTiming)

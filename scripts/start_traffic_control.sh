@@ -1,7 +1,7 @@
 #!/bin/bash
 
 bw=1048576 # bandwidth in kbps, 1Gbps by default
-port=7001
+port=7018
 delay=0 # ms
 qlen=10000 # packets, 250ms of buffer, it is around 21 packets for 1 Mbps
 loss=0 # percentile

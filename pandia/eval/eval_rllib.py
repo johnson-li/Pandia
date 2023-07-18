@@ -17,7 +17,7 @@ def run(bitrate=None, pacing_rate=None, working_dir=os.path.join(RESULTS_PATH, '
         duration=30, delay=5, loss=2, drl_path=None):
     if working_dir:
         Path(working_dir).mkdir(parents=True, exist_ok=True)
-    bw = 1024 * 1024
+    bw = 10 * 1024
     tune.register_env('pandia', lambda config: WebRTCEnv0(**config))
     action_keys = []
     if bitrate is not None:
@@ -70,9 +70,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--duration', type=int, default=10)
     args = parser.parse_args()
-    bitrate = 1024 * 50
-    # bitrate = None
-    pacing_rate = 1024 * 200
+    # bitrate = 1024 * 50
+    bitrate = None
+    # pacing_rate = 1024 * 200
+    pacing_rate = None
     working_dir = os.path.join(RESULTS_PATH, "eval_rllib")
     # path = '~/ray_results/PPO/PPO_None_97ccd_00000_0_2023-07-12_23-56-37/checkpoint_003600'
     path = None
