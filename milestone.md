@@ -3,8 +3,15 @@ Milestone
 
 Track the development of new features
 
+### 15th July
+- [ ] Refactor the env (observation, monitor block, action, etc.)
+
+### 14th July
+- [x] Log the cause of frame drop and downscale (The first few frames are dropped due to bitrate constraint, which trigers downscale. It takes a long time to recover from downscale.)
+- [x] Find out the root cause of the pacing queue, which builds up very long pacing delay. The pacing rate has been increase to a very large value. (The problem is that the actual egress rate is much smaller than the pacing rate (7 mbps vs 12 mbps). Since the pacing rate and the bitrate are large enough for the encoded frame, the frame dropper does not take effect. The egress queue just builds up.) [The egress rate measured per second is limited to 7 mbps. Linux stdout is blocking. The python program delays the webrtc process because the data is not processed fast enough.]
+
 ### 12th July
-- [ ] Transfer frame-related metrics along with the packet RTCP feedback.
+- [x] Transfer frame-related metrics along with the packet RTCP feedback. (it is over dedicated rtcp packet)
 
 ### 10th July
 - [x] The first RTP packet (RTP id = 2) may be dropped, causing H264 decoding failure. (never happen again)

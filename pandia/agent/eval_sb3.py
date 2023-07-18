@@ -3,7 +3,7 @@ from stable_baselines3 import SAC
 
 
 def main():
-    env = WebRTCEnv(config={'legacy_api': True})
+    env = WebRTCEnv(config={})
     model = SAC.load("sac_pandia", env)
     
 

@@ -5,7 +5,6 @@ from pandia.log_analyzer import CODEC_NAMES
 def main():
     env = WebRTCEnv(config={
         'sender_log': '/tmp/pandia-sender.log',
-        'legacy_api': False,
     })
     obs, info = env.reset()
     action = Action()

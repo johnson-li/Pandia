@@ -1,10 +1,15 @@
+from typing import Union
 import numpy as np
 
 NORMALIZATION_RANGE = [-1, 1]
-RESOLUTION_LIST = [144, 240, 360, 480, 720, 960, 1080]
+RESOLUTION_LIST = [144, 240, 360, 480, 720, 960, 1080, 1440, 2160]
 
 
-def nml(name, value: np.ndarray, value_range, normalized_range=NORMALIZATION_RANGE, log=None) -> np.ndarray:
+def nml(name, value: Union[np.ndarray, float], value_range, normalized_range=NORMALIZATION_RANGE, log=None) -> np.ndarray:
+    unwrap = False
+    if type(value) != np.ndarray:
+        value = np.array([value, ], dtype=np.float32)
+        unwrap = True
     if log is None:
         log = value_range[1] - value_range[0] > 200
     if name == 'resolution':
@@ -18,10 +23,17 @@ def nml(name, value: np.ndarray, value_range, normalized_range=NORMALIZATION_RAN
     else:
         res = (value - value_range[0]) / (value_range[1] - value_range[0]) * \
             (normalized_range[1] - normalized_range[0]) + normalized_range[0]
-    return res.astype(np.float32)
+    if unwrap:
+        return res[0]
+    else:
+        return res.astype(np.float32)
 
 
-def dnml(name, value: np.ndarray, value_range, normalized_range=NORMALIZATION_RANGE, log=None) -> np.ndarray:
+def dnml(name, value: Union[np.ndarray, float], value_range, normalized_range=NORMALIZATION_RANGE, log=None) -> np.ndarray:
+    unwrap = False
+    if type(value) != np.ndarray:
+        value = np.array([value, ], dtype=np.float32)
+        unwrap = True
     if log is None:
         log = value_range[1] - value_range[0] > 200
     if name == 'resolution':
@@ -36,7 +48,10 @@ def dnml(name, value: np.ndarray, value_range, normalized_range=NORMALIZATION_RA
         indexes = np.clip(res, 0, len(RESOLUTION_LIST) - 1).astype(np.int32)
         res = [RESOLUTION_LIST[i] for i in indexes]
         res = np.array(res, dtype=np.int32)
-    return res.astype(np.int32)
+    if unwrap:
+        return res[0]
+    else:
+        return res.astype(np.float32)
 
 
 def test_resolution():
