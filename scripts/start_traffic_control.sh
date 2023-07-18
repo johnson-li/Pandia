@@ -3,8 +3,9 @@
 bw=1048576 # bandwidth in kbps, 1Gbps by default
 port=7018
 delay=0 # ms
-qlen=10000 # packets, 250ms of buffer, it is around 21 packets for 1 Mbps
 loss=0 # percentile
+queue=250  # the queue size in ms
+burst=1000  # in KB, should be at least bw / hz.
 
 set -o errexit -o pipefail -o noclobber -o nounset
 ! getopt --test > /dev/null
@@ -13,8 +14,8 @@ if [[ ${PIPESTATUS[0]} -ne 4 ]]; then
     exit 1
 fi
 
-LONGOPTS=delay,bw,qlen,port,loss
-OPTIONS=d:b:q:p:l:
+LONGOPTS=delay,bw,port,loss,queue,burst
+OPTIONS=d:b:p:l:q:u:
 ! PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name "$0" -- "$@")
 if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
     exit 2
@@ -30,12 +31,16 @@ while true; do
             bw="$2"
             shift 2
             ;;
-        -q|--qlen)
-            qlen="$2"
+        -u|--burst)
+            burst="$2"
             shift 2
             ;;
         -p|--port)
             port="$2"
+            shift 2
+            ;;
+        -q|--queue)
+            queue="$2"
             shift 2
             ;;
         -l|--loss)
@@ -53,7 +58,7 @@ while true; do
     esac
 done
 
-echo Traffic control, bw: $bw, delay: $delay, qlen: $qlen, loss: $loss
+echo Traffic control, bw: $bw kbps, delay: $delay ms, burst: $burst KB, loss: $loss '%', queue: $queue ms
 
 ns=pandia$port
 veth=veth$port
@@ -69,6 +74,15 @@ then
 else
   loss_clause="loss ${loss}%"
 fi
-sudo tc qdisc add dev $veth root netem ${loss_clause} delay ${delay}ms rate ${bw}kbit
-sudo ip netns exec $ns tc qdisc add dev $vpeer root netem ${loss_clause} delay ${delay}ms rate ${bw}kbit
+
+
+# sudo tc qdisc add dev $veth root netem ${loss_clause} delay ${delay}ms rate ${bw}kbit
+sudo tc qdisc add dev $veth root handle 1: netem delay ${delay}ms
+sudo tc qdisc add dev $veth parent 1: handle 2: tbf rate ${bw}kbit burst ${burst}kb minburst 1540 latency ${queue}ms
+
+exit
+
+# sudo ip netns exec $ns tc qdisc add dev $vpeer root netem ${loss_clause} delay ${delay}ms rate ${bw}kbit
+sudo ip netns exec $ns tc qdisc add dev $vpeer root handle 1: netem delay ${delay}ms
+sudo ip netns exec $ns tc qdisc add dev $vpeer parent 1: handle 2: tbf rate ${bw}kbit burst ${burst}kb minburst 1540 latency ${queue}ms
 
