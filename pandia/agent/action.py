@@ -30,15 +30,15 @@ class Action():
     def boundary() -> dict:
         return {
             'fake': [0, 1], # Useless
-            'bitrate': [10, 100 * 1024], 
+            'bitrate': [100, 100 * 1024],  # in kbps
             'fps': [1, 60],
             # Limited by the software implementation,
             # The maximum egress rate of WebRTC is around 200 Mbps
-            'pacing_rate': [10, 400 * 1024],  
-            'padding_rate': [0, 500 * 1024],
-            'fec_rate_key': [0, 255],
-            'fec_rate_delta': [0, 255],
-            'resolution': [0, 1],
+            'pacing_rate': [10, 400 * 1024],  # in kbps
+            'padding_rate': [0, 500 * 1024],  # in kbps
+            'fec_rate_key': [0, 255],  # % = key / 255
+            'fec_rate_delta': [0, 255],  # % = delta / 255
+            'resolution': [0, 1],  
         }
 
     def __str__(self) -> str:
@@ -79,7 +79,7 @@ class Action():
         return np.array([nml(k, getattr(self, k), boundary[k], log=False) for k in keys])
 
     @staticmethod
-    def from_array(array, keys) -> 'Action':
+    def from_array(array: np.ndarray, keys) -> 'Action':
         keys = list(sorted(keys))
         action = Action(keys)
         boundary = Action.boundary()

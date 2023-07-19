@@ -18,7 +18,6 @@ def run(bitrate=None, pacing_rate=None, working_dir=os.path.join(RESULTS_PATH, '
     if working_dir:
         Path(working_dir).mkdir(parents=True, exist_ok=True)
     bw = 10 * 1024
-    tune.register_env('pandia', lambda config: WebRTCEnv0(**config))
     action_keys = []
     if bitrate is not None:
         action_keys.append('bitrate')
@@ -30,7 +29,7 @@ def run(bitrate=None, pacing_rate=None, working_dir=os.path.join(RESULTS_PATH, '
     env_config={'bw': bw, 'delay': delay, 'loss': loss,
                 'fps': 30, 'width': 2160,
                 'action_keys': action_keys, 'obs_keys': obs_keys,
-                'client_id': 18, 'duration': duration,
+                'client_id': 1, 'duration': duration,
                 'step_duration': 1,
                 'monitor_durations': [1, 2, 4],
                 'working_dir': working_dir,

@@ -1,10 +1,11 @@
 #!/bin/bash
 
 bw=1048576 # bandwidth in kbps, 1Gbps by default
-port=7001
+port=7018
 delay=0 # ms
-qlen=10000 # packets, 250ms of buffer, it is around 21 packets for 1 Mbps
 loss=0 # percentile
+queue=250  # the queue size in ms
+burst=1000  # in KB, should be at least bw / hz.
 host=mobix
 
 set -o errexit -o pipefail -o noclobber -o nounset
@@ -14,8 +15,8 @@ if [[ ${PIPESTATUS[0]} -ne 4 ]]; then
     exit 1
 fi
 
-LONGOPTS=delay,bw,qlen,port,host,loss
-OPTIONS=d:b:q:p:h:l:
+LONGOPTS=delay,bw,port,loss,queue,burst
+OPTIONS=d:b:p:l:q:u:
 ! PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name "$0" -- "$@")
 if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
     exit 2
@@ -31,20 +32,20 @@ while true; do
             bw="$2"
             shift 2
             ;;
-        -q|--qlen)
-            qlen="$2"
+        -u|--burst)
+            burst="$2"
             shift 2
             ;;
         -p|--port)
             port="$2"
             shift 2
             ;;
-        -l|--loss)
-            loss="$2"
+        -q|--queue)
+            queue="$2"
             shift 2
             ;;
-        -h|--host)
-            host="$2"
+        -l|--loss)
+            loss="$2"
             shift 2
             ;;
         --)
@@ -58,4 +59,4 @@ while true; do
     esac
 done
 
-ssh $host "cd ~/Workspace/Pandia && ./scripts/start_traffic_control.sh -p $port -b $bw -d $delay -q $qlen -l $loss"
+ssh $host "cd ~/Workspace/Pandia && ./scripts/start_traffic_control.sh -p $port -b $bw -d $delay -u $burst -q $queue -l $loss"

@@ -2,6 +2,7 @@ import os
 import ray
 from pandia import MODELS_PATH
 from pandia.agent.action import Action
+from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.observation import Observation
 from ray import air, tune
 from ray.rllib.algorithms.sac import SACConfig
@@ -37,12 +38,15 @@ def main():
         else:
             return None
     
+    action = Action(ENV_CONFIG['action_keys'])
+    observation = Observation(ENV_CONFIG['observation_keys'], 
+                              ENV_CONFIG['observation_durations'])
     config = (
         PPOConfig()
         .environment(
             env=None,
-            observation_space=Observation.observation_space(),
-            action_space=Action.action_space(),
+            observation_space=observation.observation_space(),
+            action_space=action.action_space(),
         )
         .offline_data(input_=_input)
         .rollouts(

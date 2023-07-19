@@ -1,5 +1,6 @@
 from io import IOBase
 from multiprocessing import Pool, Process, shared_memory
+from ray import tune
 import os
 import subprocess
 from threading import Thread
@@ -7,7 +8,8 @@ import threading
 import time
 import gymnasium as gym
 from typing import List, Optional, TextIO, Union
-
+from pandia.agent.env_config import ENV_CONFIG
+from pandia.constants import K, M
 import numpy as np
 from pandia import BIN_PATH, SCRIPTS_PATH
 from pandia.agent.action import Action
@@ -52,11 +54,11 @@ class ReadingThread(threading.Thread):
 class WebRTCEnv0(gym.Env):
     def __init__(self, client_id=1, duration=30, # Exp settings
                  width=2160, fps=60, # Source settings
-                 bw=1024 * 1024, delay=5, loss=2, # Network settings
+                 bw=[500 , 100 * 1024], delay=[0, 100], loss=0, # Network settings
                  action_keys=Action.boundary().keys(), # Action settings
                  obs_keys=Observation.boundary().keys(), # Observation settings
                  monitor_durations=[1, 2, 4], # Observation settings
-                 working_dir=None, # Logging settings
+                 working_dir=None, print_step=False,# Logging settings
                  step_duration=.01, # RL settings
                  ) -> None:
         super().__init__() 
@@ -68,10 +70,12 @@ class WebRTCEnv0(gym.Env):
         self.width = width
         self.fps = fps
         # Network settings
-        self.bw = bw
-        self.delay = delay
-        self.loss = loss
+        self.bw0 = bw  # in kbps
+        self.delay0 = delay  # in ms
+        self.loss0 = loss  # in %
+        self.net_params = {}
         # Logging settings
+        self.print_step = print_step
         self.working_dir = working_dir
         self.sender_log = os.path.join(working_dir, self.log_name('sender')) if working_dir else None
         self.stop_event: Optional[threading.Event] = None
@@ -100,6 +104,21 @@ class WebRTCEnv0(gym.Env):
         self.start_ts = 0
         self.action_history = ActionHistory()
 
+    def sample_net_params(self):
+        if type(self.bw0) is list:
+            bw = int(np.random.uniform(self.bw0[0], self.bw0[1]))
+        else:
+            bw = self.bw0
+        if type(self.delay0) is list:
+            delay = int(np.random.uniform(self.delay0[0], self.delay0[1]))
+        else:
+            delay = self.delay0
+        if type(self.loss0) is list:
+            loss = int(np.random.uniform(self.loss0[0], self.loss0[1]))
+        else:
+            loss = self.loss0
+        return {'bw': bw, 'delay': delay, 'loss': loss}
+
     @property
     def shm_name(self):
         return f"pandia_{self.port}"
@@ -126,16 +145,21 @@ class WebRTCEnv0(gym.Env):
         # time.sleep(1)
 
     def start_webrtc(self):
+        bw = self.net_params['bw']
+        delay = self.net_params['delay']
+        loss = self.net_params['loss']
         self.process_traffic_control = \
             subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_traffic_control_remote.sh'),
-                                '-p', str(self.port), '-b', str(self.bw), '-d', str(self.delay), '-l', str(self.loss)])
+                                '-p', str(self.port), '-b', str(bw), 
+                                '-d', str(delay), '-l', str(loss)])
         self.process_traffic_control.wait()
-        self.process_sender = subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'),
-                                                '--server', '195.148.127.230',
-                                                '--port', str(self.port), '--name', 'sender',
-                                                '--width', str(self.width), '--fps', str(self.fps), '--autocall', 'true',
-                                                '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/'],
-                                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
+        self.process_sender = \
+            subprocess.Popen([os.path.join(BIN_PATH, 'peerconnection_client_headless'),
+                              '--server', '195.148.127.230',
+                              '--port', str(self.port), '--name', 'sender',
+                              '--width', str(self.width), '--fps', str(self.fps), '--autocall', 'true',
+                              '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/'],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
         return self.process_sender.stdout
 
     def stop_webrtc(self):
@@ -157,16 +181,17 @@ class WebRTCEnv0(gym.Env):
         if mb.frame_fps == 0:
             return -10
         penalty = 0 
-        delay_score = mb.frame_decoded_delay * 10
-        if delay_score < 0:
-            penalty = 10
+        fps_score = mb.frame_fps / 30
+        delay_score = - mb.frame_decoded_delay * 10 - mb.frame_egress_delay * 10
         quality_score = mb.frame_bitrate / 1024 / 1024
-        return quality_score - delay_score - penalty
+        res_score = mb.frame_height / 2160
+        return res_score + quality_score + fps_score + delay_score - penalty
 
     def reset(self, seed=None, options=None):
         self.stop_webrtc()
         if self.sender_log and os.path.exists(self.sender_log):
             os.remove(self.sender_log)
+        self.net_params = self.sample_net_params()
         self.context = StreamingContext(monitor_durations=self.monitor_durations)
         self.stop_event = threading.Event()
         self.reading_thread = ReadingThread(self.context, self.sender_log, self.stop_event)
@@ -191,6 +216,7 @@ class WebRTCEnv0(gym.Env):
         # Write action
         self.context.reset_step_context()
         act = Action.from_array(action, self.action_keys)
+        # act.bitrate = int(1024 * 1024)
         self.action_history.append(act)
         act.write(self.shm)
 
@@ -215,8 +241,9 @@ class WebRTCEnv0(gym.Env):
             time.time() - self.start_ts > self.duration
         reward = self.reward()
 
-        print(f'[{self.client_id}] #{self.step_count}@{int((time.time() - self.start_ts))}s '
-              f'R.w.: {reward:.02f}, Act.: {act}Obs.: {self.observation}')
+        if self.print_step:
+            print(f'[{self.client_id}] #{self.step_count}@{int((time.time() - self.start_ts))}s '
+                f'R.w.: {reward:.02f}, Act.: {act}Obs.: {self.observation}')
         self.step_count += 1
         return self.observation.array(), reward, False, truncated, {}
 
@@ -227,13 +254,13 @@ def run(client_id=1):
     client = PolicyClient(
         f"http://localhost:{SERVER_PORT+client_id}", inference_mode='remote'
     )
-    env = WebRTCEnv0(client_id=client_id, duration=60)
+    env = WebRTCEnv0(client_id=client_id, duration=60, action_keys=ENV_CONFIG['action_keys'])
     obs, info = env.reset()
-    action_space = Action.action_space()
     eid = client.start_episode()
     rewards = 0
     while True:
         if random_action:
+            action_space = Action(ENV_CONFIG['action_keys']).action_space()
             action: np.ndarray = action_space.sample()
             client.log_action(eid, obs, action)
         else:
@@ -249,11 +276,29 @@ def run(client_id=1):
             eid = client.start_episode()
 
 
+def test():
+    client_id = 1
+    rewards = 0
+    env = WebRTCEnv0(client_id=client_id, duration=20, action_keys=ENV_CONFIG['action_keys'])
+    obs, info = env.reset()
+    while True:
+        action_space = Action(ENV_CONFIG['action_keys']).action_space()
+        action: np.ndarray = action_space.sample()
+        obs, reward, terminated, truncated, info = env.step(action)
+        rewards += reward
+        if terminated or truncated:
+            print(f'[{client_id}] Total reward after {env.step_count} steps: {rewards:.02f}')
+
+
 def main():
     concurrency = 8
     with Pool(concurrency) as p:
         p.map(run, [i + 1 for i in range(concurrency)])
 
 
+tune.register_env('pandia', lambda config: WebRTCEnv0(**config))
+
+
 if __name__ == '__main__':
     main()
+    # test()

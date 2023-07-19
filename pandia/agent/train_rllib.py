@@ -9,9 +9,13 @@ from pandia.agent.env_client import WebRTCEnv0
 
 def main():
     tune.register_env('pandia', lambda config: WebRTCEnv0(**config))
+    env_config = {
+        'action_keys': ['bitrate'],
+        'working_dir': '/tmp/train_rllib',
+    }
     config = PPOConfig()\
-        .environment(env=WebRTCEnv0)\
-            .rollouts(num_rollout_workers=3)
+        .environment(env='pandia', env_config=env_config)\
+        .rollouts(num_rollout_workers=1)
     algo = config.build()
 
     for i in range(1000):
