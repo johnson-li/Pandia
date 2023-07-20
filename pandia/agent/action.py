@@ -2,6 +2,7 @@
 from enum import Enum
 import numpy as np
 from gymnasium import spaces
+from pandia.agent.env_config import ENV_CONFIG
 
 from pandia.agent.normalization import NORMALIZATION_RANGE, dnml, nml
 
@@ -24,13 +25,13 @@ class Action():
         self.padding_rate = 0
         self.fec_rate_key = 256
         self.fec_rate_delta = 256
-        self.fake = 0
+        self.fake = action_keys == ['fake']
 
     @staticmethod
     def boundary() -> dict:
         return {
             'fake': [0, 1], # Useless
-            'bitrate': [100, 100 * 1024],  # in kbps
+            'bitrate': ENV_CONFIG['bitrate_range'],  # in kbps
             'fps': [1, 60],
             # Limited by the software implementation,
             # The maximum egress rate of WebRTC is around 200 Mbps
@@ -43,7 +44,7 @@ class Action():
 
     def __str__(self) -> str:
         if self.fake:
-            return 'Fake'
+            return 'Fake, '
         res = ''
         if 'resolution' in self.action_keys:
             res += f'Res.: {self.resolution}p, '
@@ -55,6 +56,7 @@ class Action():
             res += f'FPS: {self.fps}, '
         if 'fec_rate_key' in self.action_keys:
             res += f'FEC: {self.fec_rate_key}/{self.fec_rate_delta}'
+        assert res != '', 'Invalid action'
         return res
 
 

@@ -62,7 +62,7 @@ def main():
             {
                 # "num_steps_sampled_before_learning_starts": 100,
                 "min_sample_timesteps_per_iteration": 200,
-                "n_step": 3,
+                # "n_step": 3,
                 "rollout_fragment_length": 'auto',
                 "train_batch_size": 128,
             }

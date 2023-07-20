@@ -54,12 +54,12 @@ class ReadingThread(threading.Thread):
 class WebRTCEnv0(gym.Env):
     def __init__(self, client_id=1, duration=30, # Exp settings
                  width=2160, fps=60, # Source settings
-                 bw=[500 , 100 * 1024], delay=[0, 100], loss=0, # Network settings
+                 bw=ENV_CONFIG['bandwidth_range'], delay=ENV_CONFIG['delay_range'], loss=0, # Network settings
                  action_keys=Action.boundary().keys(), # Action settings
                  obs_keys=Observation.boundary().keys(), # Observation settings
                  monitor_durations=[1, 2, 4], # Observation settings
                  working_dir=None, print_step=False,# Logging settings
-                 step_duration=.01, # RL settings
+                 step_duration=ENV_CONFIG['step_duration'], # RL settings
                  ) -> None:
         super().__init__() 
         # Exp settings
@@ -178,11 +178,13 @@ class WebRTCEnv0(gym.Env):
 
     def reward(self):
         mb = self.context.monitor_blocks[self.monitor_durations[0]]
-        if mb.frame_fps == 0:
-            return -10
         penalty = 0 
+        if mb.frame_fps < 1:
+            penalty = 100
         fps_score = mb.frame_fps / 30
         delay_score = - mb.frame_decoded_delay * 10 - mb.frame_egress_delay * 10
+        if mb.frame_decoded_delay > .9 or mb.frame_encoding_delay > .9:
+            penalty = 100
         quality_score = mb.frame_bitrate / 1024 / 1024
         res_score = mb.frame_height / 2160
         return res_score + quality_score + fps_score + delay_score - penalty
@@ -288,6 +290,8 @@ def test():
         rewards += reward
         if terminated or truncated:
             print(f'[{client_id}] Total reward after {env.step_count} steps: {rewards:.02f}')
+            break
+    env.close()
 
 
 def main():
