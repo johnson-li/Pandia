@@ -16,18 +16,16 @@ from pandia.log_analyzer_sender import analyze_stream
 
 def run(drl_path, working_dir=os.path.join(RESULTS_PATH, 'eval_rllib'), 
         bw=1024 * 1024, duration=30, delay=5, loss=2, step_duration=.1,
-        fake_action=False):
+        fake_action=False, fps=30):
     if working_dir:
         Path(working_dir).mkdir(parents=True, exist_ok=True)
     action_keys = ENV_CONFIG['action_keys'] if not fake_action else ['fake']
-    obs_keys = ENV_CONFIG['observation_keys']
     env_config={'bw': bw, 'delay': delay, 'loss': loss,
-                'fps': 30, 'width': 2160,
+                'fps': fps, 'width': 2160,
                 'print_step': True,
-                'action_keys': action_keys, 'obs_keys': obs_keys,
+                'action_keys': action_keys,
                 'client_id': 18, 'duration': duration,
                 'step_duration': step_duration,
-                'monitor_durations': [1, 2, 4],
                 'working_dir': working_dir,
                 }
     config = PPOConfig()\
@@ -40,6 +38,10 @@ def run(drl_path, working_dir=os.path.join(RESULTS_PATH, 'eval_rllib'),
     obs, info = env.reset()
     rewards = []
     for i in range(100000):
+    #     if i > 100:
+    #         action = Action(action_keys)
+    #         action.bitrate = 1024
+    #         act = action.array()
         if fake_action:
             action = Action(action_keys)
             act = action.array()
@@ -57,6 +59,15 @@ def run(drl_path, working_dir=os.path.join(RESULTS_PATH, 'eval_rllib'),
     # analyzer_main(working_dir)
     analyze_stream(env.context, working_dir)
 
+def checkpoint_path(path=os.path.expanduser('~/ray_results/PPO')) -> str:
+    dirs = filter(lambda x: x.startswith('PPO_None_'), os.listdir(path))
+    dirs = sorted(dirs, key=lambda x: x[-20:])
+    path = os.path.join(path, dirs[-1])
+    print(path)
+    dirs = filter(lambda x: x.startswith('checkpoint_'), os.listdir(path))
+    dirs = sorted(dirs, key=lambda x: x)
+    return os.path.join(path, dirs[-1])
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--duration', type=int, default=10)
@@ -65,12 +76,14 @@ def main():
     parser.add_argument('-b', '--bw', type=int, default=1024*1024)
     parser.add_argument('-y', '--delay', type=int, default=5)
     parser.add_argument('-l', '--loss', type=int, default=2)
+    parser.add_argument('-p', '--fps', type=int, default=30)
     args = parser.parse_args()
     working_dir = os.path.join(RESULTS_PATH, "eval_rllib")
-    path = '~/ray_results/PPO/PPO_None_705d5_00000_0_2023-07-20_07-03-52/checkpoint_000700'
+    path = checkpoint_path()
+    print(f'Using checkpoint: {path}')
     run(path, working_dir=working_dir, duration=args.duration,
         step_duration=args.step_duration, fake_action=args.fake,
-        bw=args.bw, loss=args.loss, delay=args.delay)
+        bw=args.bw, loss=args.loss, delay=args.delay, fps=args.fps)
 
 
 if __name__ == "__main__":

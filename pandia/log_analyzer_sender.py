@@ -20,7 +20,8 @@ DPI = 600
 
 
 def divide(a: np.ndarray, b: np.ndarray):
-    return np.divide(a, b, out=np.zeros_like(a), where=b != 0)
+    return np.divide(a.astype(np.float32), b.astype(np.float32), 
+                     out=np.zeros_like(a, dtype=np.float32), where=b != 0)
 
 
 class PacketContext(object):
@@ -71,6 +72,7 @@ class FrameContext(object):
         self.decoded_at = .0
         self.decoding_at = .0
         self.bitrate = 0
+        self.fps = 0
         self.encoded_size = 0
         self.sequence_range = [10000000, 0]
         self.encoded_shape: tuple = (0, 0)
@@ -184,6 +186,8 @@ class StreamingContext(object):
         self.utc_offset: float = 0  # The difference between the sender UTC and the receiver UTC
         self.monitor_blocks = {d: MonitorBlock(d) for d in monitor_durations}
         self.last_ts = .0
+        self.drl_bitrate = []
+        self.drl_pacing_rate = []
 
     def update_utc_offset(self, offset):
         self.utc_offset = offset
@@ -228,7 +232,9 @@ class MonitorBlockData(object):
             self.data.append(val)
             self.num += 1
             self.sum += self.val_fn(val) 
-        while self.data and self.ts(self.data[0]) < ts - self.duration:
+        # Prevent the data from being empty
+        # It is useful when the measured latency is larger than the duration
+        while len(self.data) > 1 and self.ts(self.data[0]) < ts - self.duration:
             val = self.data.pop(0)
             self.num -= 1
             self.sum -= self.val_fn(val)
@@ -251,8 +257,8 @@ class MonitorBlock(object):
         self.frame_encoding_delay_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.encoding_delay(), duration=duration)
         self.frame_egress_delay_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.pacing_delay(), duration=duration)
         self.frame_recv_delay_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.assemble_delay(self.utc_offset), duration=duration)
-        self.frame_decoding_delay_data = MonitorBlockData(lambda f: f.decoding_at, lambda f: f.decoding_queue_delay(self.utc_offset), duration=duration)
-        self.frame_decoded_delay_data = MonitorBlockData(lambda f: f.decoded_at, lambda f: f.decoding_delay(self.utc_offset), duration=duration)
+        self.frame_decoding_delay_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.decoding_queue_delay(self.utc_offset), duration=duration)
+        self.frame_decoded_delay_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.decoding_delay(self.utc_offset), duration=duration)
         self.frame_key_counter = MonitorBlockData(lambda f: f.encoded_at, lambda f: 1 if f.is_key_frame else 0, duration=duration)
         # Packet statistics
         self.pkts_sent_size = MonitorBlockData(lambda p: p.sent_at, lambda p: p.size, duration=duration)
@@ -278,11 +284,6 @@ class MonitorBlock(object):
     def frame_key_count(self):
         return self.frame_key_counter.sum
 
-    # Bitrate is set to the encoder
-    @property
-    def bitrate(self):
-        return self.bitrate_data.avg()
-
     @property
     def pacing_rate(self):
         return self.pacing_rate_data.avg()
@@ -295,6 +296,11 @@ class MonitorBlock(object):
     @property
     def frame_bitrate(self):
         return self.frame_encoded_size.sum * 8 / self.duration
+
+    # Bitrate is the value set to the encoder before encoding
+    @property
+    def bitrate(self):
+        return self.bitrate_data.avg()
 
     @property
     def frame_encoding_delay(self):
@@ -479,21 +485,27 @@ def parse_line(line, context: StreamingContext) -> dict:
                     frame.sequence_range[1] = max(frame.sequence_range[1], seq_num)
     elif 'Start encoding' in line:
         m = re.match(re.compile(
-            '.*\\[(\\d+)\\].*Start encoding, frame id: (\\d+), shape: (\\d+) x (\\d+), bitrate: (\\d+) kbps.*'), line)
+            '.*\\[(\\d+)\\].*Start encoding, frame id: (\\d+), shape: (\\d+) x (\\d+)'
+            ', bitrate: (\\d+) kbps, key frame: (\\d+), fps: (\\d+).*'), line)
         ts = int(m[1]) / 1000
         frame_id = int(m[2])
         width = int(m[3])
         height = int(m[4])
         bitrate = int(m[5])
+        key_frame = int(m[6]) == 1
+        fps = int(m[7])
         context.action_context.resolution = width
         if context.action_context.bitrate <= 0:
             context.action_context.bitrate = bitrate
         if frame_id in context.frames:
             frame: FrameContext = context.frames[frame_id]
             frame.bitrate = bitrate
+            frame.fps = fps
             frame.width = width
             frame.height = height
             frame.encoding_at = ts
+            # context.bitrate_data.append([ts, bitrate])
+            # context.fps_data.append([ts, fps])
             [mb.on_frame_encoding(frame, ts) for mb in context.monitor_blocks.values()]
     elif 'Finish encoding' in line:
         m = re.match(re.compile(
@@ -600,6 +612,14 @@ def parse_line(line, context: StreamingContext) -> dict:
                 context.last_decoded_frame_id = \
                         max(frame.frame_id, context.last_decoded_frame_id)
                 [mb.on_frame_decoding_updated(frame, ts) for mb in context.monitor_blocks.values()]
+    elif 'Apply bitrate' in line:
+        m = re.match(re.compile(
+            '.*\\[(\\d+)\\] Apply bitrate: (\\d+) kbps, pacing rate: (\\d+) kbps from shared memory.*'), line)
+        ts = int(m[1]) / 1000
+        bitrate = int(m[2]) * 1024
+        pacing_rate = int(m[3]) * 1024
+        context.drl_bitrate.append((ts, bitrate))
+        context.drl_pacing_rate.append((ts, pacing_rate))
     elif 'SetPacingRates' in line:
         m = re.match(re.compile(
             '.*\\[(\\d+)\\] SetPacingRates, pacing rate: (\\d+) kbps, pading rate: (\\d+) kbps.*'), line)
@@ -610,17 +630,17 @@ def parse_line(line, context: StreamingContext) -> dict:
         context.networking.pacing_rate_data.append(
             [ts, pacing_rate, padding_rate])
         [mb.on_pacing_rate_set(ts, pacing_rate * 1024) for mb in context.monitor_blocks.values()]
-    elif 'SetRates, ' in line:
-        m = re.match(re.compile(
-            '.*\\[(\\d+)\\] SetRates, stream id: (\\d+), bitrate: (\\d+) kbps, '
-            'max bitrate: (\\d+) kbps, framerate: (\\d+).*'), line)
-        ts = int(m[1]) / 1000
-        stream_id = int(m[2]) 
-        bitrate = int(m[3])
-        bitrate_max = int(m[4])
-        fps = int(m[5])
-        context.bitrate_data.append([ts, bitrate, bitrate_max])
-        context.fps_data.append([ts, fps])
+    # elif 'SetRates, ' in line:
+    #     m = re.match(re.compile(
+    #         '.*\\[(\\d+)\\] SetRates, stream id: (\\d+), bitrate: (\\d+) kbps, '
+    #         'max bitrate: (\\d+) kbps, framerate: (\\d+).*'), line)
+    #     ts = int(m[1]) / 1000
+    #     stream_id = int(m[2]) 
+    #     bitrate = int(m[3])
+    #     bitrate_max = int(m[4])
+    #     fps = int(m[5])
+    #     context.bitrate_data.append([ts, bitrate, bitrate_max])
+    #     context.fps_data.append([ts, fps])
     if ts:
         context.update_ts(ts)
     return data
@@ -690,7 +710,7 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     frame_rtp_lost_num_list = np.array([len([p for p in f.packets_video() if p.received is False]) for f in frames_encoded])
     fig, ax1 = plt.subplots()
     ax2 = ax1.twinx()
-    ax1.plot(frames_encoded_ts, frame_rtp_lost_num_list / frame_rtp_num_list * 100, 'b')
+    ax1.plot(frames_encoded_ts, divide(frame_rtp_lost_num_list, frame_rtp_num_list) * 100, 'b')
     ax1.tick_params(axis='y', labelcolor='b')
     ax2.plot(frames_encoded_ts, frame_rtp_lost_num_list, 'r.')
     plt.xlabel('Timestamp (s)')
@@ -701,7 +721,7 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.savefig(os.path.join(output_dir, f'mea-loss-packet-frame.{FIG_EXTENSION}'), dpi=DPI)
 
     plt.close()
-    duration = .1
+    duration = .5
     bucks = int((frames_encoded[-1].encoding_at - context.start_ts) / duration + 1)
     data = np.zeros((bucks, 1))
     for frame in frames_encoded:
@@ -715,6 +735,22 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.xlabel('Timestamp (s)')
     plt.legend(['Frame encoded bitrate', 'Pacing rate'])
     plt.savefig(os.path.join(output_dir, f'mea-bitrate.{FIG_EXTENSION}'), dpi=DPI)
+
+    plt.close()
+    fig, ax1 = plt.subplots()
+    ax1.set_xlabel('Timestamp (s)')
+    ax1.set_ylabel('Bitrate (Kbps)', color='b')
+    drl_bitrate = np.array(context.drl_bitrate)
+    # ax1.plot((drl_bitrate[:, 0] - context.start_ts), drl_bitrate[:, 1] / 1024, 'b--')
+    ax1.plot([f.encoding_at - context.start_ts for f in frames_encoded], [f.bitrate for f in frames_encoded], 'b')
+    ax1.plot(np.arange(bucks) * duration, data * 8 / duration / 1024, '.b')
+    ax1.legend(['Encoding bitrate', 'Encoded bitrate'])
+    ax1.tick_params(axis='y', labelcolor='b')
+    ax2 = ax1.twinx()
+    ax2.set_ylabel('Encoding FPS', color='r')
+    ax2.plot([f.encoding_at - context.start_ts for f in frames_encoded], [f.fps for f in frames_encoded], 'r')
+    ax2.tick_params(axis='y', labelcolor='r')
+    plt.savefig(os.path.join(output_dir, f'set-codec-params.{FIG_EXTENSION}'), dpi=DPI)
 
     plt.close()
     plt.plot([f.encoded_at - context.start_ts for f in frames_encoded], [f.qp for f in frames_encoded], '.')
@@ -911,23 +947,6 @@ def print_statistics(context: StreamingContext) -> None:
           f"decoding loss rate: {loss_rate_decoding:.2%}")
 
 
-def analyze_codec(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
-    plt.close()
-    fig, ax1 = plt.subplots()
-    ax1.set_xlabel('Timestamp (s)')
-    ax1.set_ylabel('Bitrate (Kbps)', color='b')
-    bitrate_data = np.array(context.bitrate_data)
-    ax1.plot((bitrate_data[:, 0] - context.start_ts), bitrate_data[:, 1], 'b')
-    ax1.plot((bitrate_data[:, 0] - context.start_ts), bitrate_data[:, 2], 'b-.')
-    ax1.legend(['Target', 'Max'])
-    ax1.tick_params(axis='y', labelcolor='b')
-    ax2 = ax1.twinx()
-    ax2.set_ylabel('FPS', color='r')
-    fps_data = np.array(context.fps_data)
-    ax2.plot((fps_data[:, 0] - context.start_ts), fps_data[:, 1], 'r')
-    ax2.tick_params(axis='y', labelcolor='r')
-    plt.savefig(os.path.join(output_dir, f'set-codec-params.{FIG_EXTENSION}'), dpi=DPI)
-
 def analyze_fec(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.close()
     plt.plot([d[0] - context.start_ts for d in context.fec.fec_key_data],
@@ -945,7 +964,6 @@ def analyze_stream(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     analyze_frame(context, output_dir)
     analyze_packet(context, output_dir)
     analyze_network(context, output_dir)
-    analyze_codec(context, output_dir)
     analyze_fec(context, output_dir)
 
 

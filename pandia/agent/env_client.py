@@ -1,3 +1,4 @@
+import argparse
 from io import IOBase
 from multiprocessing import Pool, Process, shared_memory
 from ray import tune
@@ -47,25 +48,28 @@ class ReadingThread(threading.Thread):
                     if self.log_file:
                         buf.append(line)
         if self.log_file:
+            print(f'Dump log to {self.log_file}, lines: {len(buf)}')
             with open(self.log_file, 'w+') as f:
                 f.write('\n'.join(buf))
 
 
 class WebRTCEnv0(gym.Env):
-    def __init__(self, client_id=1, duration=30, # Exp settings
-                 width=2160, fps=60, # Source settings
+    def __init__(self, client_id=1, duration=ENV_CONFIG['duration'], # Exp settings
+                 width=ENV_CONFIG['width'], fps=ENV_CONFIG['fps'], # Source settings
                  bw=ENV_CONFIG['bandwidth_range'], delay=ENV_CONFIG['delay_range'], loss=0, # Network settings
-                 action_keys=Action.boundary().keys(), # Action settings
-                 obs_keys=Observation.boundary().keys(), # Observation settings
-                 monitor_durations=[1, 2, 4], # Observation settings
+                 action_keys=ENV_CONFIG['action_keys'], # Action settings
+                 obs_keys=ENV_CONFIG['observation_keys'], # Observation settings
+                 monitor_durations=ENV_CONFIG['observation_durations'], # Observation settings
                  working_dir=None, print_step=False,# Logging settings
                  step_duration=ENV_CONFIG['step_duration'], # RL settings
+                 termination_timeout=ENV_CONFIG['termination_timeout'] # Exp settings
                  ) -> None:
         super().__init__() 
         # Exp settings
         self.client_id = client_id
         self.port = 7000 + client_id
         self.duration = duration
+        self.termination_timeout = termination_timeout
         # Source settings
         self.width = width
         self.fps = fps
@@ -95,6 +99,7 @@ class WebRTCEnv0(gym.Env):
                                                     history_size=self.hisory_size)
         self.process_sender: Optional[subprocess.Popen] = None
         # ENV state
+        self.termination_ts = 0
         self.action_keys = list(sorted(action_keys))
         self.action_space = Action(action_keys).action_space()
         self.observation_space = \
@@ -187,6 +192,11 @@ class WebRTCEnv0(gym.Env):
             penalty = 100
         quality_score = mb.frame_bitrate / 1024 / 1024
         res_score = mb.frame_height / 2160
+        if penalty == 0:
+            self.termination_ts = 0
+        if penalty > 0 and self.termination_ts == 0:
+            # If unexpected situation lasts for 5s, terminate
+            self.termination_ts = self.context.last_ts + self.termination_timeout  
         return res_score + quality_score + fps_score + delay_score - penalty
 
     def reset(self, seed=None, options=None):
@@ -199,6 +209,7 @@ class WebRTCEnv0(gym.Env):
         self.reading_thread = ReadingThread(self.context, self.sender_log, self.stop_event)
         self.reading_thread.start()
         self.action_history = ActionHistory()
+        self.termination_ts = 0
         self.step_count = 0
         if os.path.isfile(NTP_OFFSET_PATH):
             data = open(NTP_OFFSET_PATH, 'r').read().split(',')
@@ -247,16 +258,17 @@ class WebRTCEnv0(gym.Env):
             print(f'[{self.client_id}] #{self.step_count}@{int((time.time() - self.start_ts))}s '
                 f'R.w.: {reward:.02f}, Act.: {act}Obs.: {self.observation}')
         self.step_count += 1
-        return self.observation.array(), reward, False, truncated, {}
+        terminated = self.termination_ts > 0 and self.context.last_ts > self.termination_ts
+        return self.observation.array(), reward, terminated, truncated, {}
 
 
-def run(client_id=1):
+def run(client_id=1, print_step=False):
     random_action=False
     client_id = int(client_id)
     client = PolicyClient(
         f"http://localhost:{SERVER_PORT+client_id}", inference_mode='remote'
     )
-    env = WebRTCEnv0(client_id=client_id, duration=60, action_keys=ENV_CONFIG['action_keys'])
+    env = WebRTCEnv0(client_id=client_id, print_step=print_step, bw=3000)
     obs, info = env.reset()
     eid = client.start_episode()
     rewards = 0
@@ -281,7 +293,7 @@ def run(client_id=1):
 def test():
     client_id = 1
     rewards = 0
-    env = WebRTCEnv0(client_id=client_id, duration=20, action_keys=ENV_CONFIG['action_keys'])
+    env = WebRTCEnv0(client_id=client_id, duration=10)
     obs, info = env.reset()
     while True:
         action_space = Action(ENV_CONFIG['action_keys']).action_space()
@@ -295,9 +307,18 @@ def test():
 
 
 def main():
-    concurrency = 8
-    with Pool(concurrency) as p:
-        p.map(run, [i + 1 for i in range(concurrency)])
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', '--concurrency', type=int, default=8)
+    parser.add_argument('-p', '--print_step', action='store_true')
+    parser.add_argument('-t', '--test', action='store_true')
+    args = parser.parse_args()
+    concurrency = args.concurrency
+    print_step = args.print_step
+    if args.test:
+        return test()
+    else:
+        with Pool(concurrency) as p:
+            p.starmap(run, [[i + 1, print_step] for i in range(concurrency)])
 
 
 tune.register_env('pandia', lambda config: WebRTCEnv0(**config))
@@ -305,4 +326,3 @@ tune.register_env('pandia', lambda config: WebRTCEnv0(**config))
 
 if __name__ == '__main__':
     main()
-    # test()

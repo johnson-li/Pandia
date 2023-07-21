@@ -3,6 +3,14 @@ Milestone
 
 Track the development of new features
 
+### 21th July
+- [ ] The training may be very bad if the bitrate set by DRL is further adjusted by webrtc.
+
+### 20th July
+- [ ] When the decoding equeue is built, it never recovers (or takes a long time). The problem occurs when fps = 60.
+- [x] It takes a long time for the pacing queue to recover, which makes the following training steps meaningless. A temporal solution is to terminate the training when the pacing queue is not cleared within a timeout.
+- [ ] The training may be very bad if the observation is of high dimension.
+
 ### 15th July
 - [x] Refactor the env (observation, monitor block, action, etc.)
 

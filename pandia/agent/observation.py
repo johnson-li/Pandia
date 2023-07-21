@@ -51,7 +51,7 @@ class Observation(object):
                f'{get_data("frame_recv_delay")}, {get_data("frame_decoding_delay")}, {get_data("frame_decoded_delay")}]' \
                f', FPS: {get_data("frame_fps")}' \
                f', size: {get_data("frame_size")} ({get_data("frame_height")}/{get_data("frame_encoded_height")}, {get_data("frame_key_count")})' \
-               f', rates: [{get_data("frame_bitrate")}, {get_data("pkt_egress_rate")}, {get_data("pkt_ack_rate")}, {get_data("pacing_rate")}]' \
+               f', rates: [{get_data("bitrate")}, {get_data("frame_bitrate")}, {get_data("pkt_egress_rate")}, {get_data("pkt_ack_rate")}, {get_data("pacing_rate")}]' \
                f', QP: {get_data("frame_qp")}' \
                f', Dly.p: [{get_data("pkt_trans_delay")}, {get_data("pkt_delay_interval")}] ({get_data("pkt_loss_rate")}%)'
 
@@ -92,7 +92,7 @@ class Observation(object):
             'frame_key_count': [0, 10], 
 
             'pkt_egress_rate': [0, 200 * M], # bps
-            'pkt_ack_rate': [0, 1000 * 1024 * 1024], # bps
+            'pkt_ack_rate': [0, 1000 * M], # bps
             'pkt_loss_rate': [0, 1], # ratio
             'pkt_trans_delay': [0, 1], # s
             'pkt_delay_interval': [0, 10], 
