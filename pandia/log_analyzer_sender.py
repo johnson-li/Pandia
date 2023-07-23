@@ -171,7 +171,7 @@ class StreamingContext(object):
         self.packet_id_map = {}
         self.networking = NetworkContext()
         self.fec = FecContext()
-        self.bitrate_data = []
+        # self.bitrate_data = []
         self.rtt_data = []
         self.packet_loss_data = []
         self.fps_data = []
@@ -268,7 +268,7 @@ class MonitorBlock(object):
         self.pkts_delay_interval_data = MonitorBlockData(lambda s: s[0], lambda s: s[1], duration=duration)
         # Setting statistics
         self.pacing_rate_data = MonitorBlockData(lambda p: p[0], lambda p: p[1], duration=duration)
-        self.bitrate_data = MonitorBlockData(lambda p: p[0], lambda p: p[1], duration=duration)
+        self.bitrate_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.bitrate, duration=duration)
 
     def update_utc_local_offset(self, offset):
         self.pkts_acked_size.ts_offset = offset
@@ -384,6 +384,7 @@ class MonitorBlock(object):
 
     def on_frame_encoding(self, frame: FrameContext, ts: float):
         self.frame_height_data.append(frame, ts)
+        self.bitrate_data.append(frame, ts)
 
     def on_frame_encoded(self, frame: FrameContext, ts: float):
         self.frame_encoded_size.append(frame, ts)
@@ -491,7 +492,7 @@ def parse_line(line, context: StreamingContext) -> dict:
         frame_id = int(m[2])
         width = int(m[3])
         height = int(m[4])
-        bitrate = int(m[5])
+        bitrate = int(m[5]) * 1024
         key_frame = int(m[6]) == 1
         fps = int(m[7])
         context.action_context.resolution = width

@@ -14,7 +14,8 @@ from pandia.log_analyzer import main as analyzer_main
 from pandia.log_analyzer_sender import analyze_stream
 
 
-def run(bitrate=None, pacing_rate=None, bw=1024*1024, working_dir=os.path.join(RESULTS_PATH, 'eval_static'), 
+def run(bitrate=None, pacing_rate=None, bw=1024*1024, client_id=18,
+        working_dir=os.path.join(RESULTS_PATH, 'eval_static'), 
         duration=30, delay=5, loss=2):
     if working_dir:
         Path(working_dir).mkdir(parents=True, exist_ok=True)
@@ -30,7 +31,7 @@ def run(bitrate=None, pacing_rate=None, bw=1024*1024, working_dir=os.path.join(R
                 'fps': 30, 'width': 2160,
                 'print_step': True,
                 'action_keys': action_keys, 'obs_keys': obs_keys,
-                'client_id': 18, 'duration': duration,
+                'client_id': client_id, 'duration': duration,
                 'step_duration': ENV_CONFIG['step_duration'],
                 'monitor_durations': [1, 2, 4],
                 'working_dir': working_dir,
@@ -60,6 +61,7 @@ def run(bitrate=None, pacing_rate=None, bw=1024*1024, working_dir=os.path.join(R
     os.system(f'scp mobix:/tmp/{env.log_name("receiver")} {working_dir}/eval_receiver.log > /dev/null')
     # analyzer_main(working_dir)
     analyze_stream(env.context, working_dir)
+    return np.mean(rewards)
 
 
 def main():

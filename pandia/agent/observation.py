@@ -2,21 +2,23 @@ import os
 import numpy as np
 from gymnasium import spaces
 from pandia import RESULTS_PATH
+from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.normalization import NORMALIZATION_RANGE, dnml, nml
 from pandia.constants import K, M, G
+from pandia.agent.action import Action
 from typing import Dict, TYPE_CHECKING, List
 
 from pandia.ntp.ntpclient import NTP_OFFSET_PATH
 
 if TYPE_CHECKING:
-    from pandia.agent.action import Action
     from pandia.log_analyzer_sender import MonitorBlock
 
 
 ONRL_OBS_KEYS = ['pkt_loss_rate', 'pkt_trans_delay', 'pkt_delay_interval', 'pkt_ack_rate', 'action_gap']
 
 class Observation(object):
-    def __init__(self, obs_keys, durations=[1], history_size=1) -> None:
+    def __init__(self, obs_keys=ENV_CONFIG['observation_keys'], durations=ENV_CONFIG['observation_durations'], 
+                 history_size=ENV_CONFIG['history_size']) -> None:
         for obs_key in obs_keys:
             assert obs_key in Observation.boundary(), f'Unknown observation key: {obs_key}'
         self.obs_keys = list(sorted(obs_keys))
@@ -34,7 +36,7 @@ class Observation(object):
 
         def get_data(key):
             res = dnml(key, data[self.obs_keys_map[key]], self.boundary()[key], log=False) if key in self.obs_keys else '?'
-            if res != '?' and key in ['frame_bitrate', 'pkt_egress_rate', 'pkt_ack_rate', 'pacing_rate']:
+            if res != '?' and key in ['frame_bitrate', 'pkt_egress_rate', 'pkt_ack_rate', 'pacing_rate', 'bitrate']:
                 res = int(res / 1024)
             if res != '?' and key in ['frame_encoding_delay', 'frame_egress_delay', 'frame_recv_delay', 
                                       'frame_decoding_delay', 'frame_decoded_delay', 'pkt_trans_delay',
@@ -88,7 +90,7 @@ class Observation(object):
             'frame_height': [0, 2160], # pixels
             'frame_encoded_height': [0, 2160], # pixels
             'frame_size': [0, 1000_000], # bytes 
-            'frame_bitrate': [0, 100 * M], # bps
+            'frame_bitrate': [0, 4 * M], # bps
             'frame_key_count': [0, 10], 
 
             'pkt_egress_rate': [0, 200 * M], # bps
@@ -99,7 +101,11 @@ class Observation(object):
 
             'pacing_rate': [0, 200 * M], # bps
 
-            'action_gap': [- 100 * M, 100 * M]
+            'action_gap': [- 100 * M, 100 * M],
+
+            # The value is the same as the action, so reuse the action boundary. 
+            # Converting from kbps to bps
+            'bitrate': [b * 1024 for b in Action.boundary()['bitrate']],  # bps
         }
 
     def observation_space(self) -> spaces.Box:

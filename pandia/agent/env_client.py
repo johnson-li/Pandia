@@ -56,7 +56,8 @@ class ReadingThread(threading.Thread):
 class WebRTCEnv0(gym.Env):
     def __init__(self, client_id=1, duration=ENV_CONFIG['duration'], # Exp settings
                  width=ENV_CONFIG['width'], fps=ENV_CONFIG['fps'], # Source settings
-                 bw=ENV_CONFIG['bandwidth_range'], delay=ENV_CONFIG['delay_range'], loss=0, # Network settings
+                 bw=ENV_CONFIG['bandwidth_range'],  # Network settings
+                 delay=ENV_CONFIG['delay_range'], loss=ENV_CONFIG['loss_range'], # Network settings
                  action_keys=ENV_CONFIG['action_keys'], # Action settings
                  obs_keys=ENV_CONFIG['observation_keys'], # Observation settings
                  monitor_durations=ENV_CONFIG['observation_durations'], # Observation settings
@@ -181,8 +182,10 @@ class WebRTCEnv0(gym.Env):
             self.stop_event.set()
             self.reading_thread.join()
 
-    def reward(self):
-        mb = self.context.monitor_blocks[self.monitor_durations[0]]
+    @staticmethod
+    def reward(context: StreamingContext, terminated=False):
+        monitor_durations = list(sorted(context.monitor_blocks.keys()))
+        mb = context.monitor_blocks[monitor_durations[0]]
         penalty = 0 
         if mb.frame_fps < 1:
             penalty = 100
@@ -192,11 +195,11 @@ class WebRTCEnv0(gym.Env):
             penalty = 100
         quality_score = mb.frame_bitrate / 1024 / 1024
         res_score = mb.frame_height / 2160
-        if penalty == 0:
-            self.termination_ts = 0
-        if penalty > 0 and self.termination_ts == 0:
-            # If unexpected situation lasts for 5s, terminate
-            self.termination_ts = self.context.last_ts + self.termination_timeout  
+        # if penalty == 0:
+        #     self.termination_ts = 0
+        # if penalty > 0 and self.termination_ts == 0:
+        #     # If unexpected situation lasts for 5s, terminate
+        #     self.termination_ts = self.context.last_ts + self.termination_timeout  
         return res_score + quality_score + fps_score + delay_score - penalty
 
     def reset(self, seed=None, options=None):
@@ -247,12 +250,13 @@ class WebRTCEnv0(gym.Env):
         ts = time.time()
         if self.step_count == 0:
             self.start_ts = ts
+            print(f'[{self.client_id}] WebRTC is running.')
         time.sleep(self.step_duration)
 
         self.observation.append(self.context.monitor_blocks, act)
         truncated = self.process_sender.poll() is not None or \
             time.time() - self.start_ts > self.duration
-        reward = self.reward()
+        reward = self.reward(self.context)
 
         if self.print_step:
             print(f'[{self.client_id}] #{self.step_count}@{int((time.time() - self.start_ts))}s '
@@ -260,6 +264,14 @@ class WebRTCEnv0(gym.Env):
         self.step_count += 1
         terminated = self.termination_ts > 0 and self.context.last_ts > self.termination_ts
         return self.observation.array(), reward, terminated, truncated, {}
+
+
+def run_wrapper(client_id=1, print_step=False):
+    try:
+        return run(client_id, print_step)
+    except Exception as e:
+        print(f'[{client_id}] Exception: {e}')
+        raise e
 
 
 def run(client_id=1, print_step=False):
@@ -318,7 +330,7 @@ def main():
         return test()
     else:
         with Pool(concurrency) as p:
-            p.starmap(run, [[i + 1, print_step] for i in range(concurrency)])
+            p.starmap(run_wrapper, [[i + 1, print_step] for i in range(concurrency)])
 
 
 tune.register_env('pandia', lambda config: WebRTCEnv0(**config))

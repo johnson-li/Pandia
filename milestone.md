@@ -3,6 +3,9 @@ Milestone
 
 Track the development of new features
 
+### 23th July
+- [ ] The training performance of rllib is really bad. Try with sb3.
+
 ### 21th July
 - [ ] The training may be very bad if the bitrate set by DRL is further adjusted by webrtc.
 
