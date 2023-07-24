@@ -45,7 +45,8 @@ class Action():
     def __str__(self) -> str:
         if self.fake:
             return 'Fake, '
-        res = f'{self.array()} '
+        # res = f'{self.array()} '
+        res = ''
         if 'resolution' in self.action_keys:
             res += f'Res.: {self.resolution}p, '
         if 'pacing_rate' in self.action_keys:

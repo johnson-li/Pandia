@@ -3,16 +3,19 @@ Milestone
 
 Track the development of new features
 
+### 24th July
+- [ ] It is hard to teach the model of choosing a low bitrate when overshooting because it takes a lot of steps to get recovered even if the bitrate is set to a low value. The correct action (low bitrate in this action) is hard to be sampled during training because it is by default ramdomized. The solution may be 1) making the training process hybrid, 2) offline training with GCC at first (imitation learning), 3) making the reward more smooth relative to unexpected conditions, instead of simply using penalty 4) ?.
+
 ### 23th July
-- [ ] The training performance of rllib is really bad. Try with sb3.
+- [ ] The training performance of rllib is really bad. Try with sb3. The performance issue exists in rllib, too. The reason may be with the performance guantee module in webrtc (e.g., the frame dropper). We may need to fix the action values if they are not to be trained.
 
 ### 21th July
-- [ ] The training may be very bad if the bitrate set by DRL is further adjusted by webrtc.
+- [x] The training may be very bad if the bitrate set by DRL is further adjusted by webrtc. (Have applied the bitrate just before encoding. But the training is still bad.)
 
 ### 20th July
 - [ ] When the decoding equeue is built, it never recovers (or takes a long time). The problem occurs when fps = 60.
 - [x] It takes a long time for the pacing queue to recover, which makes the following training steps meaningless. A temporal solution is to terminate the training when the pacing queue is not cleared within a timeout.
-- [ ] The training may be very bad if the observation is of high dimension.
+- [x] The training may be very bad if the observation is of high dimension. (The training is still bad after reducing the dimension of the observation.)
 
 ### 15th July
 - [x] Refactor the env (observation, monitor block, action, etc.)

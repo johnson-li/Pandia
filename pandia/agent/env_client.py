@@ -48,7 +48,7 @@ class ReadingThread(threading.Thread):
                     if self.log_file:
                         buf.append(line)
         if self.log_file:
-            print(f'Dump log to {self.log_file}, lines: {len(buf)}')
+            # print(f'Dump log to {self.log_file}, lines: {len(buf)}')
             with open(self.log_file, 'w+') as f:
                 f.write('\n'.join(buf))
 
@@ -71,9 +71,8 @@ class WebRTCEnv0(gym.Env):
         self.client_id: int = client_id if client_id is not None else 1
         if rank is not None:
             self.client_id = rank + 1
-        placeholder_path = f'/tmp/pandia_placeholder_{self.client_id}'
-        assert not os.path.exists(placeholder_path), f'Placeholder {placeholder_path} exists.'
-        with open(placeholder_path, 'w+') as f:
+        assert not os.path.exists(self.placeholder_path), f'Placeholder {self.placeholder_path} exists.'
+        with open(self.placeholder_path, 'w+') as f:
             f.write('placeholder')
         self.port = 7000 + self.client_id
         self.duration = duration
@@ -89,6 +88,8 @@ class WebRTCEnv0(gym.Env):
         # Logging settings
         self.print_step = print_step
         self.working_dir = working_dir
+        if self.working_dir and not os.path.exists(self.working_dir):
+            os.makedirs(self.working_dir)
         self.sender_log = os.path.join(working_dir, self.log_name('sender')) if working_dir else None
         self.stop_event: Optional[threading.Event] = None
         self.reading_thread: ReadingThread
@@ -113,9 +114,15 @@ class WebRTCEnv0(gym.Env):
         self.observation_space = \
             Observation(self.obs_keys, self.monitor_durations, self.hisory_size)\
                 .observation_space()
+        # print(f'Action shape: {self.action_space.shape}, observation shape: {self.observation_space.shape}')
         # Tracking
         self.start_ts = 0
         self.action_history = ActionHistory()
+        self.penalty_timeout = 0
+
+    @property
+    def placeholder_path(self):
+        return f'/tmp/pandia_placeholder_{self.client_id}'
 
     def sample_net_params(self):
         if type(self.bw0) is list:
@@ -234,13 +241,20 @@ class WebRTCEnv0(gym.Env):
         if self.shm:
             self.shm.close()
             self.shm.unlink()
+        if os.path.isfile(self.placeholder_path):
+            os.remove(self.placeholder_path) 
+
+    def is_safe(self) -> bool:
+        return True
 
     def step(self, action: np.ndarray):
         # Write action
         self.context.reset_step_context()
         act = Action.from_array(action, self.action_keys)
-        # act.bitrate = int(1024 * 1024)
         self.action_history.append(act)
+        if self.penalty_timeout > 0:
+            act = Action(['fake'])
+            self.penalty_timeout -= 1
         act.write(self.shm)
 
         # Start WebRTC at the first step
@@ -264,6 +278,8 @@ class WebRTCEnv0(gym.Env):
         truncated = self.process_sender.poll() is not None or \
             time.time() - self.start_ts > self.duration
         reward = self.reward(self.context)
+        if not self.is_safe():
+            self.penalty_timeout = 1
 
         if self.print_step:
             print(f'[{self.client_id}] #{self.step_count}@{int((time.time() - self.start_ts))}s '

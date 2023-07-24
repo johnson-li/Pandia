@@ -743,7 +743,7 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     ax1.set_ylabel('Bitrate (Kbps)', color='b')
     drl_bitrate = np.array(context.drl_bitrate)
     # ax1.plot((drl_bitrate[:, 0] - context.start_ts), drl_bitrate[:, 1] / 1024, 'b--')
-    ax1.plot([f.encoding_at - context.start_ts for f in frames_encoded], [f.bitrate for f in frames_encoded], 'b')
+    ax1.plot([f.encoding_at - context.start_ts for f in frames_encoded], [f.bitrate / 1024 for f in frames_encoded], 'b')
     ax1.plot(np.arange(bucks) * duration, data * 8 / duration / 1024, '.b')
     ax1.legend(['Encoding bitrate', 'Encoded bitrate'])
     ax1.tick_params(axis='y', labelcolor='b')
