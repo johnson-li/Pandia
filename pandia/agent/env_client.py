@@ -54,7 +54,7 @@ class ReadingThread(threading.Thread):
 
 
 class WebRTCEnv0(gym.Env):
-    def __init__(self, client_id=1, duration=ENV_CONFIG['duration'], # Exp settings
+    def __init__(self, client_id=None, rank=None, duration=ENV_CONFIG['duration'], # Exp settings
                  width=ENV_CONFIG['width'], fps=ENV_CONFIG['fps'], # Source settings
                  bw=ENV_CONFIG['bandwidth_range'],  # Network settings
                  delay=ENV_CONFIG['delay_range'], loss=ENV_CONFIG['loss_range'], # Network settings
@@ -66,9 +66,16 @@ class WebRTCEnv0(gym.Env):
                  termination_timeout=ENV_CONFIG['termination_timeout'] # Exp settings
                  ) -> None:
         super().__init__() 
+        print(f'Creating WebRTCEnv0 with client_id={client_id}, rank={rank}')
         # Exp settings
-        self.client_id = client_id
-        self.port = 7000 + client_id
+        self.client_id: int = client_id if client_id is not None else 1
+        if rank is not None:
+            self.client_id = rank + 1
+        placeholder_path = f'/tmp/pandia_placeholder_{self.client_id}'
+        assert not os.path.exists(placeholder_path), f'Placeholder {placeholder_path} exists.'
+        with open(placeholder_path, 'w+') as f:
+            f.write('placeholder')
+        self.port = 7000 + self.client_id
         self.duration = duration
         self.termination_timeout = termination_timeout
         # Source settings
@@ -334,6 +341,7 @@ def main():
 
 
 tune.register_env('pandia', lambda config: WebRTCEnv0(**config))
+gym.register('pandia', entry_point='pandia.agent.env_client:WebRTCEnv0', nondeterministic=True)
 
 
 if __name__ == '__main__':
