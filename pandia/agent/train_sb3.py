@@ -1,3 +1,7 @@
+# Note: the running of train_sb3.py requires modification of exp_manager.py and env_util.py in sb3 zoo.
+# Because WebRTCEnv0 requires all instances to have dedicated client_id.
+
+
 import argparse
 import os
 import uuid
