@@ -3,8 +3,14 @@ Milestone
 
 Track the development of new features
 
+### 3rd Aug
+- [ ] Solve the issue of the zig-zag pattern of the rewards.
+
+### 2nd Aug
+- [x] Using a continual reward function makes it possible to train the model to react to the observation on the delay. However, on problem is that the reward has a zig-zag pattern, moving between a high value and a low value. One reason is that, at some point, the pacing rate drops to a low value. The pattern looks like: low delay -> high bitrate (action) -> low pacing rate (unclear reason) -> high delay -> low bitrate (action) -> low delay -> [inf.]
+
 ### 24th July
-- [ ] It is hard to teach the model of choosing a low bitrate when overshooting because it takes a lot of steps to get recovered even if the bitrate is set to a low value. The correct action (low bitrate in this action) is hard to be sampled during training because it is by default ramdomized. The solution may be 1) making the training process hybrid, 2) offline training with GCC at first (imitation learning), 3) making the reward more smooth relative to unexpected conditions, instead of simply using penalty 4) ?.
+- [x] It is hard to teach the model of choosing a low bitrate when overshooting because it takes a lot of steps to get recovered even if the bitrate is set to a low value. The correct action (low bitrate in this action) is hard to be sampled during training because it is by default ramdomized. The solution may be 1) making the training process hybrid, 2) offline training with GCC at first (imitation learning), 3) making the reward more smooth relative to unexpected conditions, instead of simply using penalty 4) ?. The root cause if the inefficiency of exploration. Regarding this, we are looking for a better context-aware exploration strategy than vanilla possibility-based random action sampling used in DRL.
 
 ### 23th July
 - [ ] The training performance of rllib is really bad. Try with sb3. The performance issue exists in rllib, too. The reason may be with the performance guantee module in webrtc (e.g., the frame dropper). We may need to fix the action values if they are not to be trained.

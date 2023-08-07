@@ -8,6 +8,7 @@ ENV_CONFIG = {
         'frame_bitrate', 
         'bitrate',
         # 'pkt_ack_rate', 'pkt_loss_rate', 'pkt_delay_interval'
+        'pacing_rate',
     ])),
     'observation_durations' : [1, 2, 3],
     'history_size' : 1,
@@ -15,8 +16,8 @@ ENV_CONFIG = {
     'bitrate_range': [300, 3 * 1024],  # in kbps
     'delay_range': [10, 10],  # in ms
     'loss_range': [0, 0],
-    'step_duration': .1, # in s
-    'duration': 30, # in s
+    'step_duration': .01, # in s
+    'duration': 60, # in s
     'width': 2160, # in px
     'fps': 30,
     'termination_timeout': 1, # in s

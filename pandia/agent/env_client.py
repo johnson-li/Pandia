@@ -65,7 +65,7 @@ class WebRTCEnv0(gym.Env):
                  step_duration=ENV_CONFIG['step_duration'], # RL settings
                  termination_timeout=ENV_CONFIG['termination_timeout'] # Exp settings
                  ) -> None:
-        super().__init__() 
+        super().__init__()
         print(f'Creating WebRTCEnv0 with client_id={client_id}, rank={rank}')
         # Exp settings
         self.client_id: int = client_id if client_id is not None else 1
@@ -104,7 +104,7 @@ class WebRTCEnv0(gym.Env):
         self.context: StreamingContext
         self.obs_keys = list(sorted(obs_keys))
         self.monitor_durations = list(sorted(monitor_durations))
-        self.observation: Observation = Observation(self.obs_keys, durations=self.monitor_durations, 
+        self.observation: Observation = Observation(self.obs_keys, durations=self.monitor_durations,
                                                     history_size=self.hisory_size)
         self.process_sender: Optional[subprocess.Popen] = None
         # ENV state
@@ -142,7 +142,7 @@ class WebRTCEnv0(gym.Env):
     @property
     def shm_name(self):
         return f"pandia_{self.port}"
-    
+
     def log_name(self, role='sender'):
         return f"eval_{role}_{self.port}.log"
 
@@ -151,15 +151,15 @@ class WebRTCEnv0(gym.Env):
         print(f"[{self.client_id}] Initializing shm {self.shm_name} for WebRTC")
         try:
             self.shm = \
-                shared_memory.SharedMemory(name=self.shm_name, 
+                shared_memory.SharedMemory(name=self.shm_name,
                                         create=True, size=shm_size)
         except FileExistsError:
             self.shm = \
-                shared_memory.SharedMemory(name=self.shm_name, 
+                shared_memory.SharedMemory(name=self.shm_name,
                                         create=False, size=shm_size)
         receiver_log = f'/tmp/{self.log_name("receiver")}' if self.working_dir else '/dev/null'
-        process = subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'), 
-                          '-p', str(self.port), '-d', str(self.duration + 3), 
+        process = subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_webrtc_receiver_remote.sh'),
+                          '-p', str(self.port), '-d', str(self.duration + 3),
                           '-l', receiver_log], shell=False)
         process.wait()
         # time.sleep(1)
@@ -170,7 +170,7 @@ class WebRTCEnv0(gym.Env):
         loss = self.net_params['loss']
         self.process_traffic_control = \
             subprocess.Popen([os.path.join(SCRIPTS_PATH, 'start_traffic_control_remote.sh'),
-                                '-p', str(self.port), '-b', str(bw), 
+                                '-p', str(self.port), '-b', str(bw),
                                 '-d', str(delay), '-l', str(loss)])
         self.process_traffic_control.wait()
         self.process_sender = \
@@ -200,21 +200,26 @@ class WebRTCEnv0(gym.Env):
     def reward(context: StreamingContext, terminated=False):
         monitor_durations = list(sorted(context.monitor_blocks.keys()))
         mb = context.monitor_blocks[monitor_durations[0]]
-        penalty = 0 
-        if mb.frame_fps < 1:
-            penalty = 100
-        fps_score = mb.frame_fps / 30
-        delay_score = - mb.frame_decoded_delay * 10 - mb.frame_egress_delay * 10
-        if mb.frame_decoded_delay > .9 or mb.frame_encoding_delay > .9:
-            penalty = 100
+        penalty = 0
+        # fps_score = mb.frame_fps / 30
+        fps_score = 0
+        delay_score = 0
+        for delay in [mb.frame_decoded_delay, mb.frame_egress_delay]:
+            delay *= 1000
+            delay_score += - delay ** 2 / 100 ** 2
         quality_score = mb.frame_bitrate / 1024 / 1024
-        res_score = mb.frame_height / 2160
+        # res_score = mb.frame_height / 2160
+        res_score = 0
         # if penalty == 0:
         #     self.termination_ts = 0
         # if penalty > 0 and self.termination_ts == 0:
         #     # If unexpected situation lasts for 5s, terminate
-        #     self.termination_ts = self.context.last_ts + self.termination_timeout  
-        return res_score + quality_score + fps_score + delay_score - penalty
+        #     self.termination_ts = self.context.last_ts + self.termination_timeout
+        # if mb.frame_fps < 1:
+        #     penalty = 100
+        score = res_score + quality_score + fps_score + delay_score
+        score = max(-10, score)
+        return score
 
     def reset(self, seed=None, options=None):
         self.stop_webrtc()
@@ -242,7 +247,7 @@ class WebRTCEnv0(gym.Env):
             self.shm.close()
             self.shm.unlink()
         if os.path.isfile(self.placeholder_path):
-            os.remove(self.placeholder_path) 
+            os.remove(self.placeholder_path)
 
     def is_safe(self) -> bool:
         return True
