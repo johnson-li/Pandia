@@ -163,7 +163,8 @@ class WebRTCEnv0(gym.Env):
                               '--server', '195.148.127.230',
                               '--port', str(self.port), '--name', 'sender',
                               '--width', str(self.width), '--fps', str(self.fps), '--autocall', 'true',
-                              '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/'],
+                              '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/', 
+                              '--path', os.path.expanduser('~/Downloads')],
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
         return self.process_sender.stdout
 
