@@ -171,7 +171,7 @@ class StreamingContext(object):
         self.packet_id_map = {}
         self.networking = NetworkContext()
         self.fec = FecContext()
-        self.bitrate_data = []
+        # self.bitrate_data = []
         self.rtt_data = []
         self.packet_loss_data = []
         self.fps_data = []
@@ -268,7 +268,7 @@ class MonitorBlock(object):
         self.pkts_delay_interval_data = MonitorBlockData(lambda s: s[0], lambda s: s[1], duration=duration)
         # Setting statistics
         self.pacing_rate_data = MonitorBlockData(lambda p: p[0], lambda p: p[1], duration=duration)
-        self.bitrate_data = MonitorBlockData(lambda p: p[0], lambda p: p[1], duration=duration)
+        self.bitrate_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.bitrate, duration=duration)
 
     def update_utc_local_offset(self, offset):
         self.pkts_acked_size.ts_offset = offset
@@ -384,6 +384,7 @@ class MonitorBlock(object):
 
     def on_frame_encoding(self, frame: FrameContext, ts: float):
         self.frame_height_data.append(frame, ts)
+        self.bitrate_data.append(frame, ts)
 
     def on_frame_encoded(self, frame: FrameContext, ts: float):
         self.frame_encoded_size.append(frame, ts)
@@ -491,7 +492,7 @@ def parse_line(line, context: StreamingContext) -> dict:
         frame_id = int(m[2])
         width = int(m[3])
         height = int(m[4])
-        bitrate = int(m[5])
+        bitrate = int(m[5]) * 1024
         key_frame = int(m[6]) == 1
         fps = int(m[7])
         context.action_context.resolution = width
@@ -742,7 +743,7 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     ax1.set_ylabel('Bitrate (Kbps)', color='b')
     drl_bitrate = np.array(context.drl_bitrate)
     # ax1.plot((drl_bitrate[:, 0] - context.start_ts), drl_bitrate[:, 1] / 1024, 'b--')
-    ax1.plot([f.encoding_at - context.start_ts for f in frames_encoded], [f.bitrate for f in frames_encoded], 'b')
+    ax1.plot([f.encoding_at - context.start_ts for f in frames_encoded], [f.bitrate / 1024 for f in frames_encoded], 'b')
     ax1.plot(np.arange(bucks) * duration, data * 8 / duration / 1024, '.b')
     ax1.legend(['Encoding bitrate', 'Encoded bitrate'])
     ax1.tick_params(axis='y', labelcolor='b')

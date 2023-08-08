@@ -4,3 +4,4 @@ tensorflow
 matplotlib
 torch
 stable_baselines3
+rl-zoo3
