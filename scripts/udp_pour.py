@@ -1,3 +1,4 @@
+import argparse
 import time
 import socket
 
@@ -8,10 +9,11 @@ def send_udp_packet(target_ip, target_port, message):
     start_ts = time.time()
     bytes = 0
     bw = 100 * 1024 * 1024
+    start_ts = time.time()
 
     try:
         # Send the UDP packet
-        while True:
+        while time.time() - start_ts < 10:
             udp_socket.sendto(message.encode(), (target_ip, target_port))
             bytes += len(message)
             next_ts = bytes * 8 / bw + start_ts
@@ -26,12 +28,21 @@ def send_udp_packet(target_ip, target_port, message):
         udp_socket.close()
 
 
-# Set the target IP and port
-target_ip = "10.200.18.2"
-target_port = 12344
+def main():
+    # Set the target IP and port
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--target_ip", default="10.200.18.2", help="The target IP address")
+    parser.add_argument("--target_port", default=12344, help="The target port")
+    args = parser.parse_args()
+    target_ip = args.target_ip
+    target_port = args.target_port
 
-# Set the message to send
-message = "a" * 1400
+    # Set the message to send
+    message = "a" * 1400
 
-# Send the UDP packet
-send_udp_packet(target_ip, target_port, message)
+    # Send the UDP packet
+    send_udp_packet(target_ip, target_port, message)
+
+
+if __name__ == "__main__":
+    main()
