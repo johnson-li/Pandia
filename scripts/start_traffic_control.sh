@@ -76,13 +76,10 @@ else
 fi
 
 
-# sudo tc qdisc add dev $veth root netem ${loss_clause} delay ${delay}ms rate ${bw}kbit
-sudo tc qdisc add dev $veth root handle 1: netem delay ${delay}ms
-sudo tc qdisc add dev $veth parent 1: handle 2: tbf rate ${bw}kbit burst ${burst}kb minburst 1540 latency ${queue}ms
+# sudo tc qdisc add dev $veth root handle 1: netem delay ${delay}ms
+# sudo tc qdisc add dev $veth parent 1: handle 2: tbf rate ${bw}kbit burst ${burst}kb minburst 1540 latency ${queue}ms
+# sudo tc qdisc add dev $veth tbf rate ${bw}kbit burst ${burst}kb minburst 1540 latency ${queue}ms
 
-exit
-
-# sudo ip netns exec $ns tc qdisc add dev $vpeer root netem ${loss_clause} delay ${delay}ms rate ${bw}kbit
-sudo ip netns exec $ns tc qdisc add dev $vpeer root handle 1: netem delay ${delay}ms
-sudo ip netns exec $ns tc qdisc add dev $vpeer parent 1: handle 2: tbf rate ${bw}kbit burst ${burst}kb minburst 1540 latency ${queue}ms
-
+# sudo ip netns exec $ns tc qdisc add dev $vpeer root handle 1: netem delay ${delay}ms
+# sudo ip netns exec $ns tc qdisc add dev $vpeer parent 1: handle 2: tbf rate ${bw}kbit burst ${burst}kb minburst 1540 latency ${queue}ms
+sudo tc qdisc add dev $vpeer tbf rate ${bw}kbit burst ${burst}kb minburst 1540 latency ${queue}ms
