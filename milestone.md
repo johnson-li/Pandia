@@ -6,6 +6,7 @@ Track the development of new features
 ### 27th Aug
 - [ ] Improve the training FPS.
 - [ ] TC-based network shaping is not working propertly. The buffer is too large.
+- [x] Reduce the CPU utilization of WebRTC (current value is 200%). The problem is solved by using inf. timeout in epoll_wait.
 
 ### 3rd Aug
 - [ ] Solve the issue of the zig-zag pattern of the rewards.
