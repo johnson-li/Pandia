@@ -3,6 +3,10 @@ Milestone
 
 Track the development of new features
 
+### 27th Aug
+- [ ] Improve the training FPS.
+- [ ] TC-based network shaping is not working propertly. The buffer is too large.
+
 ### 3rd Aug
 - [ ] Solve the issue of the zig-zag pattern of the rewards.
 
