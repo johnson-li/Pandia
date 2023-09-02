@@ -1,0 +1,20 @@
+services:
+  sender:
+    build: containers/sender
+    image: johnson163/pandia_sender
+    volumes:
+      - ./bin:/bin
+    command: ["/bin/peerconnection_client_headless"]
+  receiver:
+    build: containers/receiver
+    image: johnson163/pandia_receiver
+    volumes:
+      - ./bin:/bin
+    command: ["/bin/peerconnection_client_headless", "--receiving_only"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
