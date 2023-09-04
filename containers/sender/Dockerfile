@@ -1,7 +1,7 @@
-FROM nvidia/cuda:12.1.0-devel-ubi9
+FROM continuumio/miniconda3
 
-RUN yum install -y procps && rm -rf /var/cache
+RUN apt update && apt install -y iproute2 gdb iputils-ping dnsutils net-tools tmux
 COPY . /app/
 WORKDIR /app
 
-CMD ["/app/peerconnection_client_headless"]
+CMD ["/app/run.sh"]

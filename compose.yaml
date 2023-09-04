@@ -1,16 +1,49 @@
 version: "3.8"
 services:
-  sender:
-    build: containers/sender
-    image: johnson163/pandia_sender
-    command: ["/app/peerconnection_client_headless"]
+  stun:
+    image: ich777/stun-turn-server
+    ports:
+      - "3478:3478"
+      - "3478:3478/udp"
+      - "5349:5349"
+      - "5349:5349/udp"
   receiver:
     build: containers/receiver
     image: johnson163/pandia_receiver
+    depends_on:
+      - stun
+    cap_add:
+      - NET_ADMIN
     environment:
       - NVIDIA_DRIVER_CAPABILITIES=all
-    ports:
+      - WEBRTC_CONNECT="stun:stun:3478"
+    restart: always
+    expose:
       - "9999:9999"
+      - "1-65535/udp"
+    # command: sleep 10000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+  sender:
+    build: containers/sender
+    image: johnson163/pandia_sender
+    depends_on:
+      - stun
+      - receiver
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      # - WEBRTC_CONNECT="stun:stun:3478"
+    restart: always
+    expose:
+      - "1-65535/udp"
+    # command: sleep 10000
     deploy:
       resources:
         reservations:
