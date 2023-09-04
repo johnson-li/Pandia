@@ -12,7 +12,7 @@ t=Release
 # t=Default
 cp out/${t}/peerconnection_client_headless ~/Workspace/Pandia/containers/receiver
 cp out/${t}/peerconnection_client_headless ~/Workspace/Pandia/containers/sender
-
+cp -r ~/Workspace/Pandia/pandia ~/Workspace/Pandia/containers/sender
 
 cd ~/Workspace/Pandia
 docker compose build

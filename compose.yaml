@@ -19,9 +19,10 @@ services:
       - WEBRTC_CONNECT="stun:stun:3478"
     restart: always
     expose:
-      - "9999:9999"
+      # - "9998-9999:9998-9999"
       - "1-65535/udp"
-    # command: sleep 10000
+    ports:
+      - "9998-9999:9998-9999"
     deploy:
       resources:
         reservations:
@@ -39,11 +40,11 @@ services:
       - NET_ADMIN
     environment:
       - NVIDIA_DRIVER_CAPABILITIES=all
-      # - WEBRTC_CONNECT="stun:stun:3478"
+      - RL_SERVER=195.148.127.234
+      - PRINT_STEP=True
     restart: always
     expose:
       - "1-65535/udp"
-    # command: sleep 10000
     deploy:
       resources:
         reservations:

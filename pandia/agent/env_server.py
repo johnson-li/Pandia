@@ -13,7 +13,7 @@ from ray.air.config import CheckpointConfig
 
 
 
-SERVER_ADDRESS = "localhost"
+SERVER_ADDRESS = "0.0.0.0"
 SERVER_PORT = 9900
 CHECKPOINT_FILE = os.path.join(MODELS_PATH, "env_server.txt")
 NUM_WORKERS = 10
