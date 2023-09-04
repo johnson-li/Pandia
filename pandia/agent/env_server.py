@@ -6,14 +6,14 @@ from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.observation import Observation
 from ray import air, tune
 from ray.rllib.algorithms.sac import SACConfig
-from ray.rllib.algorithms.ppo import PPOConfig 
+from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.env.policy_server_input import PolicyServerInput
 from ray.rllib.offline import IOContext, InputReader
 from ray.air.config import CheckpointConfig
 
 
 
-SERVER_ADDRESS = "localhost"
+SERVER_ADDRESS = "0.0.0.0"
 SERVER_PORT = 9900
 CHECKPOINT_FILE = os.path.join(MODELS_PATH, "env_server.txt")
 NUM_WORKERS = 10
@@ -37,9 +37,9 @@ def main():
             )
         else:
             return None
-    
+
     action = Action(ENV_CONFIG['action_keys'])
-    observation = Observation(ENV_CONFIG['observation_keys'], 
+    observation = Observation(ENV_CONFIG['observation_keys'],
                               ENV_CONFIG['observation_durations'])
     config = (
         PPOConfig()
@@ -77,7 +77,7 @@ def main():
         checkpoint_config.checkpoint_frequency = 100
         checkpoint_config.num_to_keep = 10
         tune.Tuner(
-            run, param_space=config, 
+            run, param_space=config,
             run_config=air.RunConfig(stop=stop, verbose=2, checkpoint_config=checkpoint_config)
         ).fit()
     else:
