@@ -8,7 +8,6 @@ from pandia.constants import K, M, G
 from pandia.agent.action import Action
 from typing import Dict, TYPE_CHECKING, List
 
-from pandia.ntp.ntpclient import NTP_OFFSET_PATH
 
 if TYPE_CHECKING:
     from pandia.log_analyzer_sender import MonitorBlock
@@ -123,6 +122,7 @@ def test(result_path=os.path.join(RESULTS_PATH, 'eval_rllib')):
     from pandia.log_analyzer_sender import StreamingContext, parse_line
     from pandia.agent.action import Action
     context = StreamingContext(monitor_durations=monitor_durations)
+    from pandia.ntp.ntpclient import NTP_OFFSET_PATH
     if os.path.isfile(NTP_OFFSET_PATH):
         data = open(NTP_OFFSET_PATH, 'r').read().split(',')
         context.update_utc_offset(float(data[0]))

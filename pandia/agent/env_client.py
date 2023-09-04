@@ -18,7 +18,6 @@ from pandia.agent.observation import Observation
 from ray.rllib.env.policy_client import PolicyClient
 from pandia.agent.env_server import SERVER_PORT
 from pandia.log_analyzer_sender import StreamingContext, parse_line
-from pandia.ntp.ntpclient import NTP_OFFSET_PATH, ntp_sync
 
 
 class ActionHistory():
@@ -30,12 +29,14 @@ class ActionHistory():
 
 
 class ReadingThread(threading.Thread):
-    def __init__(self, context: StreamingContext, log_file: Optional[str], stop_event: threading.Event):
+    def __init__(self, context: StreamingContext, log_file: Optional[str], 
+                 stop_event: threading.Event, log_stdout: bool = False) -> None:
         super().__init__()
         self.stdout = None
         self.context = context
         self.log_file = log_file
         self.stop_event = stop_event
+        self.log_stdout = log_stdout
 
 
     def run(self) -> None:
@@ -44,6 +45,8 @@ class ReadingThread(threading.Thread):
             if self.stdout:
                 line = self.stdout.readline().decode().strip()
                 if line:
+                    if self.log_stdout:
+                        print(line, flush=True)
                     parse_line(line, self.context)
                     if self.log_file:
                         buf.append(line)
@@ -234,6 +237,7 @@ class WebRTCEnv0(gym.Env):
         self.action_history = ActionHistory()
         self.termination_ts = 0
         self.step_count = 0
+        from pandia.ntp.ntpclient import NTP_OFFSET_PATH
         if os.path.isfile(NTP_OFFSET_PATH):
             data = open(NTP_OFFSET_PATH, 'r').read().split(',')
             self.context.update_utc_offset(float(data[0]))

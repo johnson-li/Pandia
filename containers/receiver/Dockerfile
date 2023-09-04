@@ -1,5 +1,8 @@
-FROM nvidia/cuda:12.1.0-devel-ubi9
+FROM python:3.8
+
+RUN apt update && apt install -y iproute2 gdb iputils-ping dnsutils net-tools tmux netcat-openbsd
 COPY . /app/
 WORKDIR /app
+RUN pip install -r requirements.txt
 
-CMD ["/app/peerconnection_client_headless", "--receiving_only"]
+CMD python3 controller.py
