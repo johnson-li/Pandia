@@ -30,12 +30,16 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+  sender_base:
+    build: containers/sender_base
+    image: johnson163/pandia_sender_base
   sender:
     build: containers/sender
     image: johnson163/pandia_sender
     depends_on:
       - stun
       - receiver
+      - sender_base
     cap_add:
       - NET_ADMIN
     environment:

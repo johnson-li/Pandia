@@ -1,4 +1,5 @@
 
+import logging
 from multiprocessing import shared_memory
 import os
 import socket
@@ -21,6 +22,9 @@ from pandia.log_analyzer_sender import StreamingContext
 from ray.rllib.env.policy_client import PolicyClient
 
 
+logging.basicConfig(level=logging.WARNING)
+
+
 def log(msg):
     print(msg, flush=True)
 
@@ -33,7 +37,7 @@ class WebRTCEnv(gymnasium.Env):
                  action_keys=ENV_CONFIG['action_keys'], # Action settings
                  obs_keys=ENV_CONFIG['observation_keys'], # Observation settings
                  monitor_durations=ENV_CONFIG['observation_durations'], # Observation settings
-                 print_step=False,# Logging settings
+                 print_step=False, print_sender_log=False, print_period=1, # Logging settings
                  step_duration=ENV_CONFIG['step_duration'], # RL settings
                  termination_timeout=ENV_CONFIG['termination_timeout'] # Exp settings
                  ) -> None:
@@ -52,9 +56,12 @@ class WebRTCEnv(gymnasium.Env):
         self.net_params = {}
         # Logging settings
         self.print_step = print_step
+        self.print_sender_log = print_sender_log
+        self.print_period = print_period
         self.stop_event: Optional[threading.Event] = None
         self.reading_thread: ReadingThread
         self.logging_buf = []
+        self.last_print_ts = 0  
         # RL settings
         self.step_duration = step_duration
         self.init_timeout = 10
@@ -93,13 +100,14 @@ class WebRTCEnv(gymnasium.Env):
     def restart_receiver(self):
         r = requests.post(f'http://{self.receiver_ip}:9998/reset', json={'latency': self.net_params['delay']})
         log(f'Reset receiver: {r.text}')
+        time.sleep(5)
 
     def reset(self, seed=None, options=None):
         self.net_params = self.sample_net_params()
         self.restart_receiver()
         self.context = StreamingContext(monitor_durations=self.monitor_durations)
         self.stop_event = threading.Event()
-        self.reading_thread = ReadingThread(self.context, None, self.stop_event, True)
+        self.reading_thread = ReadingThread(self.context, None, self.stop_event, self.print_sender_log)
         self.reading_thread.start()
         self.action_history = ActionHistory()
         self.termination_ts = 0
@@ -114,6 +122,7 @@ class WebRTCEnv(gymnasium.Env):
             self.shm.unlink()
 
     def start_webrtc(self):
+        log("Starting WebRTC...")
         bw = self.net_params['bw']
         # os.system("tc qdisc del dev eth0 root")
         # os.system(f"tc qdisc add dev eth0 root tbf rate {bw}kbit burst 1000kb minburst 1540 latency 250ms")
@@ -157,8 +166,10 @@ class WebRTCEnv(gymnasium.Env):
             time.time() - self.start_ts > self.duration
         r = reward(self.context)
         if self.print_step:
-            log(f'#{self.step_count}@{int((time.time() - self.start_ts))}s '
-                f'R.w.: {r:.02f}, Act.: {act}Obs.: {self.observation}')
+            if time.time() - self.last_print_ts > self.print_period:
+                self.last_print_ts = time.time()
+                log(f'#{self.step_count}@{int((time.time() - self.start_ts))}s '
+                    f'R.w.: {r:.02f}, Act.: {act}Obs.: {self.observation}')
         self.step_count += 1
         terminated = self.termination_ts > 0 and self.context.last_ts > self.termination_ts
         return self.observation.array(), r, terminated, truncated, {}
