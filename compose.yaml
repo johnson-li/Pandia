@@ -46,6 +46,7 @@ services:
       - NVIDIA_DRIVER_CAPABILITIES=all
       - RL_SERVER=195.148.127.234
       - PRINT_STEP=True
+      # - PRINT_SENDER_LOG=True
     restart: always
     expose:
       - "1-65535/udp"

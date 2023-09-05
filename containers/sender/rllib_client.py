@@ -1,4 +1,3 @@
-
 import logging
 from multiprocessing import shared_memory
 import os
@@ -21,8 +20,7 @@ from pandia.agent.utils import sample
 from pandia.log_analyzer_sender import StreamingContext 
 from ray.rllib.env.policy_client import PolicyClient
 
-
-logging.basicConfig(level=logging.WARNING)
+logging.getLogger('ray.rllib.env.policy_client').setLevel(logging.WARNING)
 
 
 def log(msg):
@@ -64,7 +62,7 @@ class WebRTCEnv(gymnasium.Env):
         self.last_print_ts = 0  
         # RL settings
         self.step_duration = step_duration
-        self.init_timeout = 10
+        self.init_timeout = 3
         self.hisory_size = 1
         # RL state
         self.step_count = 0
@@ -99,10 +97,12 @@ class WebRTCEnv(gymnasium.Env):
 
     def restart_receiver(self):
         r = requests.post(f'http://{self.receiver_ip}:9998/reset', json={'latency': self.net_params['delay']})
-        log(f'Reset receiver: {r.text}')
-        time.sleep(5)
+        log(f'Reset received: {r.text}, wait for 1s...')
+        time.sleep(1)
 
     def reset(self, seed=None, options=None):
+        if self.process_sender and self.process_sender.poll() is None:
+            self.process_sender.kill()
         self.net_params = self.sample_net_params()
         self.restart_receiver()
         self.context = StreamingContext(monitor_durations=self.monitor_durations)
@@ -191,12 +191,13 @@ def main():
     loss = parse_rangable_int(os.getenv('LOSS', 0))
     receiver_name = os.getenv('RECEIVER_NAME', 'receiver')
     random_action= bool(os.getenv('RANDOM_ACTION', False))
+    print_sender_log = bool(os.getenv('PRINT_SENDER_LOG', False))
     receiver_ip = socket.gethostbyname(receiver_name) 
     client = PolicyClient(
         f"http://{rl_server}:{SERVER_PORT}", inference_mode='local'
     )
     env = WebRTCEnv(receiver_ip=receiver_ip, print_step=print_step, 
-                    bw=bw, delay=delay, loss=loss)
+                    bw=bw, delay=delay, loss=loss, print_sender_log=print_sender_log)
     obs, info = env.reset()
     eid = client.start_episode()
     rewards = 0

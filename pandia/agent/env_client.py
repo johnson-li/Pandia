@@ -43,13 +43,16 @@ class ReadingThread(threading.Thread):
         buf = []
         while not self.stop_event.is_set():
             if self.stdout:
-                line = self.stdout.readline().decode().strip()
-                if line:
-                    if self.log_stdout:
-                        print(line, flush=True)
-                    parse_line(line, self.context)
-                    if self.log_file:
-                        buf.append(line)
+                try:
+                    line = self.stdout.readline().decode().strip()
+                    if line:
+                        if self.log_stdout:
+                            print(line, flush=True)
+                        parse_line(line, self.context)
+                        if self.log_file:
+                            buf.append(line)
+                except Exception as e:
+                    print('Failed to read stdout: ', e)
         if self.log_file:
             # print(f'Dump log to {self.log_file}, lines: {len(buf)}')
             with open(self.log_file, 'w+') as f:
