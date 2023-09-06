@@ -9,7 +9,7 @@ services:
   sender_base:
     build: containers/sender_base
     image: johnson163/pandia_sender_base
-  receiver: &receiver1
+  receiver1: &receiver1
     build: containers/receiver
     image: johnson163/pandia_receiver
     hostname: receiver1
@@ -31,21 +31,21 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-  sender: &sender1
+  sender1: &sender1
     build: containers/sender
     image: johnson163/pandia_sender
     hostname: sender1
-    # volumes:
-    #   - /tmp/pandia:/tmp
+    volumes:
+      - /tmp/pandia:/tmp
     depends_on:
       - stun
-      - receiver
+      - receiver1
       - sender_base
     cap_add:
       - NET_ADMIN
     environment:
       - NVIDIA_DRIVER_CAPABILITIES=all
-      - RL_SERVER=195.148.127.234
+      - RL_SERVER=195.148.124.151
       - PRINT_STEP=True
       # - PRINT_SENDER_LOG=True
       - SENDER_LOG=/tmp/sender.log
@@ -60,3 +60,93 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+  receiver2:
+    <<: *receiver1
+    hostname: receiver2
+  sender2:
+    <<: *sender1
+    hostname: sender2
+    depends_on:
+      - stun
+      - receiver2
+      - sender_base
+  receiver3:
+    <<: *receiver1
+    hostname: receiver3
+  sender3:
+    <<: *sender1
+    hostname: sender3
+    depends_on:
+      - stun
+      - receiver3
+      - sender_base
+  receiver4:
+    <<: *receiver1
+    hostname: receiver4
+  sender4:
+    <<: *sender1
+    hostname: sender4
+    depends_on:
+      - stun
+      - receiver4
+      - sender_base
+  receiver5:
+    <<: *receiver1
+    hostname: receiver5
+  sender5:
+    <<: *sender1
+    hostname: sender5
+    depends_on:
+      - stun
+      - receiver5
+      - sender_base  
+  receiver6:
+    <<: *receiver1
+    hostname: receiver6
+  sender6:
+    <<: *sender1
+    hostname: sender6
+    depends_on:
+      - stun
+      - receiver6
+      - sender_base
+  receiver7:
+    <<: *receiver1
+    hostname: receiver7
+  sender7:
+    <<: *sender1
+    hostname: sender7
+    depends_on:
+      - stun
+      - receiver7
+      - sender_base
+  receiver8:
+    <<: *receiver1
+    hostname: receiver8
+  sender8:
+    <<: *sender1
+    hostname: sender8
+    depends_on:
+      - stun
+      - receiver8
+      - sender_base
+  receiver9:
+    <<: *receiver1
+    hostname: receiver9
+  sender9:
+    <<: *sender1
+    hostname: sender9
+    depends_on:
+      - stun
+      - receiver9
+      - sender_base
+  receiver10:
+    <<: *receiver1
+    hostname: receiver10
+  sender10:
+    <<: *sender1
+    hostname: sender10
+    depends_on:
+      - stun
+      - receiver10
+      - sender_base
