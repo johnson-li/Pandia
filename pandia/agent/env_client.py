@@ -54,7 +54,7 @@ class ReadingThread(threading.Thread):
                 except Exception as e:
                     print('Failed to read stdout: ', e)
         if self.log_file:
-            # print(f'Dump log to {self.log_file}, lines: {len(buf)}')
+            print(f'Dump log to {self.log_file}, lines: {len(buf)}')
             with open(self.log_file, 'w+') as f:
                 f.write('\n'.join(buf))
 

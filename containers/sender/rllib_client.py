@@ -36,6 +36,7 @@ class WebRTCEnv(gymnasium.Env):
                  obs_keys=ENV_CONFIG['observation_keys'], # Observation settings
                  monitor_durations=ENV_CONFIG['observation_durations'], # Observation settings
                  print_step=False, print_sender_log=False, print_period=1, # Logging settings
+                 sender_log=None, # Logging settings
                  step_duration=ENV_CONFIG['step_duration'], # RL settings
                  termination_timeout=ENV_CONFIG['termination_timeout'] # Exp settings
                  ) -> None:
@@ -60,6 +61,7 @@ class WebRTCEnv(gymnasium.Env):
         self.reading_thread: ReadingThread
         self.logging_buf = []
         self.last_print_ts = 0  
+        self.sender_log = sender_log
         # RL settings
         self.step_duration = step_duration
         self.init_timeout = 3
@@ -103,11 +105,15 @@ class WebRTCEnv(gymnasium.Env):
     def reset(self, seed=None, options=None):
         if self.process_sender and self.process_sender.poll() is None:
             self.process_sender.kill()
+        if self.stop_event:
+            self.stop_event.set()
+            self.reading_thread.join()
         self.net_params = self.sample_net_params()
+        log(f'Net params: {self.net_params}')
         self.restart_receiver()
         self.context = StreamingContext(monitor_durations=self.monitor_durations)
         self.stop_event = threading.Event()
-        self.reading_thread = ReadingThread(self.context, None, self.stop_event, self.print_sender_log)
+        self.reading_thread = ReadingThread(self.context, self.sender_log, self.stop_event, self.print_sender_log)
         self.reading_thread.start()
         self.action_history = ActionHistory()
         self.termination_ts = 0
@@ -124,8 +130,8 @@ class WebRTCEnv(gymnasium.Env):
     def start_webrtc(self):
         log("Starting WebRTC...")
         bw = self.net_params['bw']
-        # os.system("tc qdisc del dev eth0 root")
-        # os.system(f"tc qdisc add dev eth0 root tbf rate {bw}kbit burst 1000kb minburst 1540 latency 250ms")
+        os.system(f"tc qdisc del dev eth0 root")
+        os.system(f"tc qdisc add dev eth0 root tbf rate {bw}kbit burst 1000kb minburst 1540 latency 250ms")
         self.process_sender = \
             subprocess.Popen(['/app/peerconnection_client_headless',
                               '--server', self.receiver_ip,
@@ -186,18 +192,25 @@ def main():
     log('Starting RLlib client...')
     rl_server = os.getenv('RL_SERVER', '127.0.0.1')
     print_step = bool(os.getenv('PRINT_STEP', False))
+    sender_log = os.getenv('SENDER_LOG', None)
     bw = parse_rangable_int(os.getenv('BANDWIDTH', 3000))
     delay = parse_rangable_int(os.getenv('DELAY', 0))
     loss = parse_rangable_int(os.getenv('LOSS', 0))
-    receiver_name = os.getenv('RECEIVER_NAME', 'receiver')
     random_action= bool(os.getenv('RANDOM_ACTION', False))
     print_sender_log = bool(os.getenv('PRINT_SENDER_LOG', False))
+
+    hostname = socket.gethostname()
+    receiver_name = hostname.replace('sender', 'receiver')
+    log(f'Receiver name: {receiver_name}')
     receiver_ip = socket.gethostbyname(receiver_name) 
     client = PolicyClient(
         f"http://{rl_server}:{SERVER_PORT}", inference_mode='local'
     )
+    if sender_log:
+        sender_log = f'{sender_log}_{hostname}'
     env = WebRTCEnv(receiver_ip=receiver_ip, print_step=print_step, 
-                    bw=bw, delay=delay, loss=loss, print_sender_log=print_sender_log)
+                    bw=bw, delay=delay, loss=loss, sender_log=sender_log,
+                    print_sender_log=print_sender_log)
     obs, info = env.reset()
     eid = client.start_episode()
     rewards = 0
