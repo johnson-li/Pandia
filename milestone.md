@@ -8,7 +8,7 @@ Track the development of new features
 
 ### 27th Aug
 - [ ] Improve the training FPS.
-- [ ] TC-based network shaping is not working propertly. The buffer is too large. The problem is that netem causes abnormal delay when the buffer is built. So, we should avoid using netem and tbf together. The problem is also related to netns.
+- [x] TC-based network shaping is not working propertly. The buffer is too large. The problem is that netem causes abnormal delay when the buffer is built. So, we should avoid using netem and tbf together. The problem is also related to netns.
 - [x] Reduce the CPU utilization of WebRTC (current value is 200%). The problem is solved by using inf. timeout in epoll_wait.
 
 ### 3rd Aug
