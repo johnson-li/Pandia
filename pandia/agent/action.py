@@ -62,12 +62,17 @@ class Action():
 
 
     def write(self, shm) -> None:
+        if type(shm) == bytearray:
+            buf = shm
+        else:
+            buf = shm.buf
+
         def write_int(value, offset):
             if isinstance(value, np.ndarray):
                 value = value[0]
             value = int(value)
             bytes = value.to_bytes(4, byteorder='little')
-            shm.buf[offset * 4:offset * 4 + 4] = bytes
+            buf[offset * 4:offset * 4 + 4] = bytes
         write_int(self.bitrate, 0) if not self.fake and 'bitrate' in self.action_keys else write_int(0, 0)
         write_int(self.pacing_rate, 1) if not self.fake and 'pacing_rate' in self.action_keys else write_int(0, 1)
         write_int(self.fps, 2) if not self.fake and 'fps' in self.action_keys else write_int(0, 2)

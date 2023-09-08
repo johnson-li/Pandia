@@ -6,6 +6,7 @@ from pandia.agent.action import Action
 from pandia.agent.env_client import WebRTCEnv0
 import numpy as np
 from pandia.agent.env_config import ENV_CONFIG
+from pandia.agent.env_container import WebRTContainerEnv
 from pandia.agent.observation import Observation  
 from pandia.log_analyzer import main as analyzer_main
 from pandia.log_analyzer_sender import analyze_stream
@@ -36,7 +37,7 @@ def run(bitrate=None, pacing_rate=None, bw=1024*1024, client_id=18,
                 'monitor_durations': [1, 2, 4],
                 'working_dir': working_dir,
                 }
-    env = WebRTCEnv0(**env_config)
+    env = WebRTContainerEnv(**env_config)
     obs, info = env.reset()
     rewards = []
     for i in range(100000):

@@ -3,6 +3,10 @@ Milestone
 
 Track the development of new features
 
+### 6th Sep
+- [ ] Make the other control parameters constant to stablize the training.
+- [ ] Implement sb3 with container.
+
 ### 3rd Seq 
 - [ ] Migrate to docker and enable large-scale training.
 

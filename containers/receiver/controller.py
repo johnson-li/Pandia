@@ -19,12 +19,14 @@ def start_receiver(data={}):
     if PROCESS:
         PROCESS.kill()
     log(f'Reset receiver: {data}')
-    stun_ip = socket.gethostbyname('stun')
+    stun_name = os.getenv('STUN_NAME', 'stun')
+    stun_ip = socket.gethostbyname(stun_name)
     os.system("tc qdisc del dev eth0 root 2> /dev/null")
     os.system(f"tc qdisc add dev eth0 root netem delay {data.get('delay', 0)}ms")
+    log_file = open(f'/tmp/{socket.gethostname()}.log', 'w')
     PROCESS = Popen(['/app/peerconnection_client_headless', '--receiving_only'], 
                     env={'WEBRTC_CONNECT': f'stun:{stun_ip}:3478'},
-                    stdout=DEVNULL, stderr=DEVNULL, shell=False)
+                    stdout=log_file, stderr=log_file, shell=False)
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
