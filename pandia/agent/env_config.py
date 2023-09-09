@@ -12,7 +12,7 @@ ENV_CONFIG = {
         # 'pkt_ack_rate', 'pkt_loss_rate', 'pkt_delay_interval'
         'pacing_rate',
     ])),
-    'observation_durations' : [1, 2, 3],
+    'observation_durations' : [1],
     'history_size' : 1,
     'bandwidth_range' : [1024, 3 * 1024],  # in kbps
     'bitrate_range': [300, 3 * 1024],  # in kbps

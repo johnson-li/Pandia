@@ -210,7 +210,7 @@ class StreamingContext(object):
 
     @property
     def codec_initiated(self):
-        return self.codec is not None
+        return self.start_ts > 0
 
 
 class MonitorBlockData(object):

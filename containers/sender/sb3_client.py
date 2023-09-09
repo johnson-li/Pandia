@@ -11,6 +11,7 @@ from pandia.agent.action import Action
 from pandia.agent.utils import sample
 from pandia.constants import WEBRTC_RECEIVER_CONTROLLER_PORT, WEBRTC_SENDER_SB3_PORT
 
+TS = time.time()
 
 def parse_rangable_int(value):
     if type(value) is str and '-' in value:
@@ -31,6 +32,8 @@ class ClientProtocol(asyncio.Protocol):
         self.height = os.getenv('WIDTH', 2160)
         self.fps = int(os.getenv('FPS', 30))
         self.receiver_ip = os.getenv('RECEIVER_IP', '127.0.0.1')
+        self.obs_host = os.getenv('OBS_HOST', '127.0.0.1')
+        self.obs_port = os.getenv('OBS_PORT', 9990)
 
     def connection_made(self, transport) -> None:
         self.transport = transport
@@ -47,12 +50,13 @@ class ClientProtocol(asyncio.Protocol):
 
     def start_sender(self):
         bw = sample(self.bw)
-        os.system(f"tc qdisc del dev eth0 root")
+        os.system(f"tc qdisc del dev eth0 root 2> /dev/null")
         os.system(f"tc qdisc add dev eth0 root tbf rate {bw}kbit burst 1000kb minburst 1540 latency 250ms")
         log_file = open(f'/tmp/{socket.gethostname()}.log', 'w')
         self.process_sender = \
             subprocess.Popen(['/app/peerconnection_client_headless',
                               '--server', self.receiver_ip,
+                              '--obs_port', str(self.obs_port), '--obs_host', self.obs_host,
                               '--width', str(self.height), '--fps', str(self.fps),
                               '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/', 
                               '--path', '/app/media'],
@@ -61,13 +65,13 @@ class ClientProtocol(asyncio.Protocol):
     def datagram_received(self, data: bytes, addr) -> None:
         # Reset the sender
         if data[0] == 0:
-            print(f'Received reset command: {data}', flush=True)
+            print(f'[{time.time() - TS:.02f}] Received reset command', flush=True)
             self.stop_sender()
             self.reset_receiver()
             self.start_sender()
         # Send the action
         elif data[0] == 1:
-            print(f'Received action: {data}', flush=True)
+            print(f'[{time.time() - TS:.02f}] Received action: {data}', flush=True)
             self.shm.buf[:] = data[1:]
         else:
             print(f'Unknown command: {data[0]}', flush=True)
@@ -76,7 +80,7 @@ class ClientProtocol(asyncio.Protocol):
 async def main():
     loop = asyncio.get_running_loop()
     on_con_lost = loop.create_future()
-    print(f'Listening on {WEBRTC_SENDER_SB3_PORT}...', flush=True)
+    print(f'[{time.time() - TS:.02f}] Listening on {WEBRTC_SENDER_SB3_PORT}...', flush=True)
     transport, protocol = \
         await loop.create_datagram_endpoint(lambda: ClientProtocol(), 
                                             local_addr=("0.0.0.0", WEBRTC_SENDER_SB3_PORT))

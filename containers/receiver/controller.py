@@ -5,13 +5,15 @@ import socket
 import socketserver
 from subprocess import DEVNULL, PIPE, Popen
 import sys
+import time
 
 
 PROCESS = None
+TS = time.time()
 
 
 def log(msg):
-    print(msg, flush=True)
+    print(f'[{time.time() - TS}:.02f] {msg}', flush=True)
 
 
 def start_receiver(data={}):
@@ -21,6 +23,8 @@ def start_receiver(data={}):
     log(f'Reset receiver: {data}')
     stun_name = os.getenv('STUN_NAME', 'stun')
     stun_ip = socket.gethostbyname(stun_name)
+    obs_host = os.getenv('OBS_HOST', '')
+    obs_port = os.getenv('OBS_PORT', '')
     os.system("tc qdisc del dev eth0 root 2> /dev/null")
     os.system(f"tc qdisc add dev eth0 root netem delay {data.get('delay', 0)}ms")
     log_file = open(f'/tmp/{socket.gethostname()}.log', 'w')
