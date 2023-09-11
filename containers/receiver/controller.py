@@ -1,3 +1,4 @@
+from datetime import datetime
 import http.server
 import json
 import os
@@ -27,7 +28,8 @@ def start_receiver(data={}):
     obs_port = os.getenv('OBS_PORT', '')
     os.system("tc qdisc del dev eth0 root 2> /dev/null")
     os.system(f"tc qdisc add dev eth0 root netem delay {data.get('delay', 0)}ms")
-    log_file = open(f'/tmp/{socket.gethostname()}.log', 'w')
+    ts_str = datetime.now().strftime("%m_%d_%H_%M_%S")
+    log_file = open(f'/tmp/{ts_str}_{socket.gethostname()}.log', 'w')
     PROCESS = Popen(['/app/peerconnection_client_headless', '--receiving_only'], 
                     env={'WEBRTC_CONNECT': f'stun:{stun_ip}:3478'},
                     stdout=log_file, stderr=log_file, shell=False)

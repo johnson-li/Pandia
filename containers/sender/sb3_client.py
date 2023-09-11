@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from multiprocessing import shared_memory
 import os
 import socket
@@ -52,7 +53,8 @@ class ClientProtocol(asyncio.Protocol):
         bw = sample(self.bw)
         os.system(f"tc qdisc del dev eth0 root 2> /dev/null")
         os.system(f"tc qdisc add dev eth0 root tbf rate {bw}kbit burst 1000kb minburst 1540 latency 250ms")
-        log_file = open(f'/tmp/{socket.gethostname()}.log', 'w')
+        ts_str = datetime.now().strftime("%m_%d_%H_%M_%S")
+        log_file = open(f'/tmp/{ts_str}_{socket.gethostname()}.log', 'w')
         self.process_sender = \
             subprocess.Popen(['/app/peerconnection_client_headless',
                               '--server', self.receiver_ip,

@@ -1,18 +1,20 @@
 import os
 import socket
+from struct import unpack
 import time
 import uuid
 import docker
 import threading
 import gymnasium
 import numpy as np
+from pandia import RESULTS_PATH
 from pandia.agent.action import Action
 from pandia.agent.env_client import ActionHistory
 from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.observation import Observation
 from pandia.agent.reward import reward
 from pandia.constants import WEBRTC_SENDER_SB3_PORT
-from pandia.log_analyzer_sender import PACKET_TYPES, FrameContext, PacketContext, StreamingContext
+from pandia.log_analyzer_sender import PACKET_TYPES, FrameContext, PacketContext, StreamingContext, analyze_stream
 from ray import tune
 from typing import Any, Optional
 from docker.models.containers import Container
@@ -58,29 +60,26 @@ class ObservationThread(threading.Thread):
         while not self.stop_event.is_set():
             data, addr = self.sock.recvfrom(1024)
             # print(f'Received {len(data)} bytes from {addr}', flush=True)
-            msg_type = data[0]
+            msg_type = unpack('Q', data[:8])[0]
+            data = data[8:]
             if msg_type == 0:
                 log(f'WebRTC receiver is started.')
                 continue
-            data = data[1:]
-            ts = int.from_bytes(data[:8], byteorder='little') / 1000
             try:
-                self.parse_data(data, ts, msg_type)
+                self.parse_data(data, msg_type)
             except Exception as e:
                 data_hex = ''.join('{:02x}'.format(x) for x in data)
-                log(f'Msg type: {msg_type}, Error: {e}, Data: {data_hex}')
+                log(f'Msg type: {msg_type}, Error: {e}, Data: {len(data)} bytes')
 
-    def parse_data(self, data, ts, msg_type):
+    def parse_data(self, data, msg_type):
         if self.context is None:
             log(f'ERROR: context is not initialized yet.')
             return
         context: StreamingContext = self.context
         if msg_type == 1:  # Frame captured
-            frame_id = int.from_bytes(data[8:12], byteorder='little')
-            frame_width = int.from_bytes(data[12:16], byteorder='little')
-            frame_height = int.from_bytes(data[16:20], byteorder='little')
-            frame_ts = int.from_bytes(data[20:28], byteorder='little')
-            frame_utc_ts = int.from_bytes(data[28:36], byteorder='little')
+            ts, frame_id, width, height, frame_ts, frame_utc_ts = unpack('QQQQQQ', data)
+            ts /= 1000
+            frame_utc_ts /= 1000
             frame = FrameContext(frame_id, ts)
             frame.captured_at_utc = frame_utc_ts
             context.last_captured_frame_id = frame_id
@@ -90,19 +89,15 @@ class ObservationThread(threading.Thread):
         elif msg_type == 2:  # Apply FEC rates
             pass
         elif msg_type == 3:  # Setup codec
-            if context.codec is None:
+            ts, = unpack('Q', data)
+            ts /= 1000
+            if context.start_ts <= 0:
                 context.start_ts = ts
-            # log(f'Codec is setup.')
-        elif msg_type == 4:  # Packet sent
-            rtp_id = int.from_bytes(data[8:10], byteorder='little')
-            seq_num = int.from_bytes(data[10:12], byteorder='little')
-            first_in_frame = bool.from_bytes(data[12:13], byteorder='little')
-            last_in_frame = bool.from_bytes(data[13:14], byteorder='little')
-            frame_id = int.from_bytes(data[14:18], byteorder='little')
-            rtp_type = int.from_bytes(data[18:19], byteorder='little')
-            retrans_seq_num = int.from_bytes(data[19:21], byteorder='little')
-            allow_retrans = bool.from_bytes(data[21:22], byteorder='little')
-            size = int.from_bytes(data[22:26], byteorder='little')
+                log(f'Codec is setup, start ts: {ts}')
+        elif msg_type == 4:  # Packet added 
+            ts, rtp_id, seq_num, first_in_frame, last_in_frame, frame_id, rtp_type, \
+                retrans_seq_num, allow_retrans, size = unpack('QQQQQQQQQQ', data)
+            ts /= 1000
             if rtp_id > 0:
                 # log(f'Packet sent: {rtp_id}')
                 packet = PacketContext(rtp_id)
@@ -129,11 +124,9 @@ class ObservationThread(threading.Thread):
                         frame.sequence_range[0] = min(frame.sequence_range[0], seq_num)
                         frame.sequence_range[1] = max(frame.sequence_range[1], seq_num)
         elif msg_type == 5:  # Start encoding
-            frame_id = int.from_bytes(data[8:10], byteorder='little')
-            height = int.from_bytes(data[10:14], byteorder='little')
-            bitrate = int.from_bytes(data[14:18], byteorder='little')
-            key_frame = bool.from_bytes(data[18:19], byteorder='little')
-            fps = int.from_bytes(data[19:20], byteorder='little')
+            ts, frame_id, height, bitrate, key_frame, fps = unpack('QQQQQQ', data)
+            ts /= 1000
+            bitrate *= 1024
             context.action_context.resolution = height 
             if context.action_context.bitrate <= 0:
                 context.action_context.bitrate = bitrate
@@ -146,11 +139,8 @@ class ObservationThread(threading.Thread):
                 [mb.on_frame_encoding(frame, ts) for mb in context.monitor_blocks.values()]
             # log(f'Frame encoding started: {frame_id}, ts: {ts}')
         elif msg_type == 6:  # Finish encoding
-            frame_id = int.from_bytes(data[8:10], byteorder='little')
-            height = int.from_bytes(data[10:14], byteorder='little')
-            frame_size = int.from_bytes(data[14:18], byteorder='little')
-            is_key = int.from_bytes(data[18:19], byteorder='little')
-            qp = int.from_bytes(data[19:20], byteorder='little')
+            ts, frame_id, height, frame_size, is_key, qp = unpack('QQQQQQ', data)
+            ts /= 1000
             frame = context.frames[frame_id]
             frame.encoded_at = ts
             frame.encoded_shape = (0, height)
@@ -160,13 +150,16 @@ class ObservationThread(threading.Thread):
             [mb.on_frame_encoded(frame, ts) for mb in context.monitor_blocks.values()]
             # log(f'Frame encoding finished: {frame_id}, ts: {ts}, delay: {ts - frame.captured_at}')
         elif msg_type == 7:  # RTCP RTT 
-            rtt = int.from_bytes(data[8:12], byteorder='little')
+            ts, rtt = unpack('QQ', data)
+            ts /= 1000
+            rtt /= 1000
             context.rtt_data.append((ts, rtt))
         elif msg_type == 8:  # Frame decoding ack 
-            rtp_sequence = int.from_bytes(data[8:12], byteorder='little')
-            received_ts_utc = int.from_bytes(data[12:20], byteorder='little')
-            decoding_ts_utc = int.from_bytes(data[20:28], byteorder='little')
-            decoded_ts_utc = int.from_bytes(data[28:36], byteorder='little')
+            ts, rtp_sequence, received_ts_utc, decoding_ts_utc, decoded_ts_utc = unpack('QQQQQ', data)
+            ts /= 1000
+            received_ts_utc /= 1000
+            decoding_ts_utc /= 1000
+            decoded_ts_utc /= 1000
             rtp_id = context.packet_id_map.get(rtp_sequence, -1)
             if rtp_id > 0 and rtp_id in context.packets:
                 frame_id = context.packets[rtp_id].frame_id
@@ -185,39 +178,60 @@ class ObservationThread(threading.Thread):
         elif msg_type == 9:  # Send video
             pass
         elif msg_type == 10:  # Apply bitrate 
-            bitrate = int.from_bytes(data[8:12], byteorder='little') * 1024
-            pacing_rate = int.from_bytes(data[12:16], byteorder='little') * 1024
+            ts, bitrate, pacing_rate = unpack('QQQ', data)
+            ts /= 1000
+            bitrate *= 1024
+            pacing_rate *= 1024
             context.drl_bitrate.append((ts, bitrate))
             context.drl_pacing_rate.append((ts, pacing_rate))
         elif msg_type == 11:  # Apply pacing rate
-            bitrate = int.from_bytes(data[8:12], byteorder='little') * 1024
-            pacing_rate = int.from_bytes(data[12:16], byteorder='little') * 1024
-            context.drl_bitrate.append((ts, bitrate))
-            context.drl_pacing_rate.append((ts, pacing_rate))
+            ts, pacing_rate, padding_rate = unpack('QQQ', data)
+            ts /= 1000
+            pacing_rate *= 1024
+            padding_rate *= 1024
+            context.action_context.pacing_rate = pacing_rate
+            context.networking.pacing_rate_data.append([ts, pacing_rate, padding_rate])
+            [mb.on_pacing_rate_set(ts, pacing_rate) for mb in context.monitor_blocks.values()]
         elif msg_type == 12:  # RTCP feedback
+            ts, count = unpack('QQ', data[:16])
+            ts /= 1000
+            data = data[16:]
+            size = 64
+            seq_nums = unpack(f'{size}H', data[:size * 2])[:count]
+            data = data[size * 2:]
+            losts = unpack(f'{size}B', data[:size])[:count]
+            data = data[size:]
+            ts_list = unpack(f'{size}Q', data)[:count]
+            
             pkt_pre = None
-            count = int.from_bytes(data[8:10], byteorder='little')
-            for i in range(count):
-                rtp_id = int.from_bytes(data[10 + i * 11:10 + i * 11 + 2], byteorder='little')
-                ack_type = int.from_bytes(data[10 + i * 11 + 2:10 + i * 11 + 3], byteorder='little')
-                received_at = int.from_bytes(data[10 + i * 11 + 3:10 + i * 11 + 11], byteorder='little')
+            for rtp_id, lost, received_at in zip(seq_nums, losts, ts_list):
                 # The recv time is wrapped by kTimeWrapPeriod.
                 # The fixed value 1570 should be calculated according to the current time.
                 offset = int(time.time() * 1000 / kTimeWrapPeriod) - 1
                 received_at = (int(received_at) + offset * kTimeWrapPeriod) / 1000
                 rtp_id = int(rtp_id)
-                # received_at = int(received_at) / 1000
                 if rtp_id in context.packets:
-                    # log(f'Packet acked: {rtp_id}')
                     packet = context.packets[rtp_id]
                     packet.received_at_utc = received_at
-                    packet.received = ack_type == 'acked'
+                    packet.received = lost != 1
                     packet.acked_at = ts
                     context.last_acked_packet_id = \
                         max(rtp_id, context.last_acked_packet_id)
                     [mb.on_packet_acked(packet, pkt_pre, ts) for mb in context.monitor_blocks.values()]
                     if packet.received:
                         pkt_pre = packet
+        elif msg_type == 13:  # Packet sent
+            ts, rtp_id, payload_type, size, utc = unpack('QqQQQ', data)
+            ts /= 1000
+            utc /= 1000
+            if rtp_id > 0:
+                packet: PacketContext = context.packets[rtp_id]
+                packet.payload_type = payload_type
+                packet.size = size
+                packet.sent_at = ts 
+                packet.sent_at_utc = utc
+                context.last_egress_packet_id = max(rtp_id, context.last_egress_packet_id)
+                [mb.on_packet_sent(packet, context.frames.get(packet.frame_id, None), ts) for mb in context.monitor_blocks.values()]
         else:
             log(f'Unknown message type: {data[0]}')
 
@@ -326,9 +340,9 @@ class WebRTContainerEnv(gymnasium.Env):
     def stop_containers(self):
         print('Stopping containers...', flush=True)
         if self.sender_container:
-            os.system(f'docker stop {self.sender_container.id}')
+            os.system(f'docker stop {self.sender_container.id} &')
         if self.receiver_container:
-            os.system(f'docker stop {self.receiver_container.id}')
+            os.system(f'docker stop {self.receiver_container.id} &')
 
     def start_webrtc(self):
         print('Starting WebRTC...', flush=True)
@@ -394,7 +408,7 @@ gymnasium.register('WebRTContainerEnv', entry_point='pandia.agent.env_container:
 
 
 if __name__ == '__main__':
-    env = WebRTContainerEnv(print_step=True)
+    env = WebRTContainerEnv(print_step=True, duration=30)
     env.reset()
     try:
         while True:
@@ -406,4 +420,8 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         pass
     env.close()
+    output_dir = os.path.join(RESULTS_PATH, 'env_container')
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    analyze_stream(env.context, output_dir=output_dir)
     exit(0)

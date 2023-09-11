@@ -234,7 +234,7 @@ class MonitorBlockData(object):
             self.sum += self.val_fn(val) 
         # Prevent the data from being empty
         # It is useful when the measured latency is larger than the duration
-        while len(self.data) > 1 and self.ts(self.data[0]) < ts - self.duration:
+        while self.num > 1 and self.ts(self.data[0]) < ts - self.duration:
             val = self.data.pop(0)
             self.num -= 1
             self.sum -= self.val_fn(val)
@@ -262,7 +262,7 @@ class MonitorBlock(object):
         self.frame_key_counter = MonitorBlockData(lambda f: f.encoded_at, lambda f: 1 if f.is_key_frame else 0, duration=duration)
         # Packet statistics
         self.pkts_sent_size = MonitorBlockData(lambda p: p.sent_at, lambda p: p.size, duration=duration)
-        self.pkts_acked_size = MonitorBlockData(lambda p: p.received_at_utc, lambda p: p.size, duration=duration)
+        self.pkts_acked_size = MonitorBlockData(lambda p: p.acked_at, lambda p: p.size, duration=duration)
         self.pkts_trans_delay_data = MonitorBlockData(lambda p: p.sent_at, lambda p: p.recv_delay(self.utc_offset), duration=duration)
         self.pkts_lost_count = MonitorBlockData(lambda p: p.acked_at, lambda p: 1 if not p.received else 0, duration=duration)
         self.pkts_delay_interval_data = MonitorBlockData(lambda s: s[0], lambda s: s[1], duration=duration)
@@ -368,6 +368,7 @@ class MonitorBlock(object):
 
     def on_packet_acked(self, packet: PacketContext, packet_pre: Optional[PacketContext], ts: float):
         if packet.received:
+            # print(f'Packet {packet.rtp_id} acked of {packet.size} bytes, ts: {ts}')
             self.pkts_acked_size.append(packet, ts)
             # if packet.recv_delay() > 1:
             #     print(packet.recv_delay(), packet.sent_at_utc, packet.received_at_utc, packet.received_at_utc - packet.sent_at_utc, packet.rtp_id, packet.seq_num)
@@ -732,7 +733,7 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.plot(np.arange(bucks) * duration, data * 8 / duration / 1024, '.b')
     plt.ylabel('Rates (Kbps)')
     plt.plot([d[0] - context.start_ts for d in context.networking.pacing_rate_data], 
-             [d[1] for d in context.networking.pacing_rate_data], '.r')
+             [d[1] / 1024 for d in context.networking.pacing_rate_data], '.r')
     plt.xlabel('Timestamp (s)')
     plt.legend(['Frame encoded bitrate', 'Pacing rate'])
     plt.savefig(os.path.join(output_dir, f'mea-bitrate.{FIG_EXTENSION}'), dpi=DPI)
@@ -980,8 +981,9 @@ def get_stream_context(result_path=os.path.join(RESULTS_PATH, 'eval_static')) ->
     return context
 
 
-def main(result_path=os.path.join(RESULTS_PATH, 'eval_static')) -> None:
-    sender_log = os.path.join(result_path, 'eval_sender.log')
+def main(result_path=os.path.join(RESULTS_PATH, 'eval_static'), sender_log=None) -> None:
+    if sender_log is None:
+        sender_log = os.path.join(result_path, 'eval_sender.log')
     context = StreamingContext()
     for line in open(sender_log).readlines():
         try:
@@ -995,5 +997,6 @@ def main(result_path=os.path.join(RESULTS_PATH, 'eval_static')) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-r', '--result_path', type=str, default=os.path.join(RESULTS_PATH, 'eval_static'))
+    parser.add_argument('-l', '--sender_log', type=str, default=None)
     args = parser.parse_args()
-    main(result_path=args.result_path)
+    main(result_path=args.result_path, sender_log=args.sender_log)
