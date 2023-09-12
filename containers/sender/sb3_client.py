@@ -43,6 +43,7 @@ class ClientProtocol(asyncio.Protocol):
 
     def reset_receiver(self):
         delay = sample(self.delay)
+        print(f'Reset receiver with delay: {delay} ms', flush=True)
         r = requests.post(f'http://{self.receiver_ip}:{WEBRTC_RECEIVER_CONTROLLER_PORT}/reset', json={'latency': delay})
         print(f'Reset received: {r.text}, wait for 1s...', flush=True)
         time.sleep(1)
@@ -53,6 +54,7 @@ class ClientProtocol(asyncio.Protocol):
 
     def start_sender(self):
         bw = sample(self.bw)
+        print(f'Start sender with bandwidth: {bw} kbps', flush=True)
         os.system(f"tc qdisc del dev eth0 root 2> /dev/null")
         os.system(f"tc qdisc add dev eth0 root tbf rate {bw}kbit burst 1000kb minburst 1540 latency 250ms")
         ts_str = datetime.now().strftime("%m_%d_%H_%M_%S")

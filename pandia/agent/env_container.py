@@ -310,7 +310,7 @@ class WebRTContainerEnv(gymnasium.Env):
                 sock.bind(('0.0.0.0', port))
                 break
             except OSError as e:
-                print(e)
+                pass
         print(f'Listening on port {port}')
         return sock, port
 
@@ -416,8 +416,8 @@ gymnasium.register('WebRTContainerEnv', entry_point='pandia.agent.env_container:
 
 
 def test():
-    num_envs = 2
-    envs = gymnasium.vector.make("WebRTContainerEnv", num_envs=num_envs)
+    num_envs = 5
+    envs = gymnasium.vector.make("WebRTContainerEnv", num_envs=num_envs, bw=2000)
     envs.reset()
     try:
         while True:
