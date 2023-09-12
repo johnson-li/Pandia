@@ -1,5 +1,5 @@
 ENV_CONFIG = {
-    'action_keys' : list(sorted(['bitrate'])),
+    'action_keys' : list(sorted(['bitrate', 'pacing_rate'])),
     'observation_keys' : list(sorted([
         'frame_encoding_delay', 
         'frame_egress_delay', 'frame_recv_delay', 

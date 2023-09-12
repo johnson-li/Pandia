@@ -733,7 +733,7 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.plot(np.arange(bucks) * duration, data * 8 / duration / 1024, '.b')
     plt.ylabel('Rates (Kbps)')
     plt.plot([d[0] - context.start_ts for d in context.networking.pacing_rate_data], 
-             [d[1] / 1024 for d in context.networking.pacing_rate_data], '.r')
+             [d[1] for d in context.networking.pacing_rate_data], '.r')
     plt.xlabel('Timestamp (s)')
     plt.legend(['Frame encoded bitrate', 'Pacing rate'])
     plt.savefig(os.path.join(output_dir, f'mea-bitrate.{FIG_EXTENSION}'), dpi=DPI)

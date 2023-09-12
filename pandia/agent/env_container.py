@@ -419,11 +419,13 @@ def test():
     num_envs = 5
     envs = gymnasium.vector.make("WebRTContainerEnv", num_envs=num_envs, bw=2000)
     envs.reset()
+    action = Action(ENV_CONFIG['action_keys'])
+    action.bitrate = 1024
+    action.pacing_rate = 2048
+    actions = [action.array()] * num_envs
     try:
         while True:
-            action = Action(ENV_CONFIG['action_keys'])
-            action.bitrate = 1024
-            _, _, terminated, truncated, _ = envs.step([action.array()] * num_envs)
+            _, _, terminated, truncated, _ = envs.step(actions)
             if np.any(terminated) or np.any(truncated):
                 break
     except KeyboardInterrupt:
