@@ -150,7 +150,7 @@ class ObservationThread(threading.Thread):
                 frame.is_key_frame = is_key != 0
                 [mb.on_frame_encoded(frame, ts) for mb in context.monitor_blocks.values()]
             else:
-                log(f'ERROR: frame {frame_id} is not found.')
+                log(f'ERROR: frame {frame_id} is not found, the last one is {context.last_captured_frame_id}')
         elif msg_type == 7:  # RTCP RTT 
             ts, rtt = unpack('QQ', data)
             ts /= 1000
@@ -228,7 +228,7 @@ class ObservationThread(threading.Thread):
             utc /= 1000
             if rtp_id > 0:
                 if rtp_id not in context.packets:
-                    print(f'ERROR: packet {rtp_id} is not found.')
+                    print(f'ERROR: packet {rtp_id} is not found, the last one is {context.last_egress_packet_id}')
                 else:
                     packet: PacketContext = context.packets[rtp_id]
                     packet.payload_type = payload_type
@@ -249,7 +249,7 @@ class WebRTContainerEnv(gymnasium.Env):
                  action_keys=ENV_CONFIG['action_keys'], # Action settings
                  obs_keys=ENV_CONFIG['observation_keys'], # Observation settings
                  monitor_durations=ENV_CONFIG['observation_durations'], # Observation settings
-                 print_step=False, print_period=1,# Logging settings
+                 print_step=True, print_period=2,# Logging settings
                  step_duration=ENV_CONFIG['step_duration'], # RL settings
                  termination_timeout=ENV_CONFIG['termination_timeout'] # Exp settings
                  ) -> None:
@@ -298,6 +298,7 @@ class WebRTContainerEnv(gymnasium.Env):
         self.obs_socket, self.obs_port = self.create_observer()
         self.obs_thread = ObservationThread(self.obs_socket)
         self.obs_thread.start()
+        self.cid = ''
         self.start_containers()
 
     def create_observer(self):
@@ -315,6 +316,7 @@ class WebRTContainerEnv(gymnasium.Env):
 
     def start_containers(self):
         cid = str(uuid.uuid4())[:8]
+        self.cid = cid
         print('cid: ', cid)
         cmd = f'docker run -d --rm --network sb3_net --name sb3_receiver_{cid} --hostname sb3_receiver_{cid} '\
               f'--runtime=nvidia --gpus all '\
@@ -401,7 +403,7 @@ class WebRTContainerEnv(gymnasium.Env):
         if self.print_step:
             if time.time() - self.last_print_ts > self.print_period:
                 self.last_print_ts = time.time()
-                print(f'#{self.step_count}@{int((time.time() - self.start_ts))}s '
+                print(f'[{self.cid}] #{self.step_count}@{int((time.time() - self.start_ts))}s '
                       f'R.w.: {r:.02f}, Act.: {act}Obs.: {self.observation}', flush=True)
         self.step_count += 1
         terminated = self.termination_ts > 0 and self.context.last_ts > self.termination_ts
@@ -413,21 +415,26 @@ tune.register_env('WebRTContainerEnv', lambda config: WebRTContainerEnv(**config
 gymnasium.register('WebRTContainerEnv', entry_point='pandia.agent.env_container:WebRTContainerEnv', nondeterministic=True)
 
 
-if __name__ == '__main__':
-    env = WebRTContainerEnv(print_step=True, duration=60)
-    env.reset()
+def test():
+    num_envs = 2
+    envs = gymnasium.vector.make("WebRTContainerEnv", num_envs=num_envs)
+    envs.reset()
     try:
         while True:
-            action = Action(env.action_keys)
-            action.bitrate = 1000
-            _, _, terminated, truncated, _ = env.step(action.array())
-            if terminated or truncated:
+            action = Action(ENV_CONFIG['action_keys'])
+            action.bitrate = 1024
+            _, _, terminated, truncated, _ = envs.step([action.array()] * num_envs)
+            if np.any(terminated) or np.any(truncated):
                 break
     except KeyboardInterrupt:
         pass
-    env.close()
-    output_dir = os.path.join(RESULTS_PATH, 'env_container')
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    analyze_stream(env.context, output_dir=output_dir)
+    envs.close()
+    # output_dir = os.path.join(RESULTS_PATH, 'env_container')
+    # if not os.path.exists(output_dir):
+    #     os.makedirs(output_dir)
+    # analyze_stream(env.context, output_dir=output_dir)
     exit(0)
+
+
+if __name__ == '__main__':
+    test()
