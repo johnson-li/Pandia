@@ -84,10 +84,11 @@ class Action():
     def array(self) -> np.ndarray:
         boundary = Action.boundary()
         keys = sorted(self.action_keys)
-        return np.array([nml(k, getattr(self, k), boundary[k], log=False) for k in keys])
+        return np.array([nml(k, getattr(self, k), boundary[k], log=False) for k in keys], dtype=np.float32)
 
     @staticmethod
     def from_array(array: np.ndarray, keys) -> 'Action':
+        assert array.dtype == np.float32, f'Invalid action array type: {array.dtype}'
         keys = list(sorted(keys))
         action = Action(keys)
         boundary = Action.boundary()

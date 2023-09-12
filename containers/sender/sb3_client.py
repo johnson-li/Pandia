@@ -5,10 +5,12 @@ import os
 import socket
 import subprocess
 import time
+import numpy as np
 
 import requests
 
 from pandia.agent.action import Action
+from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.utils import sample
 from pandia.constants import WEBRTC_RECEIVER_CONTROLLER_PORT, WEBRTC_SENDER_SB3_PORT
 
@@ -73,8 +75,11 @@ class ClientProtocol(asyncio.Protocol):
             self.start_sender()
         # Send the action
         elif data[0] == 1:
-            print(f'[{time.time() - TS:.02f}] Received action: {data}', flush=True)
-            self.shm.buf[:] = data[1:]
+            data = data[1:]
+            data_str = ''.join('{:02x}'.format(x) for x in data[:16])
+            print(f'[{time.time() - TS:.02f}] Received action: {data_str}', flush=True)
+            assert len(data) == len(self.shm.buf), f'Invalid action size: {len(data)} != {len(self.shm.buf)}'
+            self.shm.buf[:] = data[:]
         else:
             print(f'Unknown command: {data[0]}', flush=True)
 

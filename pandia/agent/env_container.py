@@ -141,14 +141,16 @@ class ObservationThread(threading.Thread):
         elif msg_type == 6:  # Finish encoding
             ts, frame_id, height, frame_size, is_key, qp = unpack('QQQQQQ', data)
             ts /= 1000
-            frame = context.frames[frame_id]
-            frame.encoded_at = ts
-            frame.encoded_shape = (0, height)
-            frame.encoded_size = frame_size
-            frame.qp = qp
-            frame.is_key_frame = is_key != 0
-            [mb.on_frame_encoded(frame, ts) for mb in context.monitor_blocks.values()]
-            # log(f'Frame encoding finished: {frame_id}, ts: {ts}, delay: {ts - frame.captured_at}')
+            if frame_id in context.frames:
+                frame = context.frames[frame_id]
+                frame.encoded_at = ts
+                frame.encoded_shape = (0, height)
+                frame.encoded_size = frame_size
+                frame.qp = qp
+                frame.is_key_frame = is_key != 0
+                [mb.on_frame_encoded(frame, ts) for mb in context.monitor_blocks.values()]
+            else:
+                log(f'ERROR: frame {frame_id} is not found.')
         elif msg_type == 7:  # RTCP RTT 
             ts, rtt = unpack('QQ', data)
             ts /= 1000
@@ -225,13 +227,16 @@ class ObservationThread(threading.Thread):
             ts /= 1000
             utc /= 1000
             if rtp_id > 0:
-                packet: PacketContext = context.packets[rtp_id]
-                packet.payload_type = payload_type
-                packet.size = size
-                packet.sent_at = ts 
-                packet.sent_at_utc = utc
-                context.last_egress_packet_id = max(rtp_id, context.last_egress_packet_id)
-                [mb.on_packet_sent(packet, context.frames.get(packet.frame_id, None), ts) for mb in context.monitor_blocks.values()]
+                if rtp_id not in context.packets:
+                    print(f'ERROR: packet {rtp_id} is not found.')
+                else:
+                    packet: PacketContext = context.packets[rtp_id]
+                    packet.payload_type = payload_type
+                    packet.size = size
+                    packet.sent_at = ts 
+                    packet.sent_at_utc = utc
+                    context.last_egress_packet_id = max(rtp_id, context.last_egress_packet_id)
+                    [mb.on_packet_sent(packet, context.frames.get(packet.frame_id, None), ts) for mb in context.monitor_blocks.values()]
         else:
             log(f'Unknown message type: {data[0]}')
 
@@ -340,9 +345,9 @@ class WebRTContainerEnv(gymnasium.Env):
     def stop_containers(self):
         print('Stopping containers...', flush=True)
         if self.sender_container:
-            os.system(f'docker stop {self.sender_container.id} &')
+            os.system(f'docker stop {self.sender_container.id} > /dev/null &')
         if self.receiver_container:
-            os.system(f'docker stop {self.receiver_container.id} &')
+            os.system(f'docker stop {self.receiver_container.id} > /dev/null &')
 
     def start_webrtc(self):
         print('Starting WebRTC...', flush=True)
@@ -370,8 +375,9 @@ class WebRTContainerEnv(gymnasium.Env):
         act = Action.from_array(action, self.action_keys)
         self.action_history.append(act)
         buf = bytearray(Action.shm_size() + 1)
+        act.write(buf)
+        buf[1:] = buf[:-1]
         buf[0] = 1
-        act.write(buf[1:])
         self.container_socket.send(buf)
         if self.step_count == 0:
             self.start_webrtc()
@@ -408,7 +414,7 @@ gymnasium.register('WebRTContainerEnv', entry_point='pandia.agent.env_container:
 
 
 if __name__ == '__main__':
-    env = WebRTContainerEnv(print_step=True, duration=30)
+    env = WebRTContainerEnv(print_step=True, duration=60)
     env.reset()
     try:
         while True:
