@@ -10,10 +10,11 @@ Architecture
 
 
 Compilation
+===
 
 The compilation is required once the container needs to be updated. Notice that the compilation script requires the WebRTC repo to be already setup locally.
 
-===
+
 ```shell
 ./compile.sh
 ```
