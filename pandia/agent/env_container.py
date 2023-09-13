@@ -301,11 +301,13 @@ class WebRTContainerEnv(gymnasium.Env):
         self.docker_client = docker.from_env()
         self.cid = str(uuid.uuid4())[:8]
         self.control_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-        print(f'Listening on IPC socket {self.ctrl_socket_path()}')
         self.start_containers()
         self.obs_socket = self.create_observer()
         self.obs_thread = ObservationThread(self.obs_socket)
         self.obs_thread.start()
+
+    def log(self, msg):
+        print(f'[{self.cid}, {time.time() - TS:.02f}] {msg}', flush=True)
 
     def obs_socket_path(self):
         return f'/tmp/pandia/sockets/{self.cid}'
@@ -406,8 +408,8 @@ class WebRTContainerEnv(gymnasium.Env):
         if self.print_step:
             if time.time() - self.last_print_ts > self.print_period:
                 self.last_print_ts = time.time()
-                print(f'[{self.cid}] #{self.step_count}@{int((time.time() - self.start_ts))}s '
-                      f'R.w.: {r:.02f}, Act.: {act}Obs.: {self.observation}', flush=True)
+                self.log(f'#{self.step_count}@{int((time.time() - self.start_ts))}s '
+                      f'R.w.: {r:.02f}, Act.: {act}Obs.: {self.observation}')
         self.step_count += 1
         terminated = self.termination_ts > 0 and self.context.last_ts > self.termination_ts
         return self.observation.array(), r, terminated, truncated, {}
