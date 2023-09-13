@@ -59,17 +59,23 @@ class ObservationThread(threading.Thread):
     def run(self) -> None:
         while not self.stop_event.is_set():
             data, addr = self.sock.recvfrom(1024)
-            # print(f'Received {len(data)} bytes from {addr}', flush=True)
-            msg_type = unpack('Q', data[:8])[0]
-            data = data[8:]
+            # print(f'Got {len(data)} bytes from {addr}')
+            if not data:
+                continue
+            msg_size = unpack('Q', data[:8])[0]
+            if msg_size != len(data):
+                log(f'ERROR: msg size {msg_size} != {len(data)}')
+                continue
+            msg_type = unpack('Q', data[8:16])[0]
+            msg = data[16:]
             if msg_type == 0:
                 log(f'WebRTC receiver is started.')
                 continue
             try:
-                self.parse_data(data, msg_type)
+                self.parse_data(msg, msg_type)
             except Exception as e:
-                data_hex = ''.join('{:02x}'.format(x) for x in data)
-                log(f'Msg type: {msg_type}, Error: {e}, Data: {len(data)} bytes')
+                data_hex = ''.join('{:02x}'.format(x) for x in msg)
+                log(f'Msg type: {msg_type}, Error: {e}, Data: {len(msg)} bytes')
 
     def parse_data(self, data, msg_type):
         if self.context is None:
@@ -254,7 +260,6 @@ class WebRTContainerEnv(gymnasium.Env):
                  termination_timeout=ENV_CONFIG['termination_timeout'] # Exp settings
                  ) -> None:
         super().__init__()
-        print(f'Creating WebRTCSb3Env with client_id={client_id}, rank={rank}')
         self.duration = duration
         self.termination_timeout = termination_timeout
         # Source settings
@@ -284,7 +289,6 @@ class WebRTContainerEnv(gymnasium.Env):
         # ENV state
         self.receiver_container: Container
         self.sender_container: Container
-        self.container_socket: socket.socket
         self.termination_ts = 0
         self.action_keys = list(sorted(action_keys))
         self.action_space = Action(action_keys).action_space()
@@ -295,29 +299,29 @@ class WebRTContainerEnv(gymnasium.Env):
         self.start_ts = 0
         self.action_history = ActionHistory()
         self.docker_client = docker.from_env()
-        self.obs_socket, self.obs_port = self.create_observer()
+        self.cid = str(uuid.uuid4())[:8]
+        self.control_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        print(f'Listening on IPC socket {self.ctrl_socket_path()}')
+        self.start_containers()
+        self.obs_socket = self.create_observer()
         self.obs_thread = ObservationThread(self.obs_socket)
         self.obs_thread.start()
-        self.cid = ''
-        self.start_containers()
+
+    def obs_socket_path(self):
+        return f'/tmp/pandia/sockets/{self.cid}'
+
+    def ctrl_socket_path(self):
+        return f'/tmp/pandia/sockets/{self.cid}_ctrl'
 
     def create_observer(self):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        port = 0
-        for i in range(100):
-            try:
-                port = 9990 - i
-                sock.bind(('0.0.0.0', port))
-                break
-            except OSError as e:
-                pass
-        print(f'Listening on port {port}')
-        return sock, port
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        addr = self.obs_socket_path()
+        sock.bind(addr)
+        print(f'Listening on IPC socket {addr}')
+        return sock
 
     def start_containers(self):
-        cid = str(uuid.uuid4())[:8]
-        self.cid = cid
-        print('cid: ', cid)
+        cid = self.cid
         cmd = f'docker run -d --rm --network sb3_net --name sb3_receiver_{cid} --hostname sb3_receiver_{cid} '\
               f'--runtime=nvidia --gpus all '\
               f'--cap-add=NET_ADMIN -e NVIDIA_DRIVER_CAPABILITIES=all '\
@@ -331,18 +335,13 @@ class WebRTContainerEnv(gymnasium.Env):
               f'--cap-add=NET_ADMIN --env NVIDIA_DRIVER_CAPABILITIES=all '\
               f'--runtime=nvidia --gpus all '\
               f'-v /tmp/pandia:/tmp '\
-              f'--env OBS_PORT={self.obs_port} --env OBS_HOST=195.148.124.151 '\
               f'--env RECEIVER_IP={self.receiver_container_ip} '\
               f'--env PRINT_STEP=True -e SENDER_LOG=/tmp/sender.log --env BANDWIDTH=1000-3000 '\
               f'johnson163/pandia_sender python -um sb3_client'
         os.system(cmd)
         print(cmd)
         self.sender_container = self.docker_client.containers.get(f'sb3_sender_{cid}') # type: ignore
-        self.sender_container_ip = self.sender_container.attrs['NetworkSettings']['Networks']['sb3_net']['IPAddress']
-        print(f'Sender container IP: {self.sender_container_ip}, receiver container IP: {self.receiver_container_ip}')
-        self.container_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.container_socket.connect((self.sender_container_ip, WEBRTC_SENDER_SB3_PORT))
-        time.sleep(1)
+        self.control_socket.connect(self.ctrl_socket_path())
 
     def stop_containers(self):
         print('Stopping containers...', flush=True)
@@ -355,7 +354,7 @@ class WebRTContainerEnv(gymnasium.Env):
         print('Starting WebRTC...', flush=True)
         buf = bytearray(1)
         buf[0] = 0  
-        self.container_socket.send(buf)
+        self.control_socket.send(buf)
 
     def reset(self, seed=None, options=None):
         self.context = StreamingContext(monitor_durations=self.monitor_durations)
@@ -370,6 +369,10 @@ class WebRTContainerEnv(gymnasium.Env):
 
     def close(self):
         self.stop_containers()
+        if os.path.exists(self.obs_socket_path()):
+            os.remove(self.obs_socket_path())
+        if os.path.exists(self.ctrl_socket_path()):
+            os.remove(self.ctrl_socket_path())
         self.obs_thread.stop()
 
     def step(self, action: np.ndarray):
@@ -380,7 +383,7 @@ class WebRTContainerEnv(gymnasium.Env):
         act.write(buf)
         buf[1:] = buf[:-1]
         buf[0] = 1
-        self.container_socket.send(buf)
+        self.control_socket.send(buf)
         if self.step_count == 0:
             self.start_webrtc()
 
@@ -418,6 +421,7 @@ gymnasium.register('WebRTContainerEnv', entry_point='pandia.agent.env_container:
 def test():
     num_envs = 5
     envs = gymnasium.vector.make("WebRTContainerEnv", num_envs=num_envs, bw=2000)
+    # envs = gymnasium.make("WebRTContainerEnv", bw=2000)
     envs.reset()
     action = Action(ENV_CONFIG['action_keys'])
     action.bitrate = 1024
@@ -426,6 +430,9 @@ def test():
     try:
         while True:
             _, _, terminated, truncated, _ = envs.step(actions)
+            # _, _, terminated, truncated, _ = envs.step(action.array())
+            # if terminated or truncated:
+            #     break
             if np.any(terminated) or np.any(truncated):
                 break
     except KeyboardInterrupt:

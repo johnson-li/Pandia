@@ -1,5 +1,5 @@
 WebRTContainerEnv:
-  n_envs: 8
+  n_envs: 5
   n_timesteps: !!float 5e5
   policy: 'MlpPolicy'
   ent_coef: 0.0

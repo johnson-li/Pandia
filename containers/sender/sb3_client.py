@@ -5,10 +5,7 @@ import os
 import socket
 import subprocess
 import time
-import numpy as np
-
 import requests
-
 from pandia.agent.action import Action
 from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.utils import sample
@@ -23,7 +20,7 @@ def parse_rangable_int(value):
         return int(value)
 
 
-class ClientProtocol(asyncio.Protocol):
+class ClientProtocol():
     def __init__(self) -> None:
         super().__init__()
         self.shm = shared_memory.SharedMemory(name="pandia", create=True, 
@@ -35,11 +32,7 @@ class ClientProtocol(asyncio.Protocol):
         self.height = os.getenv('WIDTH', 2160)
         self.fps = int(os.getenv('FPS', 30))
         self.receiver_ip = os.getenv('RECEIVER_IP', '127.0.0.1')
-        self.obs_host = os.getenv('OBS_HOST', '127.0.0.1')
-        self.obs_port = os.getenv('OBS_PORT', 9990)
-
-    def connection_made(self, transport) -> None:
-        self.transport = transport
+        self.cid = socket.gethostname().split('_')[-1]
 
     def reset_receiver(self):
         delay = sample(self.delay)
@@ -52,6 +45,9 @@ class ClientProtocol(asyncio.Protocol):
         if self.process_sender and self.process_sender.poll() is None:
             self.process_sender.kill()
 
+    def obs_socket_path(self):
+        return f'/tmp/sockets/{self.cid}'
+
     def start_sender(self):
         bw = sample(self.bw)
         print(f'Start sender with bandwidth: {bw} kbps', flush=True)
@@ -62,7 +58,7 @@ class ClientProtocol(asyncio.Protocol):
         self.process_sender = \
             subprocess.Popen(['/app/peerconnection_client_headless',
                               '--server', self.receiver_ip,
-                              '--obs_port', str(self.obs_port), '--obs_host', self.obs_host,
+                              '--obs_socket', self.obs_socket_path(),
                               '--width', str(self.height), '--fps', str(self.fps),
                               '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/', 
                               '--path', '/app/media'],
@@ -85,19 +81,22 @@ class ClientProtocol(asyncio.Protocol):
         else:
             print(f'Unknown command: {data[0]}', flush=True)
 
+    def ctrl_socket_path(self):
+        return f'/tmp/sockets/{self.cid}_ctrl'
 
-async def main():
-    loop = asyncio.get_running_loop()
-    on_con_lost = loop.create_future()
-    print(f'[{time.time() - TS:.02f}] Listening on {WEBRTC_SENDER_SB3_PORT}...', flush=True)
-    transport, protocol = \
-        await loop.create_datagram_endpoint(lambda: ClientProtocol(), 
-                                            local_addr=("0.0.0.0", WEBRTC_SENDER_SB3_PORT))
-    try:
-        await on_con_lost
-    finally:
-        transport.close()
+
+def main():
+    client = ClientProtocol()
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    ctrl_sock_path = client.ctrl_socket_path()
+    print(f'[{time.time() - TS:.02f}] Connecting to {ctrl_sock_path}...', flush=True)
+    sock.bind(ctrl_sock_path)
+    os.chmod(ctrl_sock_path, 0o777)
+    while True:
+        data, addr = sock.recvfrom(1024)
+        client.datagram_received(data, addr)
+
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()
