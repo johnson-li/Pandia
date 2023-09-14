@@ -54,15 +54,16 @@ class ClientProtocol():
         os.system(f"tc qdisc del dev eth0 root 2> /dev/null")
         os.system(f"tc qdisc add dev eth0 root tbf rate {bw}kbit burst 1000kb minburst 1540 latency 250ms")
         ts_str = datetime.now().strftime("%m_%d_%H_%M_%S")
-        log_file = open(f'/tmp/{ts_str}_{socket.gethostname()}.log', 'w')
+        log_path = f'/tmp/{ts_str}_{socket.gethostname()}.log'
         self.process_sender = \
             subprocess.Popen(['/app/peerconnection_client_headless',
                               '--server', self.receiver_ip,
                               '--obs_socket', self.obs_socket_path(),
                               '--width', str(self.height), '--fps', str(self.fps),
+                              '--logging_path', log_path,
                               '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/', 
                               '--path', '/app/media'],
-                              stdout=log_file, stderr=log_file, shell=False)
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=False)
     
     def datagram_received(self, data: bytes, addr) -> None:
         # Reset the sender

@@ -1,5 +1,23 @@
 ENV_CONFIG = {
-    'action_keys' : list(sorted(['bitrate', 'pacing_rate'])),
+    'action_keys' : list(sorted(['bitrate'])),
+    'action_static_settings' : {
+        'bitrate': 1024,
+        'pacing_rate': 102400, 
+        'fps': 30,
+        'fec_rate_key': 0,
+        'fec_rate_delta': 0,
+        'padding_rate': 0,
+        'resolution': 1080,
+    },
+    'action_invalid_value': {
+        'bitrate': 0,
+        'pacing_rate': 0,
+        'fps': 0,
+        'fec_rate_key': 256,
+        'fec_rate_delta': 256,
+        'padding_rate': 0,  # TODO: 0 is still valid 
+        'resolution': 0,
+    },
     'observation_keys' : list(sorted([
         'frame_encoding_delay', 
         'frame_egress_delay', 'frame_recv_delay', 

@@ -277,7 +277,7 @@ class WebRTContainerEnv(gymnasium.Env):
         self.logging_buf = []
         # RL settings
         self.step_duration = step_duration
-        self.init_timeout = 30
+        self.init_timeout = 30000
         self.hisory_size = 1
         # RL state
         self.step_count = 0
@@ -343,6 +343,7 @@ class WebRTContainerEnv(gymnasium.Env):
         os.system(cmd)
         print(cmd)
         self.sender_container = self.docker_client.containers.get(f'sb3_sender_{cid}') # type: ignore
+        time.sleep(1)
         self.control_socket.connect(self.ctrl_socket_path())
 
     def stop_containers(self):
@@ -420,23 +421,43 @@ tune.register_env('WebRTContainerEnv', lambda config: WebRTContainerEnv(**config
 gymnasium.register('WebRTContainerEnv', entry_point='pandia.agent.env_container:WebRTContainerEnv', nondeterministic=True)
 
 
+def cleanup_tmp_folder():
+    path = '/tmp/pandia'
+    for f in os.listdir(path):
+        f = os.path.join(path, f)
+        if os.path.isfile(f):
+            os.remove(f)
+        elif os.path.isdir(f):
+            for ff in os.listdir(f):
+                ff = os.path.join(f, ff)
+                os.remove(os.path.join(f, ff))
+
+
 def test():
-    num_envs = 5
-    envs = gymnasium.vector.make("WebRTContainerEnv", num_envs=num_envs, bw=2000)
-    # envs = gymnasium.make("WebRTContainerEnv", bw=2000)
-    envs.reset()
+    cleanup_tmp_folder()
+    num_envs = 8
+    single = False
+    if single:
+        envs = gymnasium.make("WebRTContainerEnv", bw=2000)
+    else:
+        envs = gymnasium.vector.make("WebRTContainerEnv", num_envs=num_envs, bw=2000, duration=30)
     action = Action(ENV_CONFIG['action_keys'])
     action.bitrate = 1024
     action.pacing_rate = 2048
     actions = [action.array()] * num_envs
+    episodes = 10
     try:
-        while True:
-            _, _, terminated, truncated, _ = envs.step(actions)
-            # _, _, terminated, truncated, _ = envs.step(action.array())
-            # if terminated or truncated:
-            #     break
-            if np.any(terminated) or np.any(truncated):
-                break
+        for _ in range(episodes):
+            envs.reset()
+            while True:
+                if single:
+                    _, _, terminated, truncated, _ = envs.step(action.array())
+                    if terminated or truncated:
+                        break
+                else:
+                    _, _, terminated, truncated, _ = envs.step(actions)
+                    if np.any(terminated) or np.any(truncated):
+                        break
     except KeyboardInterrupt:
         pass
     envs.close()
@@ -447,5 +468,14 @@ def test():
     exit(0)
 
 
+def test0():
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    addr = "/tmp/pandia/sockets/a971a2e2_ctrl"
+    sock.connect(addr)
+    buf = bytearray(1)
+    buf[0] = 0  
+    sock.send(buf)
+
 if __name__ == '__main__':
     test()
+    # test0()
