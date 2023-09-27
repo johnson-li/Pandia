@@ -789,7 +789,7 @@ def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     plt.ylabel('Packet transmission delay (ms)')
     if y:
         plt.ylim([min(y), max(y)])
-    plt.ylim([0, 10])
+    # plt.ylim([0, 10])
     plt.savefig(os.path.join(output_dir, f'mea-delay-packet-biased.{FIG_EXTENSION}'), dpi=DPI)
 
     plt.close()
@@ -985,7 +985,7 @@ def main(result_path=os.path.join(RESULTS_PATH, 'eval_static'), sender_log=None)
     if sender_log is None:
         sender_log = os.path.join(result_path, 'eval_sender.log')
     context = StreamingContext()
-    for line in open(sender_log).readlines():
+    for line in open(sender_log).readlines()[:-1]:
         try:
             parse_line(line, context)
         except Exception as e:

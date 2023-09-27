@@ -41,7 +41,9 @@ def setup_containers():
     try:
         STUN = client.containers.get('sb3_stun') # type: ignore
     except Exception: # type: ignore
-        os.system(f'docker run -d --rm --network sb3_net --name sb3_stun ich777/stun-turn-server')
+        os.system(f'docker run -d --rm --network sb3_net -p 5349:5349 -p 5349:5349/udp '
+                  f'-p 3478:3478 -p 3478:3478/udp '
+                  f'--name sb3_stun ich777/stun-turn-server')
         STUN = client.containers.get('sb3_stun') # type: ignore
 
 
@@ -477,5 +479,6 @@ def test0():
     sock.send(buf)
 
 if __name__ == '__main__':
-    test()
+    # test()
     # test0()
+    pass

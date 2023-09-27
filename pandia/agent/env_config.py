@@ -35,10 +35,10 @@ ENV_CONFIG = {
     'history_size' : 1,
     'bandwidth_range' : [1024, 3 * 1024],  # in kbps
     'bitrate_range': [300, 3 * 1024],  # in kbps
-    'delay_range': [10, 10],  # in ms
+    'delay_range': [0, 0],  # in ms
     'loss_range': [0, 0],
     'step_duration': .01, # in s
-    'duration': 60, # in s
+    'duration': 30, # in s
     'width': 2160, # in px
     'fps': 30,
     'termination_timeout': 1, # in s

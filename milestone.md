@@ -3,9 +3,10 @@ Milestone
 
 Track the development of new features
 
+
 ### 12th Sep
 - [x] The sb3 container implementation suffers from packet loss due to the use of UDP. Change to IPC socket.
-- [ ] The TC traffic shapping is observed of high RTT variance when multiple containers are running. Implement network shaping in webrtc to solve this problem.
+- [x] The TC traffic shapping is observed of high RTT variance when multiple containers are running. Utilize the network emulation framework in WebRTC to solve this problem. WebRTC's simulation frameword is of high delay, abandoning it.
 
 ### 6th Sep
 - [ ] Make the other control parameters constant to stablize the training.

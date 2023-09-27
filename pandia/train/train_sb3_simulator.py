@@ -1,19 +1,18 @@
 import argparse
+import numpy as np
 import os
-from pandia.agent.env_container import setup_containers
+import torch as th
+from pandia import HYPERPARAMS_PATH
+from pandia.agent.env_container import WebRTContainerEnv
 from rl_zoo3.exp_manager import ExperimentManager
 from rl_zoo3.utils import ALGOS, StoreDict
 from stable_baselines3.common.utils import set_random_seed
-import torch as th
-import numpy as np
-from pandia import HYPERPARAMS_PATH
-from pandia.agent.env_client import WebRTCEnv0
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--algo", help="RL Algorithm", default="ppo", type=str, required=False, choices=list(ALGOS.keys()))
-    parser.add_argument("-tb", "--tensorboard-log", help="Tensorboard log dir", default="tensorboard", type=str)
+    parser.add_argument("-tb", "--tensorboard-log", help="Tensorboard log dir", default=os.path.expanduser("~/sb3_tensorboard"), type=str)
     parser.add_argument("-i", "--trained-agent", help="Path to a pretrained agent to continue training", default="", type=str)
     parser.add_argument(
         "--truncate-last-trajectory",
@@ -44,7 +43,7 @@ def parse_args():
     parser.add_argument(
         "--save-replay-buffer", help="Save the replay buffer too (when applicable)", action="store_true", default=False
     )
-    parser.add_argument("-f", "--log-folder", help="Log folder", type=str, default="logs")
+    parser.add_argument("-f", "--log-folder", help="Log folder", type=str, default=os.path.expanduser("~/sb3_logs"))
     parser.add_argument("--seed", help="Random generator seed", type=int, default=-1)
     parser.add_argument("--vec-env", help="VecEnv type", type=str, default="subproc", choices=["dummy", "subproc"])
     parser.add_argument("--device", help="PyTorch device to be use (ex: cpu, cuda...)", default="auto", type=str)
@@ -122,7 +121,6 @@ def parse_args():
         help="Custom yaml file or python package from which the hyperparameters will be loaded."
         "We expect that python packages contain a dictionary called 'hyperparams' which contains a key for each environment.",
     )
-    parser.add_argument("-uuid", "--uuid", action="store_true", default=False, help="Ensure that the run has a unique ID")
     parser.add_argument(
         "--track",
         action="store_true",
@@ -160,7 +158,8 @@ def main():
             args.trained_agent
         ), "The trained_agent must be a valid path to a .zip file"
 
-    setup_containers()
+    print(f"Seed: {args.seed}")
+
     exp_manager = ExperimentManager(
         args,
         args.algo,
@@ -207,8 +206,6 @@ def main():
             exp_manager.save_trained_model(model)
     else:
         exp_manager.hyperparameters_optimization()
-
-
 
 
 if __name__ == "__main__":
