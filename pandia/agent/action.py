@@ -62,27 +62,36 @@ class Action():
 
 
     def write(self, shm) -> None:
+        if type(shm) == bytearray:
+            buf = shm
+        else:
+            buf = shm.buf
+
         def write_int(value, offset):
             if isinstance(value, np.ndarray):
                 value = value[0]
             value = int(value)
             bytes = value.to_bytes(4, byteorder='little')
-            shm.buf[offset * 4:offset * 4 + 4] = bytes
-        write_int(self.bitrate, 0) if not self.fake and 'bitrate' in self.action_keys else write_int(0, 0)
-        write_int(self.pacing_rate, 1) if not self.fake and 'pacing_rate' in self.action_keys else write_int(0, 1)
-        write_int(self.fps, 2) if not self.fake and 'fps' in self.action_keys else write_int(0, 2)
-        write_int(self.fec_rate_key, 3) if not self.fake and 'fec_rate_key' in self.action_keys else write_int(256, 3)
-        write_int(self.fec_rate_delta, 4) if not self.fake and 'fec_rate_delta' in self.action_keys else write_int(256, 4)
-        write_int(self.padding_rate, 5) if not self.fake and 'padding_rate' in self.action_keys else write_int(0, 5)
-        write_int(self.resolution, 6) if not self.fake and 'resolution' in self.action_keys else write_int(0, 6)
+            buf[offset * 4:offset * 4 + 4] = bytes
+        
+        parameters = ['bitrate', 'pacing_rate', 'fps', 'fec_rate_key', 
+                      'fec_rate_delta', 'padding_rate', 'resolution']
+        for i, p in enumerate(parameters):
+            if self.fake:
+                write_int(ENV_CONFIG['action_invalid_value'][p], i)
+            elif p in self.action_keys:
+                write_int(getattr(self, p), i)
+            else:
+                write_int(ENV_CONFIG['action_static_settings'][p], i)
 
     def array(self) -> np.ndarray:
         boundary = Action.boundary()
         keys = sorted(self.action_keys)
-        return np.array([nml(k, getattr(self, k), boundary[k], log=False) for k in keys])
+        return np.array([nml(k, getattr(self, k), boundary[k], log=False) for k in keys], dtype=np.float32)
 
     @staticmethod
     def from_array(array: np.ndarray, keys) -> 'Action':
+        assert array.dtype == np.float32, f'Invalid action array type: {array.dtype}'
         keys = list(sorted(keys))
         action = Action(keys)
         boundary = Action.boundary()

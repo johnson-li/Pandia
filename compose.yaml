@@ -9,7 +9,7 @@ services:
   sender_base:
     build: containers/sender_base
     image: johnson163/pandia_sender_base
-  receiver: &receiver1
+  receiver1: &receiver1
     build: containers/receiver
     image: johnson163/pandia_receiver
     hostname: receiver1
@@ -19,7 +19,6 @@ services:
       - NET_ADMIN
     environment:
       - NVIDIA_DRIVER_CAPABILITIES=all
-      - WEBRTC_CONNECT="stun:stun:3478"
     restart: always
     expose:
       - "9998-9999:9998-9999"
@@ -31,21 +30,21 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-  sender: &sender1
+  sender1: &sender1
     build: containers/sender
     image: johnson163/pandia_sender
     hostname: sender1
-    # volumes:
-    #   - /tmp/pandia:/tmp
+    volumes:
+      - /tmp/pandia:/tmp
     depends_on:
       - stun
-      - receiver
+      - receiver1
       - sender_base
     cap_add:
       - NET_ADMIN
     environment:
       - NVIDIA_DRIVER_CAPABILITIES=all
-      - RL_SERVER=195.148.127.234
+      - RL_SERVER=195.148.124.151
       - PRINT_STEP=True
       # - PRINT_SENDER_LOG=True
       - SENDER_LOG=/tmp/sender.log

@@ -10,6 +10,7 @@ import time
 import gymnasium as gym
 from typing import List, Optional, TextIO, Union
 from pandia.agent.env_config import ENV_CONFIG
+from pandia.agent.reward import reward
 from pandia.constants import K, M
 import numpy as np
 from pandia import BIN_PATH, SCRIPTS_PATH
@@ -203,31 +204,6 @@ class WebRTCEnv0(gym.Env):
             self.stop_event.set()
             self.reading_thread.join()
 
-    @staticmethod
-    def reward(context: StreamingContext, terminated=False):
-        monitor_durations = list(sorted(context.monitor_blocks.keys()))
-        mb = context.monitor_blocks[monitor_durations[0]]
-        penalty = 0
-        # fps_score = mb.frame_fps / 30
-        fps_score = 0
-        delay_score = 0
-        for delay in [mb.frame_decoded_delay, mb.frame_egress_delay]:
-            delay *= 1000
-            delay_score += - delay ** 2 / 100 ** 2
-        quality_score = mb.frame_bitrate / 1024 / 1024
-        # res_score = mb.frame_height / 2160
-        res_score = 0
-        # if penalty == 0:
-        #     self.termination_ts = 0
-        # if penalty > 0 and self.termination_ts == 0:
-        #     # If unexpected situation lasts for 5s, terminate
-        #     self.termination_ts = self.context.last_ts + self.termination_timeout
-        # if mb.frame_fps < 1:
-        #     penalty = 100
-        score = res_score + quality_score + fps_score + delay_score
-        score = max(-10, score)
-        return score
-
     def reset(self, seed=None, options=None):
         self.stop_webrtc()
         if self.sender_log and os.path.exists(self.sender_log):
@@ -290,16 +266,16 @@ class WebRTCEnv0(gym.Env):
         self.observation.append(self.context.monitor_blocks, act)
         truncated = self.process_sender.poll() is not None or \
             time.time() - self.start_ts > self.duration
-        reward = self.reward(self.context)
+        r = reward(self.context)
         if not self.is_safe():
             self.penalty_timeout = 1
 
         if self.print_step:
             print(f'[{self.client_id}] #{self.step_count}@{int((time.time() - self.start_ts))}s '
-                f'R.w.: {reward:.02f}, Act.: {act}Obs.: {self.observation}')
+                f'R.w.: {r:.02f}, Act.: {act}Obs.: {self.observation}')
         self.step_count += 1
         terminated = self.termination_ts > 0 and self.context.last_ts > self.termination_ts
-        return self.observation.array(), reward, terminated, truncated, {}
+        return self.observation.array(), r, terminated, truncated, {}
 
 
 def run_wrapper(client_id=1, print_step=False):

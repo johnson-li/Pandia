@@ -1,16 +1,12 @@
-# Note: the running of train_sb3.py requires modification of exp_manager.py and env_util.py in sb3 zoo.
-# Because WebRTCEnv0 requires all instances to have dedicated client_id.
-
-
 import argparse
+import numpy as np
 import os
+import torch as th
+from pandia import HYPERPARAMS_PATH
+from pandia.agent.env_container import WebRTContainerEnv
 from rl_zoo3.exp_manager import ExperimentManager
 from rl_zoo3.utils import ALGOS, StoreDict
 from stable_baselines3.common.utils import set_random_seed
-import torch as th
-import numpy as np
-from pandia import HYPERPARAMS_PATH
-from pandia.agent.env_container import WebRTContainerEnv
 
 
 def parse_args():

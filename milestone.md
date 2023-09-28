@@ -3,11 +3,20 @@ Milestone
 
 Track the development of new features
 
+
+### 12th Sep
+- [x] The sb3 container implementation suffers from packet loss due to the use of UDP. Change to IPC socket.
+- [x] The TC traffic shapping is observed of high RTT variance when multiple containers are running. Utilize the network emulation framework in WebRTC to solve this problem. WebRTC's simulation frameword is of high delay, abandoning it.
+
+### 6th Sep
+- [ ] Make the other control parameters constant to stablize the training.
+- [x] Implement sb3 with container.
+
 ### 3rd Seq 
-- [ ] Migrate to docker and enable large-scale training.
+- [x] Migrate to docker and enable large-scale training.
 
 ### 27th Aug
-- [ ] Improve the training FPS.
+- [x] Improve the training FPS.
 - [x] TC-based network shaping is not working propertly. The buffer is too large. The problem is that netem causes abnormal delay when the buffer is built. So, we should avoid using netem and tbf together. The problem is also related to netns.
 - [x] Reduce the CPU utilization of WebRTC (current value is 200%). The problem is solved by using inf. timeout in epoll_wait.
 
