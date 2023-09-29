@@ -9,6 +9,16 @@ services:
   sender_base:
     build: containers/sender_base
     image: johnson163/pandia_sender_base
+  emulator:
+    build: containers/emulator
+    image: johnson163/pandia_emulator
+    depends_on:
+      - sender_base
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    restart: always
   receiver1: &receiver1
     build: containers/receiver
     image: johnson163/pandia_receiver

@@ -3,6 +3,8 @@ Milestone
 
 Track the development of new features
 
+### 27th Sep
+- [ ] Implement the container env with a single program for both sender and receiver. It turns out that tc is quite reliable as long that we set the burst to the MTU, e.g., 1540 bytes.
 
 ### 12th Sep
 - [x] The sb3 container implementation suffers from packet loss due to the use of UDP. Change to IPC socket.

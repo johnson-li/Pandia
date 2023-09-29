@@ -58,7 +58,9 @@ t=Release
 # t=Default
 cp out/${t}/peerconnection_client_headless ~/Workspace/Pandia/containers/receiver
 cp out/${t}/peerconnection_client_headless ~/Workspace/Pandia/containers/sender
+cp out/${t}/simulation ~/Workspace/Pandia/containers/emulator
 cp -r ~/Workspace/Pandia/pandia ~/Workspace/Pandia/containers/sender
+cp -r ~/Workspace/Pandia/pandia ~/Workspace/Pandia/containers/emulator
 
 cd ~/Workspace/Pandia
 docker compose build
