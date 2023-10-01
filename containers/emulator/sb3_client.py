@@ -50,15 +50,13 @@ class ClientProtocol():
         else:
             log_file = subprocess.DEVNULL
         self.process = \
-            subprocess.Popen(['/app/simulation',
+            subprocess.Popen(['/app/simulation_Release',
                               '--obs_socket', self.obs_socket_path,
                               '--resolution', str(self.height), '--fps', str(self.fps),
                               '--logging_path', self.logging_path,
                               '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/', 
                               '--path', '/app/media'],
-                            #   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
-                              stdout=log_file, stderr=log_file,
-                              shell=False)
+                              stdout=log_file, stderr=log_file, shell=False)
     
     def datagram_received(self, data: bytes, addr) -> None:
         # Kill the simulation 

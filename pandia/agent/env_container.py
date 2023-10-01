@@ -203,33 +203,22 @@ class ObservationThread(threading.Thread):
             context.networking.pacing_rate_data.append([ts, pacing_rate, padding_rate])
             [mb.on_pacing_rate_set(ts, pacing_rate) for mb in context.monitor_blocks.values()]
         elif msg_type == 12:  # RTCP feedback
-            ts, count = unpack('QQ', data[:16])
-            ts /= 1000
-            data = data[16:]
-            size = 64
-            seq_nums = unpack(f'{size}H', data[:size * 2])[:count]
-            data = data[size * 2:]
-            losts = unpack(f'{size}B', data[:size])[:count]
-            data = data[size:]
-            ts_list = unpack(f'{size}Q', data)[:count]
-            
-            pkt_pre = None
-            for rtp_id, lost, received_at in zip(seq_nums, losts, ts_list):
-                # The recv time is wrapped by kTimeWrapPeriod.
-                # The fixed value 1570 should be calculated according to the current time.
-                offset = int(time.time() * 1000 / kTimeWrapPeriod) - 1
-                received_at = (int(received_at) + offset * kTimeWrapPeriod) / 1000
-                rtp_id = int(rtp_id)
-                if rtp_id in context.packets:
-                    packet = context.packets[rtp_id]
-                    packet.received_at_utc = received_at
-                    packet.received = lost != 1
-                    packet.acked_at = ts
-                    context.last_acked_packet_id = \
-                        max(rtp_id, context.last_acked_packet_id)
-                    [mb.on_packet_acked(packet, pkt_pre, ts) for mb in context.monitor_blocks.values()]
-                    if packet.received:
-                        pkt_pre = packet
+            ts, rtp_id, lost, received_at = unpack('QQQQ', data)
+            # The recv time is wrapped by kTimeWrapPeriod.
+            # The fixed value 1570 should be calculated according to the current time.
+            offset = int(time.time() * 1000 / kTimeWrapPeriod) - 1
+            received_at = (int(received_at) + offset * kTimeWrapPeriod) / 1000
+            rtp_id = int(rtp_id)
+            if rtp_id in context.packets:
+                packet = context.packets[rtp_id]
+                packet.received_at_utc = received_at
+                packet.received = lost != 1
+                packet.acked_at = ts
+                context.last_acked_packet_id = \
+                    max(rtp_id, context.last_acked_packet_id)
+                [mb.on_packet_acked(packet, ts) for mb in context.monitor_blocks.values()]
+                if packet.received:
+                    pkt_pre = packet
         elif msg_type == 13:  # Packet sent
             ts, rtp_id, payload_type, size, utc = unpack('QqQQQ', data)
             ts /= 1000

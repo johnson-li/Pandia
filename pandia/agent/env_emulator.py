@@ -219,22 +219,29 @@ gymnasium.register('WebRTCEmulatorEnv', entry_point='pandia.agent.env_emulator:W
 
 
 def test():
-    env = gymnasium.make("WebRTCEmulatorEnv", bw=2000, delay=5, duration=30,
-                         logging_path='/tmp/pandia.log', sb3_logging_path='/tmp/sb3.log')
+    num_envs = 3
+    episodes = 1
+    duration = 30
+
+    if num_envs == 1:
+        envs = gymnasium.make("WebRTCEmulatorEnv", bw=2000, delay=5, duration=duration,
+                              logging_path='/tmp/pandia.log', sb3_logging_path='/tmp/sb3.log')
+    else:
+        envs = gymnasium.vector.make("WebRTCEmulatorEnv", num_envs=num_envs, bw=2000, duration=30)
     action = Action(ENV_CONFIG['action_keys'])
     action.bitrate = 3000 
     action.pacing_rate = 2048000
-    episodes = 1
+    actions = [action.array()] * num_envs if num_envs > 1 else action.array()
     try:
         for _ in range(episodes):
-            env.reset()
+            envs.reset()
             while True:
-                _, _, terminated, truncated, _ = env.step(action.array())
-                if terminated or truncated:
+                _, _, terminated, truncated, _ = envs.step(actions)
+                if np.any(terminated) or np.any(truncated):
                     break
     except KeyboardInterrupt:
         pass
-    env.close()
+    envs.close()
 
 
 if __name__ == '__main__':

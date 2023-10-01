@@ -266,6 +266,7 @@ class MonitorBlock(object):
         self.pkts_trans_delay_data = MonitorBlockData(lambda p: p.sent_at, lambda p: p.recv_delay(self.utc_offset), duration=duration)
         self.pkts_lost_count = MonitorBlockData(lambda p: p.acked_at, lambda p: 1 if not p.received else 0, duration=duration)
         self.pkts_delay_interval_data = MonitorBlockData(lambda s: s[0], lambda s: s[1], duration=duration)
+        self.last_acked_pkt = None
         # Setting statistics
         self.pacing_rate_data = MonitorBlockData(lambda p: p[0], lambda p: p[1], duration=duration)
         self.bitrate_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.bitrate, duration=duration)
@@ -366,7 +367,7 @@ class MonitorBlock(object):
         if packet.last_packet_in_frame and frame:
             self.frame_egress_delay_data.append(frame, ts)
 
-    def on_packet_acked(self, packet: PacketContext, packet_pre: Optional[PacketContext], ts: float):
+    def on_packet_acked(self, packet: PacketContext, ts: float):
         if packet.received:
             # print(f'Packet {packet.rtp_id} acked of {packet.size} bytes, ts: {ts}')
             self.pkts_acked_size.append(packet, ts)
@@ -375,10 +376,11 @@ class MonitorBlock(object):
             self.pkts_trans_delay_data.append(packet, ts)
         if packet.received is not None:
             self.pkts_lost_count.append(packet, ts)
-        if packet_pre:
+        if self.last_acked_pkt is not None:
             self.pkts_delay_interval_data\
-                .append((ts, (packet.received_at_utc - packet_pre.received_at_utc) - 
-                         (packet.sent_at - packet_pre.sent_at)), ts)
+                .append((ts, (packet.received_at_utc - self.last_acked_pkt.received_at_utc) - 
+                         (packet.sent_at - self.last_acked_pkt.sent_at)), ts)
+        self.last_acked_pkt = packet
 
     def on_frame_added(self, frame: FrameContext, ts: float):
         pass

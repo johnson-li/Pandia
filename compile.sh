@@ -54,13 +54,14 @@ gn gen out/Release --args='is_debug=false rtc_use_h264=true ffmpeg_branding="Chr
 ninja -C out/Default -j$(nproc) peerconnection_client_headless simulation
 ninja -C out/Release -j$(nproc) peerconnection_client_headless simulation
 
-t=Release
-# t=Default
-cp out/${t}/peerconnection_client_headless ~/Workspace/Pandia/containers/receiver
-cp out/${t}/peerconnection_client_headless ~/Workspace/Pandia/containers/sender
-cp out/${t}/simulation ~/Workspace/Pandia/containers/emulator
-cp -r ~/Workspace/Pandia/pandia ~/Workspace/Pandia/containers/sender
-cp -r ~/Workspace/Pandia/pandia ~/Workspace/Pandia/containers/emulator
+for t in 'Release' 'Default'
+do
+    cp out/${t}/peerconnection_client_headless ~/Workspace/Pandia/containers/receiver/peerconnection_client_headless_${t}
+    cp out/${t}/peerconnection_client_headless ~/Workspace/Pandia/containers/sender/peerconnection_client_headless_${t}
+    cp out/${t}/simulation ~/Workspace/Pandia/containers/emulator/simulation_${t}
+    cp -r ~/Workspace/Pandia/pandia ~/Workspace/Pandia/containers/sender
+    cp -r ~/Workspace/Pandia/pandia ~/Workspace/Pandia/containers/emulator
+done
 
 cd ~/Workspace/Pandia
 docker compose build

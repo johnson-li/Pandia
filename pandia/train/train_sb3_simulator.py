@@ -163,7 +163,7 @@ def main():
     exp_manager = ExperimentManager(
         args,
         args.algo,
-        "WebRTContainerEnv",
+        "WebRTCEmulatorEnv",
         args.log_folder,
         args.tensorboard_log,
         args.n_timesteps,
