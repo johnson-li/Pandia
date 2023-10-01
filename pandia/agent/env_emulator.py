@@ -219,9 +219,9 @@ gymnasium.register('WebRTCEmulatorEnv', entry_point='pandia.agent.env_emulator:W
 
 
 def test():
-    num_envs = 3
+    num_envs = 1
     episodes = 1
-    duration = 30
+    duration = 300000
 
     if num_envs == 1:
         envs = gymnasium.make("WebRTCEmulatorEnv", bw=2000, delay=5, duration=duration,
@@ -229,7 +229,7 @@ def test():
     else:
         envs = gymnasium.vector.make("WebRTCEmulatorEnv", num_envs=num_envs, bw=2000, duration=30)
     action = Action(ENV_CONFIG['action_keys'])
-    action.bitrate = 3000 
+    action.bitrate = 1000 
     action.pacing_rate = 2048000
     actions = [action.array()] * num_envs if num_envs > 1 else action.array()
     try:

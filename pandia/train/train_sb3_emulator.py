@@ -3,7 +3,7 @@ import numpy as np
 import os
 import torch as th
 from pandia import HYPERPARAMS_PATH
-from pandia.agent.env_container import WebRTContainerEnv
+from pandia.agent.env_emulator import WebRTCEmulatorEnv
 from rl_zoo3.exp_manager import ExperimentManager
 from rl_zoo3.utils import ALGOS, StoreDict
 from stable_baselines3.common.utils import set_random_seed

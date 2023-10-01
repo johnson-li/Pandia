@@ -54,7 +54,7 @@ class ClientProtocol():
                               '--obs_socket', self.obs_socket_path,
                               '--resolution', str(self.height), '--fps', str(self.fps),
                               '--logging_path', self.logging_path,
-                              '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/', 
+                              '--force_fieldtrials=WebRTC-FlexFEC-03-Advertised/Enabled/WebRTC-FlexFEC-03/Enabled/WebRTC-FrameDropper/Disabled', 
                               '--path', '/app/media'],
                               stdout=log_file, stderr=log_file, shell=False)
     
