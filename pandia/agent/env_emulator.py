@@ -1,7 +1,6 @@
-from multiprocessing import shared_memory
+import json
 import os
 import socket
-import subprocess
 import docker
 import time
 import uuid
@@ -15,6 +14,7 @@ from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.env_container import ObservationThread
 from pandia.agent.observation import Observation
 from pandia.agent.reward import reward
+from pandia.agent.utils import sample
 from pandia.log_analyzer_sender import StreamingContext
 from ray import tune
 from typing import Optional
@@ -28,7 +28,8 @@ class WebRTCEmulatorEnv(gymnasium.Env):
                  action_keys=ENV_CONFIG['action_keys'], # Action settings
                  obs_keys=ENV_CONFIG['observation_keys'], # Observation settings
                  monitor_durations=ENV_CONFIG['observation_durations'], # Observation settings
-                 print_step=True, print_period=2, log_path=None,# Logging settings
+                 print_step=True, print_period=2, logging_path=None, # Logging settings
+                 sb3_logging_path=None, enable_own_logging=False, # Logging settings
                  step_duration=ENV_CONFIG['step_duration'], # RL settings
                  termination_timeout=ENV_CONFIG['termination_timeout'] # Exp settings
                  ) -> None:
@@ -48,7 +49,11 @@ class WebRTCEmulatorEnv(gymnasium.Env):
         # Logging settings
         self.print_step = print_step
         self.print_period = print_period
-        self.log_path = log_path
+        self.logging_path = logging_path
+        self.sb3_logging_path = sb3_logging_path
+        if enable_own_logging:
+            self.logging_path = f'/tmp/pandia_{self.uuid}.log'
+            self.sb3_logging_path = f'/tmp/sb3_{self.uuid}.log'
         # RL settings
         self.step_duration = step_duration
         self.init_timeout = 10
@@ -85,14 +90,23 @@ class WebRTCEmulatorEnv(gymnasium.Env):
               f'-v /tmp:/tmp '\
               f'--env PRINT_STEP=True -e SENDER_LOG=/tmp/sender.log --env BANDWIDTH=1000-3000 '\
               f'--env OBS_SOCKET_PATH={self.obs_socket_path} '\
-              f'--env LOGING_PATH={self.log_path} '\
+              f'--env LOGGING_PATH={self.logging_path} '\
+              f'--env SB3_LOGGING_PATH={self.sb3_logging_path} '\
               f'--env CTRL_SOCKET_PATH={self.ctrl_socket_path} '\
               f'johnson163/pandia_emulator python -um sb3_client'
         print(cmd)
         os.system(cmd)
         self.container = self.docker_client.containers.get(self.container_name) # type: ignore
-        time.sleep(1)
-        self.control_socket.connect(self.ctrl_socket_path)
+        ts = time.time()
+        while time.time() - ts < 3:
+            try:
+                self.control_socket.connect(self.ctrl_socket_path)
+                break
+            except FileNotFoundError:
+                time.sleep(0.1)
+        if time.time() - ts > 3:
+            raise Exception(f'Cannot connect to {self.ctrl_socket_path}')
+
 
     def stop_container(self):
         if self.container:
@@ -117,10 +131,20 @@ class WebRTCEmulatorEnv(gymnasium.Env):
     def log(self, msg):
         print(f'[{self.uuid}, {time.time() - self.start_ts:.02f}] {msg}', flush=True)
 
+    def sample_net_params(self):
+        return {
+            'bw': sample(self.bw0),
+            'delay': sample(self.delay0),
+            'loss': sample(self.loss0),
+        }
+
+
     def start_webrtc(self):
-        print('Starting WebRTC...', flush=True)
+        config = self.sample_net_params()
+        print(f'Starting WebRTC, {config}', flush=True)
         buf = bytearray(1)
-        buf[0] = 2  
+        buf[0] = 2
+        buf += json.dumps(config).encode()
         self.control_socket.send(buf)
 
     def stop_webrtc(self):
@@ -190,15 +214,15 @@ class WebRTCEmulatorEnv(gymnasium.Env):
 
 
 tune.register_env('WebRTCEmulatorEnv', lambda config: WebRTCEmulatorEnv(**config))
-gymnasium.register('WebRTCEmulatorEnv', entry_point='pandia.agent.env_emulator:WebRTCEmulatorEnv', nondeterministic=True)
+gymnasium.register('WebRTCEmulatorEnv', entry_point='pandia.agent.env_emulator:WebRTCEmulatorEnv', 
+                   nondeterministic=True)
 
 
 def test():
-    env = gymnasium.make("WebRTCEmulatorEnv", 
-                         bw=1024 * 1000, delay=0,
-                         log_path='/tmp/pandia.log')
+    env = gymnasium.make("WebRTCEmulatorEnv", bw=2000, delay=5, duration=30,
+                         logging_path='/tmp/pandia.log', sb3_logging_path='/tmp/sb3.log')
     action = Action(ENV_CONFIG['action_keys'])
-    action.bitrate = 1024
+    action.bitrate = 3000 
     action.pacing_rate = 2048000
     episodes = 1
     try:

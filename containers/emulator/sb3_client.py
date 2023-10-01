@@ -1,3 +1,4 @@
+import json
 from multiprocessing import shared_memory
 import os
 import socket
@@ -29,19 +30,25 @@ class ClientProtocol():
         self.obs_socket_path = os.getenv('OBS_SOCKET_PATH', '')
         self.ctrl_socket_path = os.getenv('CTRL_SOCKET_PATH', '')
         self.logging_path = os.getenv('LOGGING_PATH', '')
+        self.sb3_logging_path = os.getenv('SB3_LOGGING_PATH', '')
+        if os.path.exists(self.logging_path):
+            os.remove(self.logging_path)
+        if os.path.exists(self.sb3_logging_path):
+            os.remove(self.sb3_logging_path)
         print(f'bw: {self.bw}, delay: {self.delay}, loss: {self.loss}, '
               f'obs_socket_path: {self.obs_socket_path}, '
               f'ctrl_socket_path: {self.ctrl_socket_path}', flush=True)
 
 
-    def start_sender(self):
-        bw = sample(self.bw)
-        delay = sample(self.delay)
+    def start_simulator(self, bw, delay, loss):
         print(f'Start sender with bandwidth: {bw} kbps, delay {delay} ms', flush=True)
         os.system(f"tc qdisc del dev lo root 2> /dev/null")
         os.system(f"tc qdisc add dev lo root handle 1: netem delay {delay}ms")
         os.system(f"tc qdisc add dev lo parent 1: handle 2: tbf rate {bw}kbit burst 1500 latency 100ms")
-        log_file = open('/tmp/sb3.log', 'w')
+        if self.sb3_logging_path:
+            log_file = open(self.sb3_logging_path, 'w')
+        else:
+            log_file = subprocess.DEVNULL
         self.process = \
             subprocess.Popen(['/app/simulation',
                               '--obs_socket', self.obs_socket_path,
@@ -67,8 +74,9 @@ class ClientProtocol():
             assert len(data) == len(self.shm.buf), f'Invalid action size: {len(data)} != {len(self.shm.buf)}'
             self.shm.buf[:] = data[:]
         elif data[0] == 2:
-            print(f'[{time.time()}] Received start command', flush=True)
-            self.start_sender()
+            config = json.loads(data[1:].decode()) if len(data) > 1 else {}
+            print(f'[{time.time()}] Received start command: {config}', flush=True)
+            self.start_simulator(config['bw'], config['delay'], config['loss'])
         else:
             print(f'Unknown command: {data[0]}', flush=True)
 

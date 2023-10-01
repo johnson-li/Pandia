@@ -655,6 +655,9 @@ def analyze_frame(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     frames_encoded_ts = np.array([f.captured_at - context.start_ts for f in frames_encoded])
     frames_dropped = list(filter(lambda f: f.encoded_size <= 0, frames))
     frames_key = list(filter(lambda f: f.is_key_frame, frames))
+    if (len(frames_encoded) == 0):
+        print('ERROR: No frame encoded.')
+        return
 
     plt.close()
     plt.plot([f.captured_at - context.start_ts for f in frames], [f.frame_id for f in frames], '.')
@@ -781,6 +784,9 @@ def analyze_packet(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
             data_ack.append((pkt.sent_at, pkt.ack_delay()))
         if pkt.recv_delay() != -1:
             data_recv.append((pkt.sent_at, pkt.recv_delay() - context.utc_offset))
+    if len(data_ack) == 0:
+        print('ERROR: No packet ACKed.')
+        return
     plt.close()
     x = [(d[0] - context.start_ts) for d in data_recv]
     y = [d[1] * 1000 for d in data_recv]
@@ -894,6 +900,9 @@ def analyze_network(context: StreamingContext, output_dir=OUTPUT_DIR) -> None:
     x = [d[0] - context.start_ts for d in data]
     y = [d[1] / 1024 for d in data]
     yy = [d[2] / 1024 for d in data]
+    if len(data) == 0:
+        print('ERROR: No network data.')
+        return
     plt.close()
     plt.plot(x, y, '.')
     plt.plot(x, yy, '.')
@@ -977,7 +986,6 @@ def get_stream_context(result_path=os.path.join(RESULTS_PATH, 'eval_static')) ->
             parse_line(line, context)
         except Exception as e:
             print(f"Error parsing line: {line}")
-            raise e
     return context
 
 
@@ -985,12 +993,11 @@ def main(result_path=os.path.join(RESULTS_PATH, 'eval_static'), sender_log=None)
     if sender_log is None:
         sender_log = os.path.join(result_path, 'eval_sender.log')
     context = StreamingContext()
-    for line in open(sender_log).readlines()[:-1]:
+    for line in open(sender_log, encoding='utf-8').readlines():
         try:
             parse_line(line, context)
         except Exception as e:
             print(f"Error parsing line: {line}")
-            raise e
     analyze_stream(context, output_dir=result_path)
 
 
