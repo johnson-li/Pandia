@@ -23,7 +23,7 @@ ENV_CONFIG = {
         'frame_egress_delay', 'frame_recv_delay', 
         'frame_decoding_delay', 
         'frame_decoded_delay', 
-        'frame_fps', 'frame_qp',
+        'frame_fps', 'frame_fps_decoded', 'frame_qp',
         'frame_height', 'frame_encoded_height', 'frame_size',
         'frame_bitrate', 'frame_key_count',
         'bitrate',

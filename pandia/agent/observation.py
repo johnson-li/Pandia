@@ -50,7 +50,7 @@ class Observation(object):
 
         return f'Dly.f: [{get_data("frame_encoding_delay")}, {get_data("frame_egress_delay")}, '\
                f'{get_data("frame_recv_delay")}, {get_data("frame_decoding_delay")}, {get_data("frame_decoded_delay")}]' \
-               f', FPS: {get_data("frame_fps")}' \
+               f', FPS: {get_data("frame_fps")}/{get_data("frame_fps_decoded")}' \
                f', size: {get_data("frame_size")} ({get_data("frame_height")}/{get_data("frame_encoded_height")}, {get_data("frame_key_count")})' \
                f', rates: [{get_data("bitrate")}, {get_data("frame_bitrate")}, {get_data("pkt_egress_rate")}, {get_data("pkt_ack_rate")}, {get_data("pacing_rate")}]' \
                f', QP: {get_data("frame_qp")}' \
@@ -78,16 +78,21 @@ class Observation(object):
 
     @staticmethod
     def boundary() -> Dict[str, List]:
+        fps_range = [0, 60] # frames per second
+        delay_range = [0, 1] # s
+        qp_range = [0, 255]
+        resolution_range = [0, 2160]
         return {
-            'frame_encoding_delay': [0, 1], # s
-            'frame_egress_delay': [0, 1], # s
-            'frame_recv_delay': [0, 1], # s
-            'frame_decoding_delay': [0, 1], # s
-            'frame_decoded_delay': [0, 1], # s
-            'frame_fps': [0, 60],
-            'frame_qp': [0, 255],
-            'frame_height': [0, 2160], # pixels
-            'frame_encoded_height': [0, 2160], # pixels
+            'frame_encoding_delay': delay_range, # s
+            'frame_egress_delay': delay_range, # s
+            'frame_recv_delay': delay_range, # s
+            'frame_decoding_delay': delay_range, # s
+            'frame_decoded_delay': delay_range, # s
+            'frame_fps': fps_range,
+            'frame_fps_decoded': fps_range,
+            'frame_qp': qp_range,
+            'frame_height': resolution_range, # pixels
+            'frame_encoded_height': resolution_range, # pixels
             'frame_size': [0, 1000_000], # bytes 
             'frame_bitrate': [0, 4 * M], # bps
             'frame_key_count': [0, 10], 
@@ -95,7 +100,7 @@ class Observation(object):
             'pkt_egress_rate': [0, 200 * M], # bps
             'pkt_ack_rate': [0, 1000 * M], # bps
             'pkt_loss_rate': [0, 1], # ratio
-            'pkt_trans_delay': [0, 1], # s
+            'pkt_trans_delay': delay_range, # s
             'pkt_delay_interval': [0, 10], 
 
             'pacing_rate': [0, 200 * M], # bps

@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pandia import RESULTS_PATH, DIAGRAMS_PATH
 from pandia.agent.normalization import RESOLUTION_LIST
+from pandia.agent.observation import Observation
 
 
 CODEC_NAMES = ['Generic', 'VP8', 'VP9', 'AV1', 'H264', 'Multiplex']
@@ -308,12 +309,20 @@ class MonitorBlock(object):
         return self.frame_encoding_delay_data.avg()
 
     @property
+    def frame_fps_decoded(self):
+        return self.frame_decoded_delay_data.num / self.duration
+
+    @property
     def frame_decoded_delay(self):
-        return self.frame_decoded_delay_data.avg()
+        return self.frame_decoded_delay_data.avg() if \
+            self.frame_decoded_delay_data.num > 0 else \
+                Observation.boundary()['frame_decoded_delay'][1]
 
     @property
     def frame_decoding_delay(self):
-        return self.frame_decoding_delay_data.avg()
+        return self.frame_decoding_delay_data.avg() if \
+            self.frame_decoding_delay_data.num > 0 else \
+                Observation.boundary()['frame_decoding_delay'][1]
 
     @property
     def frame_encoded_height(self):
@@ -329,7 +338,9 @@ class MonitorBlock(object):
 
     @property
     def frame_recv_delay(self):
-        return self.frame_recv_delay_data.avg()
+        return self.frame_recv_delay_data.avg() if \
+            self.frame_recv_delay_data.num > 0 else \
+                Observation.boundary()['frame_recv_delay'][1]
 
     @property
     def frame_egress_delay(self):
