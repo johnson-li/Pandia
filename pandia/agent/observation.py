@@ -42,7 +42,7 @@ class Observation(object):
                                       'pkt_delay_interval']:
                 res = int(res * 1000)
             if res != '?' and key in ['frame_size', 'frame_height', 'frame_encoded_height', 
-                                      'frame_fps', 'frame_qp', 'frame_key_count']:
+                                      'frame_fps', 'frame_fps_decoded', 'frame_qp', 'frame_key_count']:
                 res = int(res)
             if res != '?' and key in ['pkt_loss_rate']:
                 res = int(res * 100)

@@ -7,7 +7,7 @@ WebRTContainerEnv:
   learning_rate: lin_7e-4
 
 WebRTCEmulatorEnv:
-  n_envs: 10
+  n_envs: 8
   n_timesteps: !!float 5e5
   policy: 'MlpPolicy'
   ent_coef: 0.0
