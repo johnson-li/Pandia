@@ -40,11 +40,11 @@ Running with SB3
 SB3 performs the traning in a centralized manner. All components run on the same machine. The training is provisioned by a single command. 
 
 ```shell
-python -m pandia.train.train_sb3
+python -m pandia.train.train_sb3_emulator
 ```
 
 To test the gym environment for sb3, run the following command:
 
 ```shell
-python -m pandia.agent.env_container
+python -m pandia.agent.env_emulator
 ```
