@@ -37,7 +37,7 @@ ENV_CONFIG = {
     'bitrate_range': [300, 3 * 1024],  # in kbps
     'delay_range': [0, 0],  # in ms
     'loss_range': [0, 0],
-    'step_duration': .1, # in s
+    'step_duration': .01, # in s
     'duration': 30, # in s
     'width': 2160, # in px
     'fps': 30,

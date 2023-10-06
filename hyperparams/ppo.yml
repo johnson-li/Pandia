@@ -13,3 +13,11 @@ WebRTCEmulatorEnv:
   ent_coef: 0.0
   gamma: 0.995
   learning_rate: lin_7e-4
+
+WebRTCSimpleSimulatorEnv:
+  n_envs: 10
+  n_timesteps: !!float 5e5
+  policy: 'MlpPolicy'
+  ent_coef: 0.0
+  gamma: 0.995
+  learning_rate: lin_7e-4

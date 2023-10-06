@@ -3,8 +3,15 @@ Milestone
 
 Track the development of new features
 
+
+### 6th Oct
+- [ ] Improve the FPS of training the simple simulator
+
+### 5th Oct
+- [x] Implement a simple simulator for fast training, which will be utilized for transfer learning.
+
 ### 27th Sep
-- [ ] Implement the container env with a single program for both sender and receiver. It turns out that tc is quite reliable as long that we set the burst to the MTU, e.g., 1540 bytes.
+- [x] Implement the container env with a single program for both sender and receiver. It turns out that tc is quite reliable as long that we set the burst to the MTU, e.g., 1540 bytes.
 
 ### 12th Sep
 - [x] The sb3 container implementation suffers from packet loss due to the use of UDP. Change to IPC socket.

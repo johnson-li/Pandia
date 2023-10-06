@@ -306,7 +306,9 @@ class MonitorBlock(object):
 
     @property
     def frame_encoding_delay(self):
-        return self.frame_encoding_delay_data.avg()
+        return self.frame_encoding_delay_data.avg() if \
+            self.frame_encoding_delay_data.num > 0 else \
+                Observation.boundary()['frame_encoding_delay'][1]
 
     @property
     def frame_fps_decoded(self):
@@ -344,7 +346,9 @@ class MonitorBlock(object):
 
     @property
     def frame_egress_delay(self):
-        return self.frame_egress_delay_data.avg()
+        return self.frame_egress_delay_data.avg() if \
+            self.frame_egress_delay_data.num > 0 else \
+                Observation.boundary()['frame_egress_delay'][1]
 
     @property
     def frame_size(self):

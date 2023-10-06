@@ -97,6 +97,11 @@ class Action():
         boundary = Action.boundary()
         for i, k in enumerate(keys):
             setattr(action, k, dnml(k, array[i], boundary[k], log=False))
+        parameters = ['bitrate', 'pacing_rate', 'fps', 'fec_rate_key', 
+                      'fec_rate_delta', 'padding_rate', 'resolution']
+        for p in parameters:
+            if p not in keys:
+                setattr(action, p, ENV_CONFIG['action_static_settings'][p])
 
         # Post process to avoid invalid action settings
         if action.bitrate > action.pacing_rate:
