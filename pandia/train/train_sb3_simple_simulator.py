@@ -265,7 +265,7 @@ def main():
         return env
     envs = SubprocVecEnv([make_env for _ in range(env_num)])
     envs = VecMonitor(envs, log_dir)
-    checkpoint_callback = CheckpointCallback(save_freq=1_000_000, save_path=log_dir, 
+    checkpoint_callback = CheckpointCallback(save_freq=200_000, save_path=log_dir, 
                                              name_prefix="WebRTCSimpleSimulatorEnv")
     tensorboard_callback = TensorboardCallback()
     best_model_callback = SaveOnBestTrainingRewardCallback(check_freq=10_000, log_dir=log_dir)
@@ -280,5 +280,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main_zoo()
-    # main()
+    # main_zoo()
+    main()

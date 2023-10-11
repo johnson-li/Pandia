@@ -30,10 +30,7 @@ class Observation(object):
         np.roll(self.data, 1, axis=0)
 
     def __str__(self) -> str:
-        duration_index = 0
-        data = self.data[0][duration_index]
-
-        def get_data(key):
+        def get_data(data, key):
             res = dnml(key, data[self.obs_keys_map[key]], self.boundary()[key], log=False) if key in self.obs_keys else '?'
             if res != '?' and key in ['frame_bitrate', 'pkt_egress_rate', 'pkt_ack_rate', 'pacing_rate', 'bitrate']:
                 res = int(res / 1024)
@@ -48,13 +45,19 @@ class Observation(object):
                 res = int(res * 100)
             return res
 
-        return f'Dly.f: [{get_data("frame_encoding_delay")}, {get_data("frame_egress_delay")}, '\
-               f'{get_data("frame_recv_delay")}, {get_data("frame_decoding_delay")}, {get_data("frame_decoded_delay")}]' \
-               f', FPS: {get_data("frame_fps")}/{get_data("frame_fps_decoded")}' \
-               f', size: {get_data("frame_size")} ({get_data("frame_height")}/{get_data("frame_encoded_height")}, {get_data("frame_key_count")})' \
-               f', rates: [{get_data("bitrate")}, {get_data("frame_bitrate")}, {get_data("pkt_egress_rate")}, {get_data("pkt_ack_rate")}, {get_data("pacing_rate")}]' \
-               f', QP: {get_data("frame_qp")}' \
-               f', Dly.p: [{get_data("pkt_trans_delay")}, {get_data("pkt_delay_interval")}] ({get_data("pkt_loss_rate")}%)'
+        duration_index = 0
+        obs_str_list = []
+        for duration_index in range(len(self.data[0])):
+            data = self.data[0][duration_index]
+            obs_str = f'Dly.f: [{get_data(data, "frame_encoding_delay")}, {get_data(data, "frame_egress_delay")}, '\
+                    f'{get_data(data, "frame_recv_delay")}, {get_data(data, "frame_decoding_delay")}, {get_data(data, "frame_decoded_delay")}]' \
+                    f', FPS: {get_data(data, "frame_fps")}/{get_data(data, "frame_fps_decoded")}' \
+                    f', size: {get_data(data, "frame_size")} ({get_data(data, "frame_height")}/{get_data(data, "frame_encoded_height")}, {get_data(data, "frame_key_count")})' \
+                    f', rates: [{get_data(data, "bitrate")}, {get_data(data, "frame_bitrate")}, {get_data(data, "pkt_egress_rate")}, {get_data(data, "pkt_ack_rate")}, {get_data(data, "pacing_rate")}]' \
+                    f', QP: {get_data(data, "frame_qp")}' \
+                    f', Dly.p: [{get_data(data, "pkt_trans_delay")}, {get_data(data, "pkt_delay_interval")}] ({get_data(data, "pkt_loss_rate")}%)'
+            obs_str_list.append(obs_str)
+        return f'[{", ".join(obs_str_list)}]'
 
     def append(self, monitor_blocks: Dict[int, 'MonitorBlock'], action: 'Action'):
         self.roll()

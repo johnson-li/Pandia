@@ -243,19 +243,28 @@ tune.register_env('WebRTCSimpleSimulatorEnv', lambda config: WebRTCSimpleSimulat
 gymnasium.register('WebRTCSimpleSimulatorEnv', entry_point='pandia.agent.env_simple_simulator:WebRTCSimpleSimulatorEnv', nondeterministic=True)
 
 
-def test():
+def test_running():
     env = gymnasium.make("WebRTCSimpleSimulatorEnv", 
-                         bw=3 * 1024, delay=0,)
+                         bw=3 * 1024, delay=0, print_period=.02)
     action = Action(ENV_CONFIG['action_keys'])
-    action.bitrate = int(1.8 * 1024)
+    action.bitrate = int(4 * 1024)
     action.pacing_rate = 1000 * 1024
-    episodes = 10
+    episodes = 1
     try:
         for _ in range(episodes):
             ts = time.time()
+            steps = 0
             env.reset()
             while True:
+                if steps == 200:
+                    action.bitrate = int(1 * 1024)
+                elif steps == 500:
+                    action.bitrate = int(2 * 1024)
+                elif steps == 800:
+                    action.bitrate = int(4 * 1024)
+
                 _, _, terminated, truncated, _ = env.step(action.array())
+                steps += 1
                 if terminated or truncated:
                     print(f'It takes {time.time() - ts:.02f}s to finish a episode')
                     ts = time.time()
@@ -265,5 +274,24 @@ def test():
     env.close()
 
 
+def test_actions():
+    for bw in [.3, .5, .8, 1, 3]:
+        for bitrate in [.3, .5, .8, 1, 3]:
+            env = gymnasium.make("WebRTCSimpleSimulatorEnv", 
+                                bw=bw * 1024, delay=0, print_step=False)
+            action = Action(ENV_CONFIG['action_keys'])
+            action.bitrate = int(bitrate * 1024)
+            action.pacing_rate = 1000 * 1024
+            env.reset()
+            rewards = []
+            while True:
+                _, reward, terminated, truncated, _ = env.step(action.array())
+                rewards.append(reward)
+                if terminated or truncated:
+                    break
+            print(f'bw: {bw:.02f}Mbps, bitrate: {bitrate:.02f}Mbps, reward: {np.mean(rewards):.02f}')
+
+
 if __name__ == '__main__':
-    test()
+    test_running()
+    # test_actions()
