@@ -64,10 +64,12 @@ class StreamingSimulator:
 
 class NetowkrSimulator:
     def __init__(self, sample, buffer_size=.1) -> None:
-        self.rtt = sample['delay'] * 2
+        self.rtt = sample['delay'] * 2 / 1000
         self.bw = sample['bw'] * 1024
         self.buffer_size = buffer_size
-        self.queue_delay = .0
+        self.queue_delay = .25
+        print(f'NetworkSimulator: bw={self.bw / 1024 / 1024:.02f}Mbps, '
+              f'delay={self.rtt * 1000 / 2:.02f}ms')
 
 
 class WebRTCSimpleSimulatorEnv(gymnasium.Env):
@@ -78,7 +80,7 @@ class WebRTCSimpleSimulatorEnv(gymnasium.Env):
                  action_keys=ENV_CONFIG['action_keys'], # Action settings
                  obs_keys=ENV_CONFIG['observation_keys'], # Observation settings
                  monitor_durations=ENV_CONFIG['observation_durations'], # Observation settings
-                 print_step=True, print_period=.2, log_path=None,# Logging settings
+                 print_step=True, print_period=1, log_path=None,# Logging settings
                  step_duration=ENV_CONFIG['step_duration'], # RL settings
                  termination_timeout=ENV_CONFIG['termination_timeout'] # Exp settings
                  ) -> None:
@@ -230,8 +232,8 @@ class WebRTCSimpleSimulatorEnv(gymnasium.Env):
         if self.print_step:
             if time.time() - self.last_print_ts > self.print_period:
                 self.last_print_ts = time.time()
-                print(f'#{self.step_count} '
-                      f'R.w.: {r:.02f}, Act.: {act}Obs.: {self.observation}')
+                print(f'#{self.step_count} [{self.step_count * self.step_duration:.02f}s] '
+                      f'R.w.: {r:.02f}, Act.: {act}, Obs.: {self.observation}')
         self.step_count += 1
         truncated = next_new_frame_ts > self.duration
         return self.observation.array(), r, False, truncated, {}
@@ -247,13 +249,16 @@ def test():
     action = Action(ENV_CONFIG['action_keys'])
     action.bitrate = int(1.8 * 1024)
     action.pacing_rate = 1000 * 1024
-    episodes = 1
+    episodes = 10
     try:
         for _ in range(episodes):
+            ts = time.time()
             env.reset()
             while True:
                 _, _, terminated, truncated, _ = env.step(action.array())
                 if terminated or truncated:
+                    print(f'It takes {time.time() - ts:.02f}s to finish a episode')
+                    ts = time.time()
                     break
     except KeyboardInterrupt:
         pass

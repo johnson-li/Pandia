@@ -1,12 +1,19 @@
 import argparse
+import gymnasium
 import numpy as np
 import os
+from stable_baselines3 import PPO
 import torch as th
 from pandia import HYPERPARAMS_PATH
 from pandia.agent.env_simple_simulator import WebRTCSimpleSimulatorEnv
 from rl_zoo3.exp_manager import ExperimentManager
 from rl_zoo3.utils import ALGOS, StoreDict
 from stable_baselines3.common.utils import set_random_seed
+from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
+from stable_baselines3.common.results_plotter import ts2xy, plot_results
+from stable_baselines3.common.monitor import load_results, Monitor
+from stable_baselines3.common.vec_env import VecMonitor
 
 
 def parse_args():
@@ -46,7 +53,7 @@ def parse_args():
     parser.add_argument("-f", "--log-folder", help="Log folder", type=str, default=os.path.expanduser("~/sb3_logs"))
     parser.add_argument("--seed", help="Random generator seed", type=int, default=-1)
     parser.add_argument("--vec-env", help="VecEnv type", type=str, default="subproc", choices=["dummy", "subproc"])
-    parser.add_argument("--device", help="PyTorch device to be use (ex: cpu, cuda...)", default="auto", type=str)
+    parser.add_argument("--device", help="PyTorch device to be use (ex: cpu, cuda...)", default="cuda", type=str)
     parser.add_argument(
         "--n-trials",
         help="Number of trials for optimizing hyperparameters. "
@@ -143,7 +150,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
+def main_zoo():
     args = parse_args()
     if args.seed < 0:
         # Seed but with a random one
@@ -208,5 +215,70 @@ def main():
         exp_manager.hyperparameters_optimization()
 
 
+class TensorboardCallback(BaseCallback):
+    def __init__(self, verbose=0):
+        super().__init__(verbose)
+
+    def _on_step(self) -> bool:
+        return True
+
+    def _on_rollout_end(self) -> None:
+        return super()._on_rollout_end()
+
+class SaveOnBestTrainingRewardCallback(BaseCallback):
+    def __init__(self, check_freq: int, log_dir: str, verbose=1):
+        super(SaveOnBestTrainingRewardCallback, self).__init__(verbose)
+        self.check_freq = check_freq
+        self.log_dir = log_dir
+        self.save_path = os.path.join(log_dir, "best_model")
+        self.best_mean_reward = -np.inf
+
+    def _init_callback(self) -> None:
+        if self.save_path is not None:
+            os.makedirs(self.save_path, exist_ok=True)
+
+    def _on_step(self) -> bool:
+        if self.n_calls % self.check_freq == 0:
+            x, y = ts2xy(load_results(self.log_dir), "timesteps")
+            if len(x) > 0:
+                mean_reward = np.mean(y[-100:])
+                if self.verbose > 0:
+                    print(f"Num timesteps: {self.num_timesteps}")
+                    print(
+                        f"Best mean reward: {self.best_mean_reward:.2f} - Last mean reward per episode: {mean_reward:.2f}"
+                    )
+                if mean_reward > self.best_mean_reward:
+                    self.best_mean_reward = mean_reward
+                    if self.verbose > 0:
+                        print(f"Saving new best model to {self.save_path}.zip")
+                    self.model.save(self.save_path)
+        return True
+
+def main():
+    env_num = 32
+    log_dir = os.path.expanduser('/tmp/WebRTCSimpleSimulatorEnv')
+    os.system(f"rm -r {log_dir}")
+    os.makedirs(log_dir, exist_ok=True)
+
+    def make_env():
+        env = WebRTCSimpleSimulatorEnv(bw=[300, 3 * 1024], delay=[0, 100])
+        return env
+    envs = SubprocVecEnv([make_env for _ in range(env_num)])
+    envs = VecMonitor(envs, log_dir)
+    checkpoint_callback = CheckpointCallback(save_freq=1_000_000, save_path=log_dir, 
+                                             name_prefix="WebRTCSimpleSimulatorEnv")
+    tensorboard_callback = TensorboardCallback()
+    best_model_callback = SaveOnBestTrainingRewardCallback(check_freq=10_000, log_dir=log_dir)
+    model = PPO(policy="MlpPolicy", env=envs, verbose=1, 
+                tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCSimpleSimulatorEnv"),
+                device="cuda", batch_size=256)
+    model.learn(total_timesteps=200_000_000, 
+                callback=[checkpoint_callback, 
+                        #   tensorboard_callback, 
+                          best_model_callback
+                          ])
+
+
 if __name__ == "__main__":
-    main()
+    main_zoo()
+    # main()
