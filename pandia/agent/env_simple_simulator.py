@@ -1,5 +1,6 @@
 import time
 import gymnasium
+from matplotlib import pyplot as plt
 import numpy as np
 from ray import tune
 from pandia import BIN_PATH
@@ -68,7 +69,7 @@ class NetowkrSimulator:
         self.bw = sample['bw'] * 1024
         self.buffer_size = buffer_size
         self.queue_delay = .25
-        print(f'NetworkSimulator: bw={self.bw / 1024 / 1024:.02f}Mbps, '
+        print(f'Init NetworkSimulator: bw={self.bw / 1024 / 1024:.02f}Mbps, '
               f'delay={self.rtt * 1000 / 2:.02f}ms')
 
 
@@ -274,24 +275,5 @@ def test_running():
     env.close()
 
 
-def test_actions():
-    for bw in [.3, .5, .8, 1, 3]:
-        for bitrate in [.3, .5, .8, 1, 3]:
-            env = gymnasium.make("WebRTCSimpleSimulatorEnv", 
-                                bw=bw * 1024, delay=0, print_step=False)
-            action = Action(ENV_CONFIG['action_keys'])
-            action.bitrate = int(bitrate * 1024)
-            action.pacing_rate = 1000 * 1024
-            env.reset()
-            rewards = []
-            while True:
-                _, reward, terminated, truncated, _ = env.step(action.array())
-                rewards.append(reward)
-                if terminated or truncated:
-                    break
-            print(f'bw: {bw:.02f}Mbps, bitrate: {bitrate:.02f}Mbps, reward: {np.mean(rewards):.02f}')
-
-
 if __name__ == '__main__':
     test_running()
-    # test_actions()

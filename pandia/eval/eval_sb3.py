@@ -1,64 +1,102 @@
 import argparse
 import os
 import time
+import gymnasium
+from matplotlib import pyplot as plt
 import numpy as np
 from stable_baselines3 import PPO
 from pandia import RESULTS_PATH, SB3_LOG_PATH
+from pandia.agent.action import Action
 from pandia.agent.env_client import WebRTCEnv0
 from pandia.agent.env_config import ENV_CONFIG
+from pandia.agent.env_simple_simulator import WebRTCSimpleSimulatorEnv
+from pandia.agent.observation import Observation
 from pandia.log_analyzer_sender import analyze_stream
 
 
 def model_path():
-    path = os.path.join(SB3_LOG_PATH, 'ppo')
-    dirs = [f for f in os.listdir(path) if f.startswith('pandia_')]
-    dirs = sorted(dirs, key=lambda x: int(x.split('_')[-1]))
-    path = os.path.join(path, dirs[-1])
+    # path = os.path.expanduser('~/sb3_logs/ppo')
+    # dirs = [f for f in os.listdir(path) if f.startswith('WebRTCSimpleSimulatorEnv')]
+    # dirs = sorted(dirs, key=lambda x: int(x.split('_')[-1]))
+    # path = os.path.join(path, dirs[-1])
+    path = '/tmp/WebRTCSimpleSimulatorEnv'
     print(f'Loading model from {path}')
     return os.path.join(path, 'best_model.zip')
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-d', '--duration', type=int, default=10)
-    parser.add_argument('-s', '--step_duration', type=float, default=ENV_CONFIG['step_duration'])
-    parser.add_argument('-f', '--fake', action='store_true')
-    parser.add_argument('-b', '--bw', type=int, default=1024*1024)
-    parser.add_argument('-y', '--delay', type=int, default=5)
-    parser.add_argument('-l', '--loss', type=int, default=2)
-    parser.add_argument('-p', '--fps', type=int, default=30)
-    parser.add_argument('-w', '--working_dir', type=str, default=os.path.join(RESULTS_PATH, 'eval_sb3'))
-    args = parser.parse_args()
-    fake_action = args.fake
-    working_dir = args.working_dir
-    action_keys = ENV_CONFIG['action_keys'] if not fake_action else ['fake']
-    env_config={'bw': args.bw, 'delay': args.delay, 'loss': args.loss,
-                'fps': args.fps, 'width': 2160,
-                'print_step': True,
-                'action_keys': action_keys,
-                'client_id': 18, 'duration': args.duration,
-                'step_duration': args.step_duration,
-                'working_dir': working_dir,
-                }
-    env = WebRTCEnv0(**env_config)
+def main_trained():
+    duration = 30
+    env = WebRTCSimpleSimulatorEnv(duration=duration, delay=0)
     model = PPO.load(model_path(), env)
-    start_ts = None
-    obs, _ = env.reset()
-    rewards = []
-    while start_ts is None or time.time() - start_ts < args.duration:
-        action, _ = model.predict(obs, deterministic=True)
-        obs, reward, terminated, truncated, info = env.step(action)
-        if start_ts is None:
-            start_ts = time.time()
-        rewards.append(reward)
-        if terminated or truncated:
-            break
+    data = []
+    for bw in range(1, 25):
+        env.bw0 = bw / 10 * 1024
+        obs, _ = env.reset()
+        obs, _ = env.reset()
+        rewards = []
+        delays = []
+        actions = []
+        while True:
+            action, _ = model.predict(obs, deterministic=True)
+            obs, reward, terminated, truncated, info = env.step(action)
+            obs_obj = env.observation
+            act_obj = Action.from_array(action, env.action_keys)
+            actions.append(act_obj.bitrate)
+            delays.append(obs_obj.get_data(obs_obj.data[0][0], 'frame_decoded_delay'))
+            rewards.append(reward)
+            if terminated or truncated:
+                break
+        data.append((env.bw0, np.mean(actions), np.mean(delays), np.mean(rewards)))
+        print(f'bw: {env.bw0 / 1024:.02f}Mbps, bitrate: {np.mean(actions):.02f}Mbps, delay: {np.mean(delays):.02f}ms, reward: {np.mean(rewards):.02f}')
     env.close()
-    print(f'Average reward: {np.mean(rewards):.02f}')
-    os.system(f'mv {working_dir}/{env.log_name("sender")} {working_dir}/eval_sender.log')
-    os.system(f'scp mobix:/tmp/{env.log_name("receiver")} {working_dir}/eval_receiver.log > /dev/null')
-    analyze_stream(env.context, working_dir)
+
+    # Plot evaluation results
+    # x = [d[0] for d in data]
+    # y1 = [d[1] for d in data]
+    # y2 = [d[2] for d in data]
+    # plt.close()
+    # fig, ax1 = plt.subplots()
+    # ax1.plot(x, y1, 'r')
+    # ax1.tick_params(axis='y', labelcolor='r')
+    # ax1.set_xlabel('Step')
+    # ax1.set_ylabel('Bitrate setting (Mbps)')
+    # ax2 = ax1.twinx()
+    # ax2.plot(x, y2, 'b')
+    # ax2.tick_params(axis='y', labelcolor='b')
+    # ax2.set_ylabel('G2G delay (ms)')
+    # ax2.set_ylim(0, 100)
+    # plt.tight_layout()
+    # output_dir = os.path.join(RESULTS_PATH, 'eval_sb3')
+    # os.makedirs(output_dir, exist_ok=True)
+    # plt.savefig(os.path.join(output_dir, 'bitrate_delay.pdf'))
+
+
+def test_action_rewards():
+    data = []
+    for bw in [3]:
+        for bitrate in range(10, 31):
+            env = gymnasium.make("WebRTCSimpleSimulatorEnv", 
+                                bw=bw * 1024, delay=0, print_step=False)
+            action = Action(ENV_CONFIG['action_keys'])
+            action.bitrate = int(bitrate / 10 * 1024)
+            action.pacing_rate = 1000 * 1024
+            env.reset()
+            rewards = []
+            while True:
+                _, reward, terminated, truncated, _ = env.step(action.array())
+                rewards.append(reward)
+                if terminated or truncated:
+                    break
+            # print(f'bw: {bw:.02f}Mbps, bitrate: {bitrate:.02f}Mbps, reward: {np.mean(rewards):.02f}')
+            data.append((bitrate, np.mean(rewards)))
+    plt.plot([d[0] for d in data], [d[1] for d in data])
+    plt.xlabel('Bitrate (Mbps)')
+    plt.ylabel('Reward')
+    output_dir = os.path.join(RESULTS_PATH, 'eval_sb3')
+    os.makedirs(output_dir, exist_ok=True)
+    plt.savefig(os.path.join(output_dir, 'bitrate_reward.pdf'))
 
 
 if __name__ == "__main__":
-    main()
+    main_trained()
+    # test_action_rewards()

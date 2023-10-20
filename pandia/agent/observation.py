@@ -29,24 +29,25 @@ class Observation(object):
     def roll(self):
         np.roll(self.data, 1, axis=0)
 
-    def __str__(self) -> str:
-        def get_data(data, key):
-            res = dnml(key, data[self.obs_keys_map[key]], self.boundary()[key], log=False) if key in self.obs_keys else '?'
-            if res != '?' and key in ['frame_bitrate', 'pkt_egress_rate', 'pkt_ack_rate', 'pacing_rate', 'bitrate']:
-                res = int(res / 1024)
-            if res != '?' and key in ['frame_encoding_delay', 'frame_egress_delay', 'frame_recv_delay', 
-                                      'frame_decoding_delay', 'frame_decoded_delay', 'pkt_trans_delay',
-                                      'pkt_delay_interval']:
-                res = int(res * 1000)
-            if res != '?' and key in ['frame_size', 'frame_height', 'frame_encoded_height', 
-                                      'frame_fps', 'frame_fps_decoded', 'frame_qp', 'frame_key_count']:
-                res = int(res)
-            if res != '?' and key in ['pkt_loss_rate']:
-                res = int(res * 100)
-            return res
+    def get_data(self, data, key):
+        res = dnml(key, data[self.obs_keys_map[key]], self.boundary()[key], log=False) if key in self.obs_keys else '?'
+        if res != '?' and key in ['frame_bitrate', 'pkt_egress_rate', 'pkt_ack_rate', 'pacing_rate', 'bitrate']:
+            res = int(res / 1024)
+        if res != '?' and key in ['frame_encoding_delay', 'frame_egress_delay', 'frame_recv_delay', 
+                                    'frame_decoding_delay', 'frame_decoded_delay', 'pkt_trans_delay',
+                                    'pkt_delay_interval']:
+            res = int(res * 1000)
+        if res != '?' and key in ['frame_size', 'frame_height', 'frame_encoded_height', 
+                                    'frame_fps', 'frame_fps_decoded', 'frame_qp', 'frame_key_count']:
+            res = int(res)
+        if res != '?' and key in ['pkt_loss_rate']:
+            res = int(res * 100)
+        return res
 
+    def __str__(self) -> str:
         duration_index = 0
         obs_str_list = []
+        get_data = self.get_data
         for duration_index in range(len(self.data[0])):
             data = self.data[0][duration_index]
             obs_str = f'Dly.f: [{get_data(data, "frame_encoding_delay")}, {get_data(data, "frame_egress_delay")}, '\

@@ -261,7 +261,7 @@ def main():
     os.makedirs(log_dir, exist_ok=True)
 
     def make_env():
-        env = WebRTCSimpleSimulatorEnv(bw=[300, 3 * 1024], delay=[0, 100])
+        env = WebRTCSimpleSimulatorEnv()
         return env
     envs = SubprocVecEnv([make_env for _ in range(env_num)])
     envs = VecMonitor(envs, log_dir)
@@ -271,7 +271,7 @@ def main():
     best_model_callback = SaveOnBestTrainingRewardCallback(check_freq=10_000, log_dir=log_dir)
     model = PPO(policy="MlpPolicy", env=envs, verbose=1, 
                 tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCSimpleSimulatorEnv"),
-                device="cuda", batch_size=256)
+                device="cuda", batch_size=256, n_epochs=20)
     model.learn(total_timesteps=200_000_000, 
                 callback=[checkpoint_callback, 
                         #   tensorboard_callback, 
