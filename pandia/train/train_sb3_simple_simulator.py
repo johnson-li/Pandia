@@ -255,7 +255,7 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
         return True
 
 def main():
-    env_num = 32
+    env_num = 8
     log_dir = os.path.expanduser('/tmp/WebRTCSimpleSimulatorEnv')
     os.system(f"rm -r {log_dir}")
     os.makedirs(log_dir, exist_ok=True)

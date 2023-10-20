@@ -164,6 +164,7 @@ class WebRTCSimpleSimulatorEnv(gymnasium.Env):
         # Notify packet added and sent
         for i in range(fi.rtp_packet_count):
             rtp_id = fi.rtp_id_base + i
+            # send_ts = encoded_ts + i * MTU * 8 / self.network_simulator.bw
             send_ts = encoded_ts
             packet = PacketContext(rtp_id)
             packet.sent_at = send_ts
@@ -189,20 +190,26 @@ class WebRTCSimpleSimulatorEnv(gymnasium.Env):
         self.network_simulator.queue_delay = min(self.network_simulator.queue_delay, self.network_simulator.buffer_size)
         self.network_simulator.queue_delay -= 1 / self.streaming_simulator.fps 
         self.network_simulator.queue_delay = max(0, self.network_simulator.queue_delay)
+        any_packet_lost = False
         for i in range(fi.rtp_packet_count):
             self.network_simulator.queue_delay += MTU * 8 / self.network_simulator.bw
+            lost = self.network_simulator.queue_delay > self.network_simulator.buffer_size
+            any_packet_lost |= lost
             transmission_delay = self.network_simulator.rtt + self.network_simulator.queue_delay
             rtp_id = fi.rtp_id_base + i
             packet = self.context.packets[rtp_id]
             packet.received_at_utc = transmission_delay + packet.sent_at_utc
             assmebled_ts = packet.received_at_utc
-            packet.received = True
+            packet.received = not lost
             packet.acked_at = packet.sent_at + transmission_delay - self.network_simulator.rtt / 2
             self.context.last_acked_packet_id = \
                 max(rtp_id, self.context.last_acked_packet_id)
             [mb.on_packet_acked(packet, packet.acked_at) for mb in self.context.monitor_blocks.values()]
+
         # Notify frame decoding
         decoding_delay = .001
+        if any_packet_lost:
+            decoding_delay = .1  # We penalize the decoding delay if any packet is lost
         frame.assembled_at_utc = assmebled_ts
         frame.decoding_at = assmebled_ts
         frame.decoding_at_utc = assmebled_ts

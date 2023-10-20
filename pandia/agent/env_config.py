@@ -35,12 +35,12 @@ ENV_CONFIG = {
     ])),
     'observation_durations' : [1, 2, 4],
     'history_size' : 1,
-    'bandwidth_range' : [1024, 3 * 1024],  # in kbps
-    'bitrate_range': [1024, 2 * 1024],  # in kbps
-    'delay_range': [0, 5],  # in ms
+    'bandwidth_range' : [1024, 5 * 1024],  # in kbps
+    'bitrate_range': [1024, 5 * 1024],  # in kbps
+    'delay_range': [0, 10],  # in ms
     'loss_range': [0, 0],  # in %
     'step_duration': .01, # in s
-    'duration': 10, # in s
+    'duration': 20, # in s
     'width': 2160, # in px
     'fps': 30,
     'termination_timeout': 1, # in s
