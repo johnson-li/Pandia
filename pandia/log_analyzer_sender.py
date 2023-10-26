@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import matplotlib.pyplot as plt
 import numpy as np
 from pandia import RESULTS_PATH, DIAGRAMS_PATH
+from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.normalization import RESOLUTION_LIST
 from pandia.agent.observation import Observation
 
@@ -245,9 +246,10 @@ class MonitorBlockData(object):
 
 
 class MonitorBlock(object):
-    def __init__(self, duration=1) -> None:
+    def __init__(self, duration=1, boundary=ENV_CONFIG['boundary']) -> None:
         self.ts: float = 0
         self.duration: float = duration
+        self.boundary = boundary
         self.utc_offset = 0
         # Frame statictics
         self.frame_encoded_size = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.encoded_size, duration=duration)
@@ -308,7 +310,7 @@ class MonitorBlock(object):
     def frame_encoding_delay(self):
         return self.frame_encoding_delay_data.avg() if \
             self.frame_encoding_delay_data.num > 0 else \
-                Observation.boundary()['frame_encoding_delay'][1]
+                self.boundary['frame_encoding_delay'][1]
 
     @property
     def frame_fps_decoded(self):
@@ -318,13 +320,13 @@ class MonitorBlock(object):
     def frame_decoded_delay(self):
         return self.frame_decoded_delay_data.avg() if \
             self.frame_decoded_delay_data.num > 0 else \
-                Observation.boundary()['frame_decoded_delay'][1]
+                self.boundary['frame_decoded_delay'][1]
 
     @property
     def frame_decoding_delay(self):
         return self.frame_decoding_delay_data.avg() if \
             self.frame_decoding_delay_data.num > 0 else \
-                Observation.boundary()['frame_decoding_delay'][1]
+                self.boundary['frame_decoding_delay'][1]
 
     @property
     def frame_encoded_height(self):
@@ -342,13 +344,13 @@ class MonitorBlock(object):
     def frame_recv_delay(self):
         return self.frame_recv_delay_data.avg() if \
             self.frame_recv_delay_data.num > 0 else \
-                Observation.boundary()['frame_recv_delay'][1]
+                self.boundary['frame_recv_delay'][1]
 
     @property
     def frame_egress_delay(self):
         return self.frame_egress_delay_data.avg() if \
             self.frame_egress_delay_data.num > 0 else \
-                Observation.boundary()['frame_egress_delay'][1]
+                self.boundary['frame_egress_delay'][1]
 
     @property
     def frame_size(self):
@@ -418,6 +420,9 @@ class MonitorBlock(object):
 
     def on_pacing_rate_set(self, ts: float, rate: float):
         self.pacing_rate_data.append((ts, rate), ts)
+
+    def update_max_queue_delay(self, ts: float):
+        pass
 
 
 class NetworkContext(object):

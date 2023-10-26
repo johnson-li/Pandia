@@ -11,6 +11,8 @@ def reward(context: StreamingContext, terminated=False):
     for delay in [mb.frame_decoded_delay, mb.frame_egress_delay]:
         delay *= 1000
         delay_score += - delay ** 2 / 100 ** 2
+    if mb.frame_decoded_delay > .1:
+        return -10
     quality_score = mb.frame_bitrate / 1024 / 1024
     # res_score = mb.frame_height / 2160
     res_score = 0

@@ -1,16 +1,14 @@
-import argparse
 import os
-import time
 import gymnasium
 from matplotlib import pyplot as plt
 import numpy as np
 from stable_baselines3 import PPO
 from pandia import RESULTS_PATH, SB3_LOG_PATH
 from pandia.agent.action import Action
-from pandia.agent.env_client import WebRTCEnv0
 from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.env_simple_simulator import WebRTCSimpleSimulatorEnv
 from pandia.agent.observation import Observation
+from pandia.constants import M
 from pandia.log_analyzer_sender import analyze_stream
 
 
@@ -46,8 +44,8 @@ def main_multi_env():
 
 def main_single_env():
     duration = 30
-    bw = 2500
-    env = WebRTCSimpleSimulatorEnv(duration=duration, delay=0, print_step=False)
+    bw = 4500
+    env = WebRTCSimpleSimulatorEnv(duration=duration, delay=20, print_step=False)
     model = PPO.load(model_path(), env)
     data = []
     env.bw0 = bw 
@@ -106,23 +104,29 @@ def main_single_env():
 
 
 def test_action_rewards():
+    buckets = 40
     data = []
-    for bw in [4]:
-        for bitrate in range(10, 49):
-            env = gymnasium.make("WebRTCSimpleSimulatorEnv", 
-                                bw=bw * 1024, delay=0, print_step=False)
-            action = Action(ENV_CONFIG['action_keys'])
-            action.bitrate = int(bitrate / 10 * 1024)
-            action.pacing_rate = 1000 * 1024
-            env.reset()
-            rewards = []
-            while True:
-                _, reward, terminated, truncated, _ = env.step(action.array())
-                rewards.append(reward)
-                if terminated or truncated:
-                    break
-            # print(f'bw: {bw:.02f}Mbps, bitrate: {bitrate/1024:.02f}Mbps, reward: {np.mean(rewards):.02f}')
-            data.append((bitrate, np.mean(rewards)))
+    config = ENV_CONFIG
+    config['network_setting']['bandwidth'] = 20 * M
+    config['network_setting']['delay'] = .01
+    env = gymnasium.make("WebRTCSimpleSimulatorEnv", config=config)
+    br = ENV_CONFIG['training_setting']['bitrate_range']
+    # br = [1 * M, 40 * M]
+    for bucket in range(buckets):
+        bitrate = int(br[0] + (br[1] - br[0]) * bucket / buckets)
+        print(f'bitrate: {bitrate/M:.02f}Mbps')
+        action = Action(ENV_CONFIG['action_keys'])
+        action.bitrate = bitrate
+        action.pacing_rate = 1000 * M
+        env.reset()
+        rewards = []
+        while True:
+            _, reward, terminated, truncated, _ = env.step(action.array())
+            rewards.append(reward)
+            if terminated or truncated:
+                break
+        # print(f'bw: {bw:.02f}Mbps, bitrate: {bitrate/1024:.02f}Mbps, reward: {np.mean(rewards):.02f}')
+        data.append((action.bitrate / M, np.mean(rewards)))
     plt.plot([d[0] for d in data], [d[1] for d in data])
     plt.xlabel('Bitrate (Mbps)')
     plt.ylabel('Reward')

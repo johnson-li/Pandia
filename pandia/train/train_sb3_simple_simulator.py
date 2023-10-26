@@ -1,9 +1,13 @@
 import argparse
-import gymnasium
+from typing import Any, Dict, List, Optional, Type, Union
+from gymnasium import Space, spaces
 import numpy as np
 import os
 from stable_baselines3 import PPO
+from stable_baselines3.common.torch_layers import BaseFeaturesExtractor, FlattenExtractor
+from stable_baselines3.common.type_aliases import Schedule
 import torch as th
+from torch import Module, nn
 from pandia import HYPERPARAMS_PATH
 from pandia.agent.env_simple_simulator import WebRTCSimpleSimulatorEnv
 from rl_zoo3.exp_manager import ExperimentManager
@@ -14,6 +18,7 @@ from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
 from stable_baselines3.common.results_plotter import ts2xy, plot_results
 from stable_baselines3.common.monitor import load_results, Monitor
 from stable_baselines3.common.vec_env import VecMonitor
+from stable_baselines3.common.policies import ActorCriticPolicy
 
 
 def parse_args():
@@ -254,6 +259,34 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
                     self.model.save(self.save_path)
         return True
 
+
+class CustomPolicy(ActorCriticPolicy):
+    def __init__(
+        self,
+        observation_space: spaces.Space,
+        action_space: spaces.Space,
+        lr_schedule: Schedule,
+        net_arch: Optional[Union[List[int], Dict[str, List[int]]]] = None,
+        activation_fn: Type[nn.Module] = nn.Tanh,
+        ortho_init: bool = True,
+        use_sde: bool = False,
+        log_std_init: float = 0.0,
+        full_std: bool = True,
+        use_expln: bool = False,
+        squash_output: bool = False,
+        features_extractor_class: Type[BaseFeaturesExtractor] = FlattenExtractor,
+        features_extractor_kwargs: Optional[Dict[str, Any]] = None,
+        share_features_extractor: bool = True,
+        normalize_images: bool = True,
+        optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
+        optimizer_kwargs: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(observation_space, action_space, lr_schedule, net_arch, activation_fn, ortho_init,
+                         use_sde, log_std_init, full_std, use_expln, squash_output, features_extractor_class,
+                         features_extractor_kwargs, share_features_extractor, normalize_images, 
+                         optimizer_class, optimizer_kwargs)
+
+
 def main():
     env_num = 8
     log_dir = os.path.expanduser('/tmp/WebRTCSimpleSimulatorEnv')
@@ -269,7 +302,7 @@ def main():
                                              name_prefix="WebRTCSimpleSimulatorEnv")
     tensorboard_callback = TensorboardCallback()
     best_model_callback = SaveOnBestTrainingRewardCallback(check_freq=10_000, log_dir=log_dir)
-    model = PPO(policy="MlpPolicy", env=envs, verbose=1, 
+    model = PPO(policy=CustomPolicy, env=envs, verbose=1, 
                 tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCSimpleSimulatorEnv"),
                 device="cuda", batch_size=256, n_epochs=20)
     model.learn(total_timesteps=200_000_000, 
