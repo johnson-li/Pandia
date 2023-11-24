@@ -114,9 +114,9 @@ class WebRTCSimpleSimulatorEnv(gymnasium.Env):
         self.network_simulator: NetowkrSimulator
         self.termination_ts = 0
         self.action_keys = list(sorted(ENV_CONFIG['action_keys']))
-        self.action_space = Action(self.action_keys, boundary=config['boundary'], 
-                                   limit=config.get('action_limit', {})).action_space()
-        print(f'action space: {self.action_space}')
+        self.action_space = Action(self.action_keys, boundary=config['boundary']).action_space()
+        self.action_limit = config.get('action_limit', {})
+        print(f'action limit: {self.action_limit}')
         self.observation_space = \
             Observation(self.obs_keys, self.monitor_durations, self.hisory_size)\
                 .observation_space()
@@ -228,6 +228,8 @@ class WebRTCSimpleSimulatorEnv(gymnasium.Env):
 
 
     def step(self, action: np.ndarray):
+        limit = Action.action_limit(self.action_keys, limit=self.action_limit)
+        action = np.clip(action, limit.low, limit.high)
         self.context.reset_step_context()
         act = Action.from_array(action, self.action_keys)
         self.actions.append(act)
@@ -270,8 +272,7 @@ def test_running():
     config['gym_setting']['print_step'] = True
     config['gym_setting']['print_period'] = 100
     env = gymnasium.make("WebRTCSimpleSimulatorEnv", config=config)
-    action = Action(ENV_CONFIG['action_keys'], boundary=config['boundary'], 
-                    limit=config.get('action_limit', {}))
+    action = Action(ENV_CONFIG['action_keys'], boundary=config['boundary'])
     action.bitrate = int(4 * 1024)
     action.pacing_rate = 1000 * 1024
     episodes = 1

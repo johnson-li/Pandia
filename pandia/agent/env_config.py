@@ -120,7 +120,8 @@ ENV_CONFIG = {
     },
     'boundary': BOUNDARY,
     'network_setting': NETWORK_SETTING,
-    'action_limit': ACTION_LIMIT,
+    'action_limit': ACTION_LIMIT,  # It is used by curriculum learning that 
+                                   # constrains the action space by cliping
     'video_source': VIDEO_SOURCE,
     'gym_setting': GYM_SETTING,
 }

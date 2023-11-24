@@ -8,7 +8,7 @@ from pandia.constants import M
 
 class Action():
     def __init__(self, action_keys, boundary=ENV_CONFIG['boundary'], 
-                 limit={}, log=ENV_CONFIG['gym_setting']['log_nml']) -> None:
+                 log=ENV_CONFIG['gym_setting']['log_nml']) -> None:
         self.action_keys = list(sorted(action_keys))
         # Initiation values are invalid values so that WebRTC will not use DRL actions 
         self.bitrate = 0
@@ -20,7 +20,6 @@ class Action():
         self.fec_rate_delta = 256
         self.fake = action_keys == ['fake']
         self.boundary = boundary
-        self.limit = limit
         self.log = log
 
     def __str__(self) -> str:
@@ -89,12 +88,19 @@ class Action():
         return action
 
     def action_space(self):
-        bound = np.zeros((2, len(self.action_keys)), dtype=np.float32)
-        for i, key in enumerate(self.action_keys):
+        low = np.ones(len(self.action_keys), dtype=np.float32) * NORMALIZATION_RANGE[0]
+        high = np.ones(len(self.action_keys), dtype=np.float32) * NORMALIZATION_RANGE[1]
+        return spaces.Box(low=low, high=high, dtype=np.float32)
+
+    @staticmethod
+    def action_limit(action_keys, boundary=ENV_CONFIG['boundary'], 
+                     limit={}, log=ENV_CONFIG['gym_setting']['log_nml']):
+        res = np.zeros((2, len(action_keys)), dtype=np.float32)
+        for i, key in enumerate(action_keys):
             for j in [0, 1]:
-                bound[j][i] = nml(key, self.limit.get(key, self.boundary[key])[j], 
-                                  self.boundary[key], log=self.log) 
-        return spaces.Box(low=bound[0], high=bound[1], dtype=np.float32)
+                res[j][i] = nml(key, limit.get(key, boundary[key])[j], 
+                                boundary[key], log=log) 
+        return spaces.Box(low=res[0], high=res[1], dtype=np.float32)
 
     @staticmethod
     def shm_size():

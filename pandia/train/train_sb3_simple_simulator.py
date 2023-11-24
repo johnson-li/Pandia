@@ -301,7 +301,7 @@ def linear_schedule(initial_value: float) -> Callable[[float], float]:
 
 
 def main():
-    model_pre = '/Users/johnson/sb3_logs/model_35/best_model'
+    model_pre = '/Users/johnson/sb3_logs/model_39/best_model'
     # model_pre = None
     note = 'Train with variable bandwidth and delay'
     env_num = 8
@@ -320,13 +320,12 @@ def main():
     config['gym_setting']['print_period'] = 100
 
     def make_env():
-        env = WebRTCSimpleSimulatorEnv(config=config, curriculum_level=0)
+        env = WebRTCSimpleSimulatorEnv(config=config, curriculum_level=1)
         return env
     envs = SubprocVecEnv([make_env for _ in range(env_num)])
     envs = VecMonitor(envs, log_dir)
-    checkpoint_callback = CheckpointCallback(save_freq=200_000, save_path=log_dir, 
+    checkpoint_callback = CheckpointCallback(save_freq=200_000, save_path=log_dir,
                                              name_prefix="WebRTCSimpleSimulatorEnv")
-    # tensorboard_callback = TensorboardCallback()
     best_model_callback = SaveOnBestTrainingRewardCallback(check_freq=2_000, log_dir=log_dir)
     if model_pre:
         model = PPO.load(model_pre, env=envs, verbose=1,
@@ -344,7 +343,6 @@ def main():
     #             device="auto", batch_size=256, learning_rate=linear_schedule(0.0003))
     model.learn(total_timesteps=20_000_000, 
                 callback=[checkpoint_callback, 
-                        #   tensorboard_callback, 
                           best_model_callback])
 
 

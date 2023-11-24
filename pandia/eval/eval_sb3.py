@@ -4,6 +4,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 from sb3_contrib import RecurrentPPO
 from stable_baselines3 import PPO, SAC
+import torch
 from pandia import RESULTS_PATH, SB3_LOG_PATH
 from pandia.agent.action import Action
 from pandia.agent.curriculum_level import CURRICULUM_LEVELS
@@ -33,21 +34,22 @@ def model_path(zoo=False):
 def main_single_env():
     config = ENV_CONFIG
     deep_update(config, CURRICULUM_LEVELS[0])
-    config['network_setting']['bandwidth'] = 10 * M
-    config['network_setting']['delay'] = .002
-    config['gym_setting']['print_step'] = True
+    config['network_setting']['bandwidth'] = 2 * M
+    config['network_setting']['delay'] = .008
+    # config['gym_setting']['print_step'] = True
     config['gym_setting']['duration'] = 50
+    config['action_limit']['bitrate'] = [1 * M, 20 * M]
     env = WebRTCSimpleSimulatorEnv(config=config, curriculum_level=None) # type: ignore
 
     path = model_path()
-    # path = '/Users/johnson/sb3_logs/model_23/best_model'
+    # path = '/Users/johnson/sb3_logs/model_36/best_model'
     # model = PPO.load(os.path.expanduser('~/sb3_logs/WebRTCSimpleSimulatorEnv_17600000_steps'), env)
     # model = RecurrentPPO.load(model_path(zoo=False), env)
     model = PPO.load(path, env)
     # model = SAC.load(model_path(zoo=False), env)
     data = []
-    print(f'Eval with bw: {env.bw0 / M:.02f} Mbps')
     obs, _ = env.reset()
+    print(f'Eval with bw: {env.net_sample["bw"] / M:.02f} Mbps')
     rewards = []
     delays = []
     actions = []
@@ -63,7 +65,7 @@ def main_single_env():
             break
     bw = env.net_sample['bw']
     data.append((bw, np.mean(actions), np.mean(delays), np.mean(rewards)))
-    print(f'bw: {bw / M:.02f}Mbps, bitrate: {np.mean(actions) / M:.02f}Mbps, '
+    print(f'bw: {bw / M:.02f}Mbps, bitrate: {np.mean(actions):.02f}Mbps, '
             f'delay: {np.mean(delays) * 1000:.02f}ms, reward: {np.mean(rewards):.02f}')
     env.close()
 
