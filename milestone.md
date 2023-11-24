@@ -3,9 +3,11 @@ Milestone
 
 Track the development of new features
 
+### 24th Nov
+- [x] Traing on the simulator with curricum level 0 is successful. The key trick is to set a small gamma (0.8) because an action affects a limite number of future rewards.
 
 ### 6th Oct
-- [ ] Improve the FPS of training the simple simulator
+- [x] Improve the FPS of training the simple simulator
 
 ### 5th Oct
 - [x] Implement a simple simulator for fast training, which will be utilized for transfer learning.
