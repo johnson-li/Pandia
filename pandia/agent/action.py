@@ -8,7 +8,7 @@ from pandia.constants import M
 
 class Action():
     def __init__(self, action_keys, boundary=ENV_CONFIG['boundary'], 
-                 limit=ENV_CONFIG['boundary']) -> None:
+                 limit={}, log=ENV_CONFIG['gym_setting']['log_nml']) -> None:
         self.action_keys = list(sorted(action_keys))
         # Initiation values are invalid values so that WebRTC will not use DRL actions 
         self.bitrate = 0
@@ -21,6 +21,7 @@ class Action():
         self.fake = action_keys == ['fake']
         self.boundary = boundary
         self.limit = limit
+        self.log = log
 
     def __str__(self) -> str:
         if self.fake:
@@ -65,15 +66,17 @@ class Action():
 
     def array(self) -> np.ndarray:
         keys = sorted(self.action_keys)
-        return np.array([nml(k, getattr(self, k), self.boundary[k], log=False) for k in keys], dtype=np.float32)
+        return np.array([nml(k, getattr(self, k), self.boundary[k], log=self.log) for k in keys], dtype=np.float32)
 
+    ## It is usually used for testing purpose. Try to avoid using it in the training process.
     @staticmethod
-    def from_array(array: np.ndarray, keys, boundary=ENV_CONFIG['boundary']) -> 'Action':
+    def from_array(array: np.ndarray, keys, boundary=ENV_CONFIG['boundary'],
+                   log=ENV_CONFIG['gym_setting']['log_nml']) -> 'Action':
         assert array.dtype == np.float32, f'Invalid action array type: {array.dtype}'
         keys = list(sorted(keys))
         action = Action(keys, boundary=boundary)
         for i, k in enumerate(keys):
-            setattr(action, k, dnml(k, array[i], boundary[k], log=False))
+            setattr(action, k, dnml(k, array[i], boundary[k], log=log))
         parameters = ['bitrate', 'pacing_rate', 'fps', 'fec_rate_key', 
                       'fec_rate_delta', 'padding_rate', 'resolution']
         for p in parameters:
@@ -89,9 +92,8 @@ class Action():
         bound = np.zeros((2, len(self.action_keys)), dtype=np.float32)
         for i, key in enumerate(self.action_keys):
             for j in [0, 1]:
-                bound[j][i] = (self.boundary[key][j] - self.limit[key][j]) / \
-                    (self.boundary[key][1] - self.boundary[key][0]) \
-                    * (NORMALIZATION_RANGE[1] - NORMALIZATION_RANGE[0]) + NORMALIZATION_RANGE[0]
+                bound[j][i] = nml(key, self.limit.get(key, self.boundary[key])[j], 
+                                  self.boundary[key], log=self.log) 
         return spaces.Box(low=bound[0], high=bound[1], dtype=np.float32)
 
     @staticmethod

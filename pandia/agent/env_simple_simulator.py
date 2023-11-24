@@ -5,10 +5,11 @@ import numpy as np
 from ray import tune
 from pandia import BIN_PATH
 from pandia.agent.action import Action
+from pandia.agent.curriculum_level import CURRICULUM_LEVELS
 from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.observation import Observation
 from pandia.agent.reward import reward
-from pandia.agent.utils import sample
+from pandia.agent.utils import deep_update, sample
 from pandia.constants import M
 from pandia.log_analyzer_sender import FrameContext, PacketContext, StreamingContext
 
@@ -74,11 +75,14 @@ class NetowkrSimulator:
 
 
 class WebRTCSimpleSimulatorEnv(gymnasium.Env):
-    def __init__(self, config=ENV_CONFIG) -> None: 
+    def __init__(self, config=ENV_CONFIG, curriculum_level=0) -> None: 
         super().__init__()
+        if curriculum_level is not None:
+            deep_update(config, CURRICULUM_LEVELS[curriculum_level])
         # Exp settings
         self.duration = config['gym_setting']['duration']
         self.startup_delay = config['gym_setting']['startup_delay']
+        self.skip_slow_start = config['gym_setting']['skip_slow_start']
         # Source settings
         self.resolution = config['video_source']['resolution']
         self.fps = config['video_source']['fps']
@@ -88,6 +92,7 @@ class WebRTCSimpleSimulatorEnv(gymnasium.Env):
         self.loss0 = config['network_setting']['loss']
         self.buffer_size0 = .1
         self.queue_delay0 = .25
+        self.net_sample: dict
         # Logging settings
         self.print_step = config['gym_setting']['print_step']
         self.print_period = config['gym_setting']['print_period']
@@ -102,27 +107,32 @@ class WebRTCSimpleSimulatorEnv(gymnasium.Env):
         self.observation: Observation = Observation(self.obs_keys, 
                                                     durations=self.monitor_durations,
                                                     history_size=self.hisory_size)
+        self.actions = list()
         # ENV state
         self.streaming_simulator: StreamingSimulator = \
             StreamingSimulator(self.fps, 0, self.resolution, self.startup_delay)
-        self.network_simulator: NetowkrSimulator = NetowkrSimulator(self.sample_net_params())
+        self.network_simulator: NetowkrSimulator
         self.termination_ts = 0
         self.action_keys = list(sorted(ENV_CONFIG['action_keys']))
-        self.action_space = Action(self.action_keys).action_space()
+        self.action_space = Action(self.action_keys, boundary=config['boundary'], 
+                                   limit=config.get('action_limit', {})).action_space()
+        print(f'action space: {self.action_space}')
         self.observation_space = \
             Observation(self.obs_keys, self.monitor_durations, self.hisory_size)\
                 .observation_space()
 
     def sample_net_params(self):
-        return {'bw': sample(self.bw0),
+        self.net_sample = {'bw': sample(self.bw0),
                 'delay': sample(self.delay0),
                 'loss': sample(self.loss0),
                 'buffer_size': sample(self.buffer_size0),
                 'queue_delay': sample(self.queue_delay0),
                 }
+        return self.net_sample
 
     def reset(self, seed=None, options=None):
         self.context = StreamingContext(monitor_durations=self.monitor_durations)
+        self.actions.clear()
         self.step_count = 0
         self.network_simulator = NetowkrSimulator(self.sample_net_params())
         self.streaming_simulator: StreamingSimulator = \
@@ -220,41 +230,48 @@ class WebRTCSimpleSimulatorEnv(gymnasium.Env):
     def step(self, action: np.ndarray):
         self.context.reset_step_context()
         act = Action.from_array(action, self.action_keys)
+        self.actions.append(act)
         self.streaming_simulator.bitrate = act.bitrate
         terminal_ts = self.step_duration * (self.step_count + 1)
+        terminal_ts += self.skip_slow_start
         next_new_frame_ts = self.streaming_simulator.next_frame_ts()
+        [mb.on_pacing_rate_set(next_new_frame_ts, act.pacing_rate) for mb in self.context.monitor_blocks.values()]
+        [mb.on_bandwidth_updated(next_new_frame_ts, self.net_sample['bw']) for mb in self.context.monitor_blocks.values()]
         while next_new_frame_ts + self.network_simulator.rtt / 2 < terminal_ts:
-            [mb.on_pacing_rate_set(next_new_frame_ts, act.pacing_rate * 1024) for mb in self.context.monitor_blocks.values()]
             frame = self.streaming_simulator.get_next_frame()
             self.on_new_frame_added(frame)
             next_new_frame_ts = self.streaming_simulator.next_frame_ts() 
 
         self.observation.append(self.context.monitor_blocks, act)
-        r = reward(self.context)
+        r = reward(self.context, net_sample=self.net_sample, actions=self.actions)
 
         if self.print_step and self.step_count % self.print_period == 0:
             print(f'#{self.step_count} [{self.step_count * self.step_duration:.02f}s] '
                     f'R.w.: {r:.02f}, Act.: {act}, Obs.: {self.observation}')
         self.step_count += 1
-        truncated = next_new_frame_ts > self.duration
+        truncated = next_new_frame_ts > self.duration + self.skip_slow_start
         return self.observation.array(), r, False, truncated, {}
 
 
-tune.register_env('WebRTCSimpleSimulatorEnv', lambda config: WebRTCSimpleSimulatorEnv(**config))
+# tune.register_env('WebRTCSimpleSimulatorEnv', lambda config: WebRTCSimpleSimulatorEnv(**config))
 gymnasium.register('WebRTCSimpleSimulatorEnv', \
                    entry_point='pandia.agent.env_simple_simulator:WebRTCSimpleSimulatorEnv', \
                    nondeterministic=True)
+# def env_creator(config, asfd=None):
+#     return WebRTCSimpleSimulatorEnv(config)
+
+# gymnasium.register('WebRTCSimpleSimulatorEnv', \
+#                    entry_point=env_creator, nondeterministic=True)
 
 
 def test_running():
     config = ENV_CONFIG
     config['network_setting']['bandwidth'] = 3 * M
-    config['network_setting']['delay'] = 0
-    config['network_setting']['loss'] = 0
     config['gym_setting']['print_step'] = True
-    config['gym_setting']['print_period'] = 1
+    config['gym_setting']['print_period'] = 100
     env = gymnasium.make("WebRTCSimpleSimulatorEnv", config=config)
-    action = Action(ENV_CONFIG['action_keys'])
+    action = Action(ENV_CONFIG['action_keys'], boundary=config['boundary'], 
+                    limit=config.get('action_limit', {}))
     action.bitrate = int(4 * 1024)
     action.pacing_rate = 1000 * 1024
     episodes = 1

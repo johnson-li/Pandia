@@ -30,12 +30,15 @@ class Observation(object):
     def roll(self):
         np.roll(self.data, 1, axis=0)
 
-    def get_data(self, data, key):
+    def get_data(self, data, key, numeric=False):
         res = dnml(key, data[self.obs_keys_map[key]], self.boundary[key], log=False) \
             if key in self.obs_keys else '?'
+        if numeric:
+            return res
         if res == '?':
             return res
-        elif key in ['frame_bitrate', 'pkt_egress_rate', 'pkt_ack_rate', 'pacing_rate', 'bitrate']:
+        elif key in ['frame_bitrate', 'pkt_egress_rate', 'pkt_ack_rate', 'pacing_rate', 
+                     'bitrate', 'bandwidth']:
             return f'{res / M: .02f}'  # in mbps 
         elif key in ['frame_encoding_delay', 'frame_egress_delay', 'frame_recv_delay', 
                      'frame_decoding_delay', 'frame_decoded_delay', 'pkt_trans_delay',
@@ -59,6 +62,7 @@ class Observation(object):
                     f', FPS: {get_data(data, "frame_fps")}/{get_data(data, "frame_fps_decoded")}' \
                     f', size (bytes): {get_data(data, "frame_size")} ({get_data(data, "frame_height")}/{get_data(data, "frame_encoded_height")}, {get_data(data, "frame_key_count")})' \
                     f', rates (mbps): [{get_data(data, "bitrate")}, {get_data(data, "frame_bitrate")}, {get_data(data, "pkt_egress_rate")}, {get_data(data, "pkt_ack_rate")}, {get_data(data, "pacing_rate")}]' \
+                    f', bw (mbps): {get_data(data, "bandwidth")}' \
                     f', QP: {get_data(data, "frame_qp")}' \
                     f', Dly.p (ms): [{get_data(data, "pkt_trans_delay")}, {get_data(data, "pkt_delay_interval")}] ({get_data(data, "pkt_loss_rate")}%)'
             obs_str_list.append(obs_str)
@@ -79,7 +83,8 @@ class Observation(object):
         return self.data.flatten()
 
     @staticmethod
-    def from_array(array, obs_keys, durations) -> 'Observation':
+    def from_array(array, obs_keys=ENV_CONFIG['observation_keys'], 
+                   durations=ENV_CONFIG['gym_setting']['observation_durations']) -> 'Observation':
         obs = Observation(obs_keys, durations)
         obs.data = array.reshape(obs.data.shape)
         return obs

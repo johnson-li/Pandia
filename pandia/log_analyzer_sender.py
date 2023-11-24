@@ -273,6 +273,8 @@ class MonitorBlock(object):
         # Setting statistics
         self.pacing_rate_data = MonitorBlockData(lambda p: p[0], lambda p: p[1], duration=duration)
         self.bitrate_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.bitrate, duration=duration)
+        # Network statistics
+        self.bandwidth_data = MonitorBlockData(lambda p: p[0], lambda p: p[1], duration=duration)
 
     def update_utc_local_offset(self, offset):
         self.pkts_acked_size.ts_offset = offset
@@ -291,6 +293,10 @@ class MonitorBlock(object):
     @property
     def pacing_rate(self):
         return self.pacing_rate_data.avg()
+
+    @property
+    def bandwidth(self):
+        return self.bandwidth_data.avg()
 
     @property
     def frame_fps(self):
@@ -420,6 +426,9 @@ class MonitorBlock(object):
 
     def on_pacing_rate_set(self, ts: float, rate: float):
         self.pacing_rate_data.append((ts, rate), ts)
+
+    def on_bandwidth_updated(self, ts: float, bw: float):
+        self.bandwidth_data.append((ts, bw), ts)
 
     def update_max_queue_delay(self, ts: float):
         pass

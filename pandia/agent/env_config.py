@@ -49,6 +49,7 @@ BOUNDARY = {
     'pkt_trans_delay': NORMALIZATION_RANGE['delay'],
     'pkt_delay_interval': [0, 10], 
     'action_gap': [- 100 * M, 100 * M],
+    'bandwidth': NORMALIZATION_RANGE['bandwidth'],
 }
 
 NETWORK_SETTING = {
@@ -57,8 +58,8 @@ NETWORK_SETTING = {
     'loss': [0, 0],
 }
 
-TRAINING_SETTING = {
-    'bitrate_range': [1 * M, 10 * M],
+ACTION_LIMIT = {
+    'bitrate': [1 * M, 10 * M],
 }
 
 VIDEO_SOURCE = {
@@ -67,19 +68,21 @@ VIDEO_SOURCE = {
 }
 
 GYM_SETTING = {
-    'step_duration': .01,
-    'startup_delay': .1,
-    'duration': 20,
-    'observation_durations' : [1],
+    'step_duration': .1,
+    'startup_delay': 0,
+    'duration': 100,
+    'observation_durations' : [.1],
     'history_size' : 5,
     'print_step': False,
     'print_period': 1,
+    'skip_slow_start': 10,
+    'log_nml': True, # If false, use linear normalization
 }
 
 ENV_CONFIG = {
     'action_keys' : list(sorted(['bitrate'])),
     'observation_keys' : list(sorted([
-        'frame_encoding_delay', 
+        # 'frame_encoding_delay', 
         # 'frame_egress_delay', 'frame_recv_delay', 
         # 'frame_decoding_delay', 
         'frame_decoded_delay', 
@@ -92,6 +95,10 @@ ENV_CONFIG = {
         'pkt_trans_delay', 'pkt_delay_interval',
         # 'pkt_loss_rate', 
         # 'pacing_rate', 'action_gap',
+
+        # Internal variable of the network. 
+        # Should only be used in the value function. 
+        # 'bandwidth',
     ])),
     'action_static_settings' : {
         'bitrate': 1 * M,
@@ -113,7 +120,7 @@ ENV_CONFIG = {
     },
     'boundary': BOUNDARY,
     'network_setting': NETWORK_SETTING,
-    'training_setting': TRAINING_SETTING,
+    'action_limit': ACTION_LIMIT,
     'video_source': VIDEO_SOURCE,
     'gym_setting': GYM_SETTING,
 }
