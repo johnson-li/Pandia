@@ -301,7 +301,7 @@ def linear_schedule(initial_value: float) -> Callable[[float], float]:
 
 
 def main():
-    model_pre = '/Users/johnson/sb3_logs/model_39/best_model'
+    model_pre = '/Users/johnson/sb3_logs/model_43/best_model'
     # model_pre = None
     note = 'Train with variable bandwidth and delay'
     env_num = 8
@@ -320,7 +320,7 @@ def main():
     config['gym_setting']['print_period'] = 100
 
     def make_env():
-        env = WebRTCSimpleSimulatorEnv(config=config, curriculum_level=1)
+        env = WebRTCSimpleSimulatorEnv(config=config, curriculum_level=3)
         return env
     envs = SubprocVecEnv([make_env for _ in range(env_num)])
     envs = VecMonitor(envs, log_dir)

@@ -31,18 +31,20 @@ def model_path(zoo=False):
         return os.path.join(path, 'best_model')
 
 
-def main_single_env():
+def main():
+    path = model_path()
+    # path = '/Users/johnson/sb3_logs/model_36/best_model'
+    bw = 80 * M
+
     config = ENV_CONFIG
     deep_update(config, CURRICULUM_LEVELS[0])
-    config['network_setting']['bandwidth'] = 2 * M
+    config['network_setting']['bandwidth'] = bw
     config['network_setting']['delay'] = .008
     # config['gym_setting']['print_step'] = True
     config['gym_setting']['duration'] = 50
     config['action_limit']['bitrate'] = [1 * M, 20 * M]
     env = WebRTCSimpleSimulatorEnv(config=config, curriculum_level=None) # type: ignore
 
-    path = model_path()
-    # path = '/Users/johnson/sb3_logs/model_36/best_model'
     # model = PPO.load(os.path.expanduser('~/sb3_logs/WebRTCSimpleSimulatorEnv_17600000_steps'), env)
     # model = RecurrentPPO.load(model_path(zoo=False), env)
     model = PPO.load(path, env)
@@ -103,4 +105,4 @@ def main_single_env():
 
 
 if __name__ == "__main__":
-    main_single_env()
+    main()
