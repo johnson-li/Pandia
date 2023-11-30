@@ -3,7 +3,7 @@ import numpy as np
 from gymnasium import spaces
 from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.normalization import NORMALIZATION_RANGE, dnml, nml
-from pandia.constants import M
+from pandia.constants import K, M
 
 
 class Action():
@@ -53,15 +53,16 @@ class Action():
             bytes = value.to_bytes(4, byteorder='little')
             buf[offset * 4:offset * 4 + 4] = bytes
         
-        parameters = ['bitrate', 'pacing_rate', 'fps', 'fec_rate_key', 
-                      'fec_rate_delta', 'padding_rate', 'resolution']
+        parameters = [('bitrate', K), ('pacing_rate', K), ('fps', 1),
+                      ('fec_rate_key', 1), ('fec_rate_delta', 1),
+                      ('padding_rate', K), ('resolution', 1)]
         for i, p in enumerate(parameters):
             if self.fake:
-                write_int(ENV_CONFIG['action_invalid_value'][p], i)
+                write_int(ENV_CONFIG['action_invalid_value'][p[0]] / p[1], i)
             elif p in self.action_keys:
-                write_int(getattr(self, p), i)
+                write_int(getattr(self, p[0]) / p[1], i)
             else:
-                write_int(ENV_CONFIG['action_static_settings'][p], i)
+                write_int(ENV_CONFIG['action_static_settings'][p[0]] / p[1], i)
 
     def array(self) -> np.ndarray:
         keys = sorted(self.action_keys)

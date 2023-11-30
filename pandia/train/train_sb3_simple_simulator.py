@@ -237,6 +237,7 @@ class TensorboardCallback(BaseCallback):
     def _on_rollout_end(self) -> None:
         return super()._on_rollout_end()
 
+
 class SaveOnBestTrainingRewardCallback(BaseCallback):
     def __init__(self, check_freq: int, log_dir: str, verbose=1):
         super(SaveOnBestTrainingRewardCallback, self).__init__(verbose)

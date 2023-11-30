@@ -1,3 +1,5 @@
+# Depreciated
+
 import os
 
 from pandia import RESULTS_PATH

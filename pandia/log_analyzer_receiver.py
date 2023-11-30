@@ -152,7 +152,7 @@ def get_stream(result_path=os.path.join(RESULTS_PATH, 'eval_static')) -> Stream:
     return stream
 
 
-def main(result_path=os.path.join(RESULTS_PATH, 'eval_static')) -> None:
+def test(result_path=os.path.join(RESULTS_PATH, 'eval_static')) -> None:
     receiver_log = os.path.join(result_path, 'eval_receiver.log')
     stream = Stream()
     for line in open(receiver_log).readlines()[:-1]:  # Ignore the last line because it may be incomplete
@@ -169,4 +169,4 @@ def main(result_path=os.path.join(RESULTS_PATH, 'eval_static')) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    test()

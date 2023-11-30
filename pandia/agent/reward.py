@@ -3,7 +3,7 @@ from pandia.constants import M
 import numpy as np
 
 
-def reward(context: StreamingContext, terminated=False, net_sample=None, actions=list()):
+def reward(context: StreamingContext, net_sample, terminated=False, actions=list()):
     monitor_durations = list(sorted(context.monitor_blocks.keys()))
     mb = context.monitor_blocks[monitor_durations[0]]
     penalty = 0

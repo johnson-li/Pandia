@@ -77,6 +77,7 @@ GYM_SETTING = {
     'print_period': 1,
     'skip_slow_start': 10,
     'log_nml': True, # If false, use linear normalization
+    'enable_own_logging': False,
 }
 
 ENV_CONFIG = {
