@@ -65,7 +65,7 @@ class StreamingSimulator:
         return frame
 
 
-class NetowkrSimulator:
+class NetworkSimulator:
     def __init__(self, sample) -> None:
         self.rtt = sample['delay']
         self.bw = sample['bw']
@@ -77,15 +77,16 @@ class NetowkrSimulator:
 
 class WebRTCSimpleSimulatorEnv(WebRTCEnv):
     def __init__(self, config=ENV_CONFIG, curriculum_level=0) -> None: 
-        super().__init__()
+        super().__init__(config, curriculum_level)
         # ENV state
         self.streaming_simulator: StreamingSimulator = \
             StreamingSimulator(self.fps, 0, self.resolution, self.startup_delay)
-        self.network_simulator: NetowkrSimulator
+        self.network_simulator: NetworkSimulator
+        self.last_print_ts = 0
 
     def reset(self, seed=None, options=None):
         ans = super().reset(seed, options)
-        self.network_simulator = NetowkrSimulator(self.net_sample)
+        self.network_simulator = NetworkSimulator(self.net_sample)
         self.streaming_simulator: StreamingSimulator = \
             StreamingSimulator(self.fps, 0, self.resolution, self.startup_delay)
         return ans
@@ -196,7 +197,8 @@ class WebRTCSimpleSimulatorEnv(WebRTCEnv):
         self.observation.append(self.context.monitor_blocks, act)
         r = reward(self.context, self.net_sample, actions=self.actions)
 
-        if self.print_step and self.step_count % self.print_period == 0:
+        if self.print_step and (self.step_count * self.step_duration - self.last_print_ts) >= self.print_period:
+            self.last_print_ts = self.step_count * self.step_duration
             print(f'#{self.step_count} [{self.step_count * self.step_duration:.02f}s] '
                     f'R.w.: {r:.02f}, Act.: {act}, Obs.: {self.observation}')
         self.step_count += 1

@@ -2,7 +2,7 @@ import gymnasium
 import numpy as np
 from pandia.agent.action import Action
 from pandia.agent.curriculum_level import CURRICULUM_LEVELS
-
+from stable_baselines3.common.utils import set_random_seed
 from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.observation import Observation
 from pandia.agent.utils import deep_update, sample
@@ -62,7 +62,9 @@ class WebRTCEnv(gymnasium.Env):
         return self.net_sample
 
     def reset(self, seed=None, options=None):
-        np.random.seed(seed)
+        if seed is None:
+            seed = np.random.randint(0xffffff)
+        set_random_seed(seed, True)
         self.context = StreamingContext(monitor_durations=self.monitor_durations)
         self.actions.clear()
         self.step_count = 0

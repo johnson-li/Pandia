@@ -19,13 +19,14 @@ from pandia.constants import M
 
 class WebRTCEmulatorEnv(WebRTCEnv):
     def __init__(self, config=ENV_CONFIG, curriculum_level=0) -> None: 
-        super().__init__()
+        super().__init__(config, curriculum_level)
         # Exp settings
         self.uuid = str(uuid.uuid4())[:8]
         self.termination_timeout = 3
         # Logging settings
         self.logging_path = config['gym_setting'].get('logging_path', None)
         self.sb3_logging_path = config['gym_setting'].get('sb3_logging_path', None)
+        self.obs_logging_path = config['gym_setting'].get('obs_logging_path', None)
         self.enable_own_logging = config['gym_setting'].get('enable_own_logging', False)
         if self.enable_own_logging:
             self.logging_path = f'{self.logging_path}.{self.uuid}'
@@ -36,7 +37,7 @@ class WebRTCEmulatorEnv(WebRTCEnv):
         self.docker_client = docker.from_env()
         self.control_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         self.obs_socket = self.create_observer()
-        self.obs_thread = ObservationThread(self.obs_socket, logging_path='/tmp/obs.log')
+        self.obs_thread = ObservationThread(self.obs_socket, logging_path=self.obs_logging_path)
         self.obs_thread.start()
         self.start_container()
 
@@ -108,7 +109,6 @@ class WebRTCEmulatorEnv(WebRTCEnv):
         ans = super().reset(seed, options)
         self.stop_webrtc()
         self.obs_thread.context = self.context
-        self.termination_ts = 0
         self.last_print_ts = 0
         self.start_ts = time.time()
         return ans
@@ -120,8 +120,11 @@ class WebRTCEmulatorEnv(WebRTCEnv):
         self.obs_thread.stop()
 
     def step(self, action: np.ndarray):
+        limit = Action.action_limit(self.action_keys, limit=self.action_limit)
+        action = np.clip(action, limit.low, limit.high)
         self.context.reset_step_context()
         act = Action.from_array(action, self.action_keys)
+        self.actions.append(act)
         buf = bytearray(Action.shm_size() + 1)
         act.write(buf)
         buf[1:] = buf[:-1]
@@ -151,8 +154,7 @@ class WebRTCEmulatorEnv(WebRTCEnv):
             self.log(f'#{self.step_count}@{int((time.time() - self.start_ts))}s '
                     f'R.w.: {r:.02f}, Act.: {act}, Obs.: {self.observation}')
         self.step_count += 1
-        terminated = self.termination_ts > 0 and self.context.last_ts > self.termination_ts
-        return self.observation.array(), r, terminated, truncated, {}
+        return self.observation.array(), r, False, truncated, {}
 
 
 gymnasium.register('WebRTCEmulatorEnv', entry_point='pandia.agent.env_emulator:WebRTCEmulatorEnv', 
@@ -170,7 +172,7 @@ def test_single():
     config['gym_setting']['logging_path'] = '/tmp/pandia.log'
     env: WebRTCEmulatorEnv = gymnasium.make("WebRTCEmulatorEnv", config=config) # type: ignore
     action = Action(config['action_keys'])
-    action.bitrate = 5 * M
+    action.bitrate = 8 * M
     try:
         for _ in range(episodes):
             env.reset()

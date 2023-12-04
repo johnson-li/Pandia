@@ -25,7 +25,9 @@ from stable_baselines3.common.vec_env import VecMonitor
 from stable_baselines3.common.policies import ActorCriticPolicy
 from pandia.agent.utils import deep_update
 from pandia.constants import M
-from pandia.eval.eval_sb3 import model_path
+from pandia.model.policies import CustomPolicy
+from pandia.model.schedules import linear_schedule
+from pandia.train.callbacks import SaveOnBestTrainingRewardCallback
 
 
 def parse_args():
@@ -225,81 +227,6 @@ def main_zoo():
             exp_manager.save_trained_model(model)
     else:
         exp_manager.hyperparameters_optimization()
-
-
-class TensorboardCallback(BaseCallback):
-    def __init__(self, verbose=0):
-        super().__init__(verbose)
-
-    def _on_step(self) -> bool:
-        return True
-
-    def _on_rollout_end(self) -> None:
-        return super()._on_rollout_end()
-
-
-class SaveOnBestTrainingRewardCallback(BaseCallback):
-    def __init__(self, check_freq: int, log_dir: str, verbose=1):
-        super(SaveOnBestTrainingRewardCallback, self).__init__(verbose)
-        self.check_freq = check_freq
-        self.log_dir = log_dir
-        self.save_path = os.path.join(log_dir, "best_model")
-        self.best_mean_reward = -np.inf
-
-    def _init_callback(self) -> None:
-        if self.save_path is not None:
-            os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
-
-    def _on_step(self) -> bool:
-        if self.n_calls % self.check_freq == 0:
-            x, y = ts2xy(load_results(self.log_dir), "timesteps")
-            if len(x) > 0:
-                mean_reward = np.mean(y[-100:])
-                if self.verbose > 0:
-                    print(f"Num timesteps: {self.num_timesteps}")
-                    print(
-                        f"Best mean reward: {self.best_mean_reward:.2f} - Last mean reward per episode: {mean_reward:.2f}"
-                    )
-                if mean_reward > self.best_mean_reward:
-                    self.best_mean_reward = mean_reward
-                    if self.verbose > 0:
-                        print(f"Saving new best model to {self.save_path}.zip")
-                    self.model.save(self.save_path)
-        return True
-
-
-class CustomPolicy(ActorCriticPolicy):
-    def __init__(
-        self,
-        observation_space: spaces.Space,
-        action_space: spaces.Space,
-        lr_schedule: Schedule,
-        net_arch: Optional[Union[List[int], Dict[str, List[int]]]] = None,
-        activation_fn: Type[nn.Module] = nn.Tanh,
-        ortho_init: bool = True,
-        use_sde: bool = False,
-        log_std_init: float = 0.0,
-        full_std: bool = True,
-        use_expln: bool = False,
-        squash_output: bool = False,
-        features_extractor_class: Type[BaseFeaturesExtractor] = FlattenExtractor,
-        features_extractor_kwargs: Optional[Dict[str, Any]] = None,
-        share_features_extractor: bool = True,
-        normalize_images: bool = True,
-        optimizer_class: Type[th.optim.Optimizer] = th.optim.Adam,
-        optimizer_kwargs: Optional[Dict[str, Any]] = None,
-    ):
-        super().__init__(observation_space, action_space, lr_schedule, net_arch, activation_fn, ortho_init,
-                         use_sde, log_std_init, full_std, use_expln, squash_output, features_extractor_class,
-                         features_extractor_kwargs, share_features_extractor, normalize_images, 
-                         optimizer_class, optimizer_kwargs)
-
-
-def linear_schedule(initial_value: float) -> Callable[[float], float]:
-    def func(progress_remaining: float) -> float:
-        return progress_remaining * initial_value
-    return func
-
 
 def main():
     model_pre = '/Users/johnson/sb3_logs/model_43/best_model'

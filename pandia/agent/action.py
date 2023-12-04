@@ -59,7 +59,7 @@ class Action():
         for i, p in enumerate(parameters):
             if self.fake:
                 write_int(ENV_CONFIG['action_invalid_value'][p[0]] / p[1], i)
-            elif p in self.action_keys:
+            elif p[0] in self.action_keys:
                 write_int(getattr(self, p[0]) / p[1], i)
             else:
                 write_int(ENV_CONFIG['action_static_settings'][p[0]] / p[1], i)
