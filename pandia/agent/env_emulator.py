@@ -12,8 +12,7 @@ from pandia.agent.env import WebRTCEnv
 from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.observation_thread import ObservationThread
 from pandia.agent.reward import reward
-from pandia.agent.utils import sample
-from pandia.analysis.stream_illustrator import illustrate_frame
+from pandia.analysis.stream_illustrator import generate_diagrams
 from pandia.constants import M
 
 
@@ -184,7 +183,7 @@ def test_single():
         pass
     env.close()
     fig_path = os.path.join(RESULTS_PATH, 'env_emulator_test')
-    illustrate_frame(fig_path, env.context)
+    generate_diagrams(fig_path, env.context)
 
 
 if __name__ == '__main__':

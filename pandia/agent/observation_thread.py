@@ -176,12 +176,14 @@ class ObservationThread(threading.Thread):
             [mb.on_pacing_rate_set(ts, pacing_rate) for mb in context.monitor_blocks.values()]
         elif msg_type == 12:  # RTCP feedback
             ts, rtp_id, lost, received_at = unpack('QQQQ', data)
+            ts /= 1000
             # The recv time is wrapped by kTimeWrapPeriod.
             # The fixed value 1570 should be calculated according to the current time.
             offset = int(time.time() * 1000 / kTimeWrapPeriod) - 1
             received_at = (int(received_at) + offset * kTimeWrapPeriod) / 1000
             rtp_id = int(rtp_id)
             if rtp_id in context.packets:
+                # print(f'Packet acked: {rtp_id}')
                 packet = context.packets[rtp_id]
                 packet.received_at_utc = received_at
                 packet.received = lost != 1
@@ -196,6 +198,7 @@ class ObservationThread(threading.Thread):
             ts /= 1000
             utc /= 1000
             if rtp_id > 0:
+                # print(f'Packet sent: {rtp_id}')
                 if rtp_id not in context.packets:
                     print(f'ERROR: packet {rtp_id} is not found, the last one is {context.last_egress_packet_id}')
                 else:

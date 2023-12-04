@@ -226,6 +226,8 @@ def analyze_packet(context: StreamingContext, output_dir: str) -> None:
     data_recv = []
     for pkt in sorted(context.packets.values(), key=lambda x: x.sent_at):
         pkt: PacketContext = pkt
+        if pkt.sent_at < context.start_ts:
+            continue
         if pkt.ack_delay() > 0:
             data_ack.append((pkt.sent_at, pkt.ack_delay()))
         if pkt.recv_delay() != -1:
@@ -245,8 +247,8 @@ def analyze_packet(context: StreamingContext, output_dir: str) -> None:
     plt.savefig(os.path.join(output_dir, f'mea-delay-packet-biased.{FIG_EXTENSION}'), dpi=DPI)
 
     plt.close()
-    plt.plot([(d[0] - context.start_ts)
-             for d in data_ack], [d[1] * 1000 for d in data_ack], 'x')
+    plt.plot([(d[0] - context.start_ts) for d in data_ack], 
+             [d[1] * 1000 for d in data_ack], 'x')
     plt.xlabel('Timestamp (s)')
     plt.ylabel('RTT (ms)')
     # plt.ylim([0, 50])
@@ -389,7 +391,7 @@ def analyze_network(context: StreamingContext, output_dir: str) -> None:
     plt.savefig(os.path.join(output_dir, f'mea-pacing-queue.{FIG_EXTENSION}'), dpi=DPI)
 
 
-def illustrate_frame(path, context):
+def generate_diagrams(path, context):
     os.makedirs(path, exist_ok=True)
     for f in os.listdir(path):
         os.remove(os.path.join(path, f))

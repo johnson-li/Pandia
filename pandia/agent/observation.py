@@ -10,7 +10,7 @@ from typing import Dict, TYPE_CHECKING, List
 
 
 if TYPE_CHECKING:
-    from pandia.log_analyzer_sender import MonitorBlock
+    from pandia.monitor.monitor_block import MonitorBlock
 
 
 ONRL_OBS_KEYS = ['pkt_loss_rate', 'pkt_trans_delay', 'pkt_delay_interval', 'pkt_ack_rate', 'action_gap']
