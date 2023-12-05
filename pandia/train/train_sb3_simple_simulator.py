@@ -216,7 +216,7 @@ def main_zoo():
         device=args.device,
         config=args.conf_file,
         show_progress=args.progress,
-    )    
+    )
     results = exp_manager.setup_experiment()
     if results is not None:
         model, saved_hyperparams = results
@@ -229,7 +229,7 @@ def main_zoo():
         exp_manager.hyperparameters_optimization()
 
 def main():
-    model_pre = '/Users/johnson/sb3_logs/model_43/best_model'
+    model_pre = '/Users/johnson/sb3_logs/model_45/best_model'
     # model_pre = None
     note = 'Train with variable bandwidth and delay'
     env_num = 8
@@ -248,7 +248,7 @@ def main():
     config['gym_setting']['print_period'] = 100
 
     def make_env():
-        env = WebRTCSimpleSimulatorEnv(config=config, curriculum_level=3)
+        env = WebRTCSimpleSimulatorEnv(config=config, curriculum_level=0)
         return env
     envs = SubprocVecEnv([make_env for _ in range(env_num)])
     envs = VecMonitor(envs, log_dir)
@@ -263,14 +263,14 @@ def main():
         model = PPO(policy=CustomPolicy, env=envs, verbose=1, gamma=.8,
                     tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCSimpleSimulatorEnv"),
                     device="auto", batch_size=256, n_epochs=20, learning_rate=linear_schedule(0.0003))
-    # model = RecurrentPPO("MlpLstmPolicy", env=envs, verbose=1, 
+    # model = RecurrentPPO("MlpLstmPolicy", env=envs, verbose=1,
     #             tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCSimpleSimulatorEnv"),
     #             device="auto", batch_size=256, n_epochs=20, learning_rate=linear_schedule(0.0003))
-    # model = SAC(policy='MlpPolicy', env=envs, verbose=1, 
+    # model = SAC(policy='MlpPolicy', env=envs, verbose=1,
     #             tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCSimpleSimulatorEnv"),
     #             device="auto", batch_size=256, learning_rate=linear_schedule(0.0003))
-    model.learn(total_timesteps=20_000_000, 
-                callback=[checkpoint_callback, 
+    model.learn(total_timesteps=20_000_000,
+                callback=[checkpoint_callback,
                           best_model_callback])
 
 
