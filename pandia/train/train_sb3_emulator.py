@@ -11,11 +11,11 @@ from stable_baselines3.common.vec_env import VecMonitor
 
 
 def main():
-    note = 'Train with emulator. Curricum level 0.'
+    note = 'Train with emulator. Curricum level 0. The observation bug is fixed. lr=.001.'
     env_num = 8
 
     # model_pre = None
-    model_pre = os.path.expanduser('~/sb3_logs/model_1/best_model')
+    model_pre = os.path.expanduser('~/sb3_logs/model_12/best_model')
     log_dir = os.path.expanduser('~/sb3_logs')
     models = [int(d[6:]) for d in os.listdir(log_dir) if d.startswith('model_')]
     if models:
@@ -39,7 +39,7 @@ def main():
     if model_pre:
         model = PPO.load(model_pre, env=envs, verbose=1, custom_objects={'policy_class': CustomPolicy},
                          tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCEmulatorEnv/"),
-                         device="auto", batch_size=256, n_epochs=20, learning_rate=linear_schedule(0.00001))
+                         device="auto", batch_size=256, n_epochs=20, learning_rate=linear_schedule(0.0003))
     else:
         model = PPO(policy=CustomPolicy, env=envs, verbose=1, gamma=.8,
                     tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCEmulatorEnv/"),

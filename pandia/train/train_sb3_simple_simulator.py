@@ -229,23 +229,24 @@ def main_zoo():
         exp_manager.hyperparameters_optimization()
 
 def main():
-    model_pre = '/Users/johnson/sb3_logs/model_45/best_model'
-    # model_pre = None
+    model_pre = None
+    algo = 'ppo'
     note = 'Train with variable bandwidth and delay'
     env_num = 8
-    log_dir = os.path.expanduser('~/sb3_logs')
-    models = [int(d[6:]) for d in os.listdir(log_dir) if d.startswith('model_')]
+    log_dir = os.path.expanduser(f'~/sb3_logs/{algo}')
+    models = [int(d[25:]) for d in os.listdir(log_dir) if d.startswith('WebRTCSimpleSimulatorEnv_')]
     if models:
         model_id = max(models) + 1
     else:
         model_id = 0
-    log_dir = os.path.join(log_dir, f'model_{model_id}')
+    log_dir = os.path.join(log_dir, f'WebRTCSimpleSimulatorEnv_{model_id}')
     os.makedirs(log_dir, exist_ok=True)
     with open(os.path.join(log_dir, 'note.txt'), 'w') as f:
         f.write(note)
     config = ENV_CONFIG
     config['gym_setting']['print_step'] = True
-    config['gym_setting']['print_period'] = 100
+    config['gym_setting']['print_period'] = 10
+    config['gym_setting']['duration'] = 100
 
     def make_env():
         env = WebRTCSimpleSimulatorEnv(config=config, curriculum_level=0)
@@ -272,6 +273,8 @@ def main():
     model.learn(total_timesteps=20_000_000,
                 callback=[checkpoint_callback,
                           best_model_callback])
+    with open(os.path.join(log_dir, 'tensorboard.txt'), 'w') as f:
+        f.write(str(model.logger.dir))
 
 
 if __name__ == "__main__":
