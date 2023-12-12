@@ -16,6 +16,20 @@ class TensorboardCallback(BaseCallback):
         return super()._on_rollout_end()
 
 
+class StartupCallback(BaseCallback):
+    def __init__(self, verbose: int = 0, log_dir=None):
+        super().__init__(verbose)
+        self.log_dir = log_dir
+
+    def _on_training_start(self) -> None:
+        if self.log_dir:
+            with open(os.path.join(self.log_dir, 'tensorboard.txt'), 'w') as f:
+                f.write(str(self.model.logger.dir))
+
+    def _on_step(self) -> bool:
+        return super()._on_step()
+
+
 class SaveOnBestTrainingRewardCallback(BaseCallback):
     def __init__(self, check_freq: int, log_dir: str, verbose=1):
         super(SaveOnBestTrainingRewardCallback, self).__init__(verbose)

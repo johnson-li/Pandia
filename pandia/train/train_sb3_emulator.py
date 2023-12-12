@@ -13,9 +13,8 @@ from stable_baselines3.common.vec_env import VecMonitor
 def main():
     note = 'Train with emulator. Curricum level 0. The observation bug is fixed. lr=.001.'
     env_num = 8
-
-    # model_pre = None
     model_pre = os.path.expanduser('~/sb3_logs/model_12/best_model')
+    # model_pre = None
     log_dir = os.path.expanduser('~/sb3_logs')
     models = [int(d[6:]) for d in os.listdir(log_dir) if d.startswith('model_')]
     if models:

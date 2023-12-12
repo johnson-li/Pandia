@@ -31,19 +31,18 @@ def model_path(zoo=False):
 
 
 def main():
-    bw_list = [i * M for i in range(2, 11)]
+    bw_list = [i * 10 * M for i in range(1, 20)]
     rewards = []
 
     for bw in bw_list:
         config = ENV_CONFIG
-        deep_update(config, CURRICULUM_LEVELS[0])
+        deep_update(config, CURRICULUM_LEVELS[4])
         config['network_setting']['bandwidth'] = bw
         config['network_setting']['delay'] = .002
         config['gym_setting']['duration'] = 50
         env = WebRTCSimpleSimulatorEnv(config=config, curriculum_level=None) # type: ignore
-        path = model_path()
+        path = '/Users/johnson/sb3_logs/ppo/WebRTCSimpleSimulatorEnv_37/best_model'
         model = PPO.load(path, env)
-        print(f'Eval with bw: {env.bw0 / M:.02f} Mbps')
         obs, _ = env.reset()
         rewards0 = []
         while True:
@@ -55,6 +54,7 @@ def main():
             if terminated or truncated:
                 break
         env.close()
+        print(f'Eval with bw: {env.bw0 / M:.02f} Mbps, reward: {np.mean(rewards0)}')
         rewards.append(np.mean(rewards0))
 
     # Plot evaluation results
@@ -63,7 +63,7 @@ def main():
     plt.xlabel('Bandwidth (Mbps)')
     plt.ylabel('Reward')
     plt.tight_layout()
-    output_dir = os.path.join(RESULTS_PATH, 'eval_sb3')
+    output_dir = os.path.join(RESULTS_PATH, 'eval_sb3_multi_env')
     os.makedirs(output_dir, exist_ok=True)
     plt.savefig(os.path.join(output_dir, 'multi_env_bw_reward.pdf'))
 

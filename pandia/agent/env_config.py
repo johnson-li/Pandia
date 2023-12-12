@@ -1,13 +1,14 @@
 # All bitrates are in bps, all delays are in s,
 # all loss rates are in %, all data size are in bytes
 
-from pandia.constants import M
+from pandia.constants import K, M
 
 RESOLUTION_LIST = [144, 240, 360, 480, 720, 960, 1080, 1440, 2160]
+MIN_BW = 100 * K
 
 NORMALIZATION_RANGE = {
-    'bandwidth': [0, 100 * M],
-    'bitrate': [0, 100 * M],
+    'bandwidth': [MIN_BW, 200 * M],
+    'bitrate': [MIN_BW, 200 * M],
     'fec_rate': [0, 255],
     'fps': [1, 60],
     'delay': [0, 1],
@@ -75,7 +76,7 @@ GYM_SETTING = {
     'history_size' : 5,
     'print_step': False,
     'print_period': 1,
-    'skip_slow_start': 10,
+    'skip_slow_start': 0,
     'log_nml': True, # If false, use linear normalization
     'enable_own_logging': False,
 }

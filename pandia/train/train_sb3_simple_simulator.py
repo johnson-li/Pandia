@@ -1,16 +1,12 @@
-from typing import Any, Callable, Dict, List, Optional, Type, Union
-from gymnasium import spaces
+import json
+from typing import Any, Dict, List
 import argparse
 import numpy as np
 import os
 import torch as th
-from stable_baselines3 import PPO, SAC
-from sb3_contrib import RecurrentPPO
-from stable_baselines3.common.torch_layers import BaseFeaturesExtractor, FlattenExtractor
+from stable_baselines3 import PPO
 from stable_baselines3.common.type_aliases import Schedule
-from torch import nn
 from pandia import HYPERPARAMS_PATH
-from pandia.agent.action import Action
 from pandia.agent.curriculum_level import CURRICULUM_LEVELS
 from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.env_simple_simulator import WebRTCSimpleSimulatorEnv
@@ -18,16 +14,15 @@ from rl_zoo3.exp_manager import ExperimentManager
 from rl_zoo3.utils import ALGOS, StoreDict
 from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.vec_env import SubprocVecEnv
-from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
+from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.results_plotter import ts2xy, plot_results
 from stable_baselines3.common.monitor import load_results
 from stable_baselines3.common.vec_env import VecMonitor
-from stable_baselines3.common.policies import ActorCriticPolicy
 from pandia.agent.utils import deep_update
 from pandia.constants import M
 from pandia.model.policies import CustomPolicy
 from pandia.model.schedules import linear_schedule
-from pandia.train.callbacks import SaveOnBestTrainingRewardCallback
+from pandia.train.callbacks import SaveOnBestTrainingRewardCallback, StartupCallback
 
 
 def parse_args():
@@ -228,11 +223,14 @@ def main_zoo():
     else:
         exp_manager.hyperparameters_optimization()
 
+
 def main():
-    model_pre = None
+    model_pre = os.path.expanduser("~/sb3_logs/ppo/WebRTCSimpleSimulatorEnv_36/best_model")
+    # model_pre = None
+    curriculum_level = 4
     algo = 'ppo'
-    note = 'Train with variable bandwidth and delay'
-    env_num = 8
+    note = f'Train with variable bandwidth and delay. Curriculum level: {curriculum_level}. model_pre: {model_pre}'
+    env_num = 12
     log_dir = os.path.expanduser(f'~/sb3_logs/{algo}')
     models = [int(d[25:]) for d in os.listdir(log_dir) if d.startswith('WebRTCSimpleSimulatorEnv_')]
     if models:
@@ -247,32 +245,29 @@ def main():
     config['gym_setting']['print_step'] = True
     config['gym_setting']['print_period'] = 10
     config['gym_setting']['duration'] = 100
+    with open(os.path.join(log_dir, 'config.json'), 'w') as f:
+        json.dump({'curriculum_level': CURRICULUM_LEVELS[curriculum_level] if curriculum_level is not None else None,
+                   'config': config}, f)
 
     def make_env():
-        env = WebRTCSimpleSimulatorEnv(config=config, curriculum_level=0)
+        env = WebRTCSimpleSimulatorEnv(config=config, curriculum_level=curriculum_level)
         return env
     envs = SubprocVecEnv([make_env for _ in range(env_num)])
     envs = VecMonitor(envs, log_dir)
-    checkpoint_callback = CheckpointCallback(save_freq=200_000, save_path=log_dir,
+    checkpoint_callback = CheckpointCallback(save_freq=20_000, save_path=log_dir,
                                              name_prefix="WebRTCSimpleSimulatorEnv")
     best_model_callback = SaveOnBestTrainingRewardCallback(check_freq=2_000, log_dir=log_dir)
+    startup_callback = StartupCallback(log_dir=log_dir)
     if model_pre:
         model = PPO.load(model_pre, env=envs, verbose=1,
                 tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCSimpleSimulatorEnv"),
-                device="auto", batch_size=256, n_epochs=20, learning_rate=linear_schedule(0.00001))
+                device="auto", batch_size=256, n_epochs=20, learning_rate=linear_schedule(0.00003))
     else:
         model = PPO(policy=CustomPolicy, env=envs, verbose=1, gamma=.8,
                     tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCSimpleSimulatorEnv"),
                     device="auto", batch_size=256, n_epochs=20, learning_rate=linear_schedule(0.0003))
-    # model = RecurrentPPO("MlpLstmPolicy", env=envs, verbose=1,
-    #             tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCSimpleSimulatorEnv"),
-    #             device="auto", batch_size=256, n_epochs=20, learning_rate=linear_schedule(0.0003))
-    # model = SAC(policy='MlpPolicy', env=envs, verbose=1,
-    #             tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCSimpleSimulatorEnv"),
-    #             device="auto", batch_size=256, learning_rate=linear_schedule(0.0003))
     model.learn(total_timesteps=20_000_000,
-                callback=[checkpoint_callback,
-                          best_model_callback])
+                callback=[checkpoint_callback, startup_callback, best_model_callback])
     with open(os.path.join(log_dir, 'tensorboard.txt'), 'w') as f:
         f.write(str(model.logger.dir))
 

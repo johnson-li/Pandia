@@ -5,6 +5,7 @@ from pandia.agent.curriculum_level import CURRICULUM_LEVELS
 from stable_baselines3.common.utils import set_random_seed
 from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.observation import Observation
+from pandia.agent.reward import reward
 from pandia.agent.utils import deep_update, sample
 from pandia.log_analyzer_sender import StreamingContext
 
@@ -60,6 +61,28 @@ class WebRTCEnv(gymnasium.Env):
                 'buffer_size': sample(self.buffer_size0),
                 'queue_delay': sample(self.queue_delay0)}
         return self.net_sample
+
+    def step0(self):
+        raise NotImplementedError()
+
+    # def step(self, action: np.ndarray):
+    #     limit = Action.action_limit(self.action_keys, limit=self.action_limit)
+    #     action = np.clip(action, limit.low, limit.high)
+    #     self.context.reset_step_context()
+    #     act = Action.from_array(action, self.action_keys)
+    #     self.actions.append(act)
+    #     self.step0()
+
+    #     self.observation.append(self.context.monitor_blocks, act)
+    #     r = reward(self.context, self.net_sample, actions=self.actions)
+
+    #     if self.print_step and (self.step_count * self.step_duration - self.last_print_ts) >= self.print_period:
+    #         self.last_print_ts = self.step_count * self.step_duration
+    #         print(f'#{self.step_count} [{self.step_count * self.step_duration:.02f}s] '
+    #                 f'R.w.: {r:.02f}, Act.: {act}, Obs.: {self.observation}')
+    #     self.step_count += 1
+    #     truncated = next_new_frame_ts > self.duration + self.skip_slow_start
+    #     return self.observation.array(), r, False, truncated, {}
 
     def reset(self, seed=None, options=None):
         if seed is None:

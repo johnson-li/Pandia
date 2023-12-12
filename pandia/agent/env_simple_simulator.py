@@ -1,18 +1,15 @@
 import time
 import gymnasium
-from matplotlib import pyplot as plt
 import numpy as np
-from ray import tune
 from pandia import BIN_PATH
 from pandia.agent.action import Action
 from pandia.agent.curriculum_level import CURRICULUM_LEVELS
 from pandia.agent.env import WebRTCEnv
 from pandia.agent.env_config import ENV_CONFIG
-from pandia.agent.observation import Observation
 from pandia.agent.reward import reward
 from pandia.agent.utils import deep_update, sample
 from pandia.constants import M
-from pandia.log_analyzer_sender import FrameContext, PacketContext, StreamingContext
+from pandia.log_analyzer_sender import FrameContext, PacketContext
 
 
 MTU = 1400
@@ -49,7 +46,7 @@ class StreamingSimulator:
         return .001
 
     def encoded_size(self):
-        return self.bitrate / 8 / self.fps
+        return int(self.bitrate / 8 / self.fps)
 
     def get_next_frame(self):
         frame = FrameInfo(self.frame_id)
@@ -59,7 +56,9 @@ class StreamingSimulator:
         frame.rtp_id_base = self.rtp_id
         frame.capture_ts = self.next_frame_ts()
         frame.encoded_size = self.encoded_size()
-        frame.rtp_packet_count = int(frame.encoded_size / MTU) + 1
+        frame.rtp_packet_count = frame.encoded_size // MTU
+        if frame.encoded_size % MTU > 0:
+            frame.rtp_packet_count += 1
         self.rtp_id += frame.rtp_packet_count
         self.frame_id += 1
         return frame
@@ -86,6 +85,7 @@ class WebRTCSimpleSimulatorEnv(WebRTCEnv):
 
     def reset(self, seed=None, options=None):
         ans = super().reset(seed, options)
+        self.last_print_ts = 0
         self.network_simulator = NetworkSimulator(self.net_sample)
         self.streaming_simulator: StreamingSimulator = \
             StreamingSimulator(self.fps, 0, self.resolution, self.startup_delay)
@@ -117,6 +117,7 @@ class WebRTCSimpleSimulatorEnv(WebRTCEnv):
         [mb.on_frame_encoded(frame, encoded_ts) for mb in self.context.monitor_blocks.values()]
         frame.sequence_range[0] = fi.rtp_id_base
         frame.sequence_range[1] = fi.rtp_id_base + fi.rtp_packet_count - 1
+        frame_size_left = frame.encoded_size
         # Notify packet added and sent
         for i in range(fi.rtp_packet_count):
             rtp_id = fi.rtp_id_base + i
@@ -133,13 +134,16 @@ class WebRTCSimpleSimulatorEnv(WebRTCEnv):
             packet.last_packet_in_frame = i == fi.rtp_packet_count - 1
             packet.allow_retrans = True
             packet.retrans_ref = None
-            packet.size = MTU
+            packet.size = min(MTU, frame_size_left)
+            assert packet.size > 0
+            frame_size_left -= packet.size
             self.context.packets[rtp_id] = packet
             self.context.packet_id_map[packet.seq_num] = rtp_id
             [mb.on_packet_added(packet, send_ts) for mb in self.context.monitor_blocks.values()]
             frame.rtp_packets[rtp_id] = packet
             self.context.last_egress_packet_id = packet.rtp_id
             [mb.on_packet_sent(packet, self.context.frames.get(packet.frame_id, None), send_ts) for mb in self.context.monitor_blocks.values()]
+        assert frame_size_left == 0
         # Notify packet received
         assmebled_ts = 0
 
@@ -177,16 +181,17 @@ class WebRTCSimpleSimulatorEnv(WebRTCEnv):
         [mb.on_frame_decoding_updated(frame, frame.decoded_at) for mb in self.context.monitor_blocks.values()]
         self.context.last_ts = frame.decoded_at
 
-    def step(self, action: np.ndarray):
+    def step(self, action0: np.ndarray):
         limit = Action.action_limit(self.action_keys, limit=self.action_limit)
-        action = np.clip(action, limit.low, limit.high)
+        action = np.clip(action0, limit.low, limit.high)
         self.context.reset_step_context()
         act = Action.from_array(action, self.action_keys)
         self.actions.append(act)
-        self.streaming_simulator.bitrate = act.bitrate
         terminal_ts = self.step_duration * (self.step_count + 1)
-        terminal_ts += self.skip_slow_start
+        if self.step_count == 0:
+            terminal_ts += self.skip_slow_start
         next_new_frame_ts = self.streaming_simulator.next_frame_ts()
+        self.streaming_simulator.bitrate = act.bitrate
         [mb.on_pacing_rate_set(next_new_frame_ts, act.pacing_rate) for mb in self.context.monitor_blocks.values()]
         [mb.on_bandwidth_updated(next_new_frame_ts, self.net_sample['bw']) for mb in self.context.monitor_blocks.values()]
         while next_new_frame_ts + self.network_simulator.rtt / 2 < terminal_ts:
@@ -200,7 +205,8 @@ class WebRTCSimpleSimulatorEnv(WebRTCEnv):
         if self.print_step and (self.step_count * self.step_duration - self.last_print_ts) >= self.print_period:
             self.last_print_ts = self.step_count * self.step_duration
             print(f'#{self.step_count} [{self.step_count * self.step_duration:.02f}s] '
-                    f'R.w.: {r:.02f}, Act.: {act}, Obs.: {self.observation}')
+                  f'bw.: {self.net_sample["bw"] / M:.02f} Mbps, '
+                  f'R.w.: {r:.02f}, Act.: {act} ({action}), Obs.: {self.observation}')
         self.step_count += 1
         truncated = next_new_frame_ts > self.duration + self.skip_slow_start
         return self.observation.array(), r, False, truncated, {}
