@@ -7,13 +7,13 @@ import time
 from pandia.agent.action import Action
 from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.utils import sample
-from pandia.constants import WEBRTC_RECEIVER_CONTROLLER_PORT, WEBRTC_SENDER_SB3_PORT
+from pandia.constants import K, M, WEBRTC_RECEIVER_CONTROLLER_PORT, WEBRTC_SENDER_SB3_PORT
 
-def parse_rangable_int(value):
+def parse_rangable(value):
     if type(value) is str and '-' in value:
-        return [int(v) for v in value.split('-')]
+        return [v for v in value.split('-')]
     else:
-        return int(value)
+        return value
 
 
 class ClientProtocol():
@@ -22,9 +22,9 @@ class ClientProtocol():
         self.shm = shared_memory.SharedMemory(name="pandia", create=True, 
                                               size=Action.shm_size())
         self.process = None
-        self.bw = parse_rangable_int(os.getenv('BANDWIDTH', 3000))
-        self.delay = parse_rangable_int(os.getenv('DELAY', 0))
-        self.loss = parse_rangable_int(os.getenv('LOSS', 0))
+        self.bw = parse_rangable(os.getenv('BANDWIDTH', 10 * M))
+        self.delay = parse_rangable(os.getenv('DELAY', 0))
+        self.loss = parse_rangable(os.getenv('LOSS', 0))
         self.height = os.getenv('WIDTH', 2160)
         self.fps = int(os.getenv('FPS', 30))
         self.obs_socket_path = os.getenv('OBS_SOCKET_PATH', '')
@@ -41,6 +41,9 @@ class ClientProtocol():
 
 
     def start_simulator(self, bw, delay, loss):
+        bw = int(bw / K)
+        delay = int(delay * 1000)
+        loss = int(loss * 100)
         print(f'Start sender with bandwidth: {bw} kbps, delay {delay} ms', flush=True)
         os.system(f"tc qdisc del dev lo root 2> /dev/null")
         os.system(f"tc qdisc add dev lo root handle 1: netem delay {delay}ms")

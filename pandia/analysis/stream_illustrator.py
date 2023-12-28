@@ -3,7 +3,7 @@ from typing import List
 from matplotlib import pyplot as plt
 import numpy as np
 from pandia.agent.utils import divide
-from pandia.constants import K
+from pandia.constants import K, M
 from pandia.context.frame_context import FrameContext
 from pandia.context.packet_context import PacketContext
 from pandia.context.streaming_context import StreamingContext
@@ -98,7 +98,9 @@ def analyze_frame(context: StreamingContext, output_dir: str) -> None:
     frame_id_list = list(sorted(context.frames.keys()))
     frames = [context.frames[i] for i in frame_id_list]
     frames_encoded: List[FrameContext] = list(filter(lambda f: f.encoded_size > 0, frames))
+    frames_decoded: List[FrameContext] = list(filter(lambda f: f.decoded_at > context.start_ts, frames))
     frames_encoded_ts = np.array([f.captured_at - context.start_ts for f in frames_encoded])
+    frames_decoded_ts = np.array([f.decoded_at - context.start_ts for f in frames_decoded])
     frames_dropped = list(filter(lambda f: f.encoded_size <= 0, frames))
     frames_key = list(filter(lambda f: f.is_key_frame, frames))
     if (len(frames_encoded) == 0):
@@ -126,9 +128,18 @@ def analyze_frame(context: StreamingContext, output_dir: str) -> None:
     plt.legend(['Decoding', 'Decoding queue', 'Transmission', 'Pacing (RTX)', 'Pacing', 'Encoding'])
     plt.xlabel('Timestamp (s)')
     plt.ylabel('Delay (ms)')
+    # plt.ylim([0, 120])
     # plt.xlim([0, 10])
-    # plt.ylim([0, 50])
     plt.savefig(os.path.join(output_dir, f'mea-delay-frame.{FIG_EXTENSION}'), dpi=DPI)
+
+    plt.close()
+    plt.plot(frames_encoded_ts[1:], (frames_encoded_ts[1:] - frames_encoded_ts[:-1]) * 1000)
+    plt.plot(frames_decoded_ts[1:], (frames_decoded_ts[1:] - frames_decoded_ts[:-1]) * 1000, alpha=0.7)
+    plt.legend(['Encoding', 'Decoding'])
+    plt.ylim([0, 100])
+    plt.xlabel('Timestamp (s)')
+    plt.ylabel('Interval (ms)')
+    plt.savefig(os.path.join(output_dir, f'mea-frame-interval.{FIG_EXTENSION}'), dpi=DPI)
 
     plt.close()
     res_list = [f.encoded_shape[1] for f in frames_encoded]
@@ -172,29 +183,30 @@ def analyze_frame(context: StreamingContext, output_dir: str) -> None:
     plt.savefig(os.path.join(output_dir, f'mea-loss-packet-frame.{FIG_EXTENSION}'), dpi=DPI)
 
     plt.close()
-    duration = .5
-    bucks = int((frames_encoded[-1].encoding_at - context.start_ts) / duration + 1)
-    data = np.zeros((bucks, 1))
-    for frame in frames_encoded:
-        if frame.encoded_size > 0:
-            i = int((frame.encoding_at - context.start_ts) / duration)
-            data[i] += frame.encoded_size
-    plt.plot(np.arange(bucks) * duration, data * 8 / duration / 1024, '.b')
-    plt.ylabel('Rates (Kbps)')
-    plt.plot([d[0] - context.start_ts for d in context.networking.pacing_rate_data], 
-             [d[1] for d in context.networking.pacing_rate_data], '.r')
+    for duration in [.1, .5, 1]:
+        bucks = int((frames_encoded[-1].encoding_at - context.start_ts) / duration + 1)
+        data = np.zeros((bucks, 1))
+        for frame in frames_encoded:
+            if frame.encoded_size > 0:
+                i = int((frame.encoding_at - context.start_ts) / duration)
+                data[i] += frame.encoded_size
+        plt.plot(np.arange(bucks) * duration, data * 8 / duration / M)
+    plt.ylabel('Rates (Mbps)')
     plt.xlabel('Timestamp (s)')
-    plt.legend(['Frame encoded bitrate', 'Pacing rate'])
+    plt.legend(['100ms', '500ms', '1s'])
     plt.savefig(os.path.join(output_dir, f'mea-bitrate.{FIG_EXTENSION}'), dpi=DPI)
 
     plt.close()
+    duration = .5
+    bucks = int((frames_encoded[-1].encoding_at - context.start_ts) / duration + 1)
+    data = np.zeros((bucks, 1))
     fig, ax1 = plt.subplots()
     ax1.set_xlabel('Timestamp (s)')
     ax1.set_ylabel('Bitrate (Kbps)', color='b')
     drl_bitrate = np.array(context.drl_bitrate)
     # ax1.plot((drl_bitrate[:, 0] - context.start_ts), drl_bitrate[:, 1] / 1024, 'b--')
-    ax1.plot([f.encoding_at - context.start_ts for f in frames_encoded], [f.bitrate / 1024 for f in frames_encoded], 'b')
-    ax1.plot(np.arange(bucks) * duration, data * 8 / duration / 1024, '.b')
+    ax1.plot([f.encoding_at - context.start_ts for f in frames_encoded], [f.bitrate / M for f in frames_encoded], 'b')
+    ax1.plot(np.arange(bucks) * duration, data * 8 / duration / M, '.b')
     ax1.legend(['Encoding bitrate', 'Encoded bitrate'])
     ax1.tick_params(axis='y', labelcolor='b')
     ax2 = ax1.twinx()
@@ -210,15 +222,28 @@ def analyze_frame(context: StreamingContext, output_dir: str) -> None:
     plt.savefig(os.path.join(output_dir, f'rep-qp-frame.{FIG_EXTENSION}'), dpi=DPI)
 
     plt.close()
-    duration = .2
-    bucks = int((frames_encoded[-1].captured_at - context.start_ts) / duration + 1)
-    data = np.zeros(bucks)
-    for f in frames_encoded:
-        data[int((f.captured_at - context.start_ts) / duration)] += 1
-    plt.plot(np.arange(bucks) * duration, data / duration, '.')
+    for duration in [.1, .5, 1]:
+        bucks = int((frames_encoded[-1].captured_at - context.start_ts) / duration + 1)
+        data = np.zeros(bucks)
+        for f in frames_encoded:
+            data[int((f.captured_at - context.start_ts) / duration)] += 1
+        plt.plot(np.arange(bucks) * duration, data / duration, '-x')
     plt.xlabel('Timestamp (s)')
     plt.ylabel('FPS')
-    plt.savefig(os.path.join(output_dir, f'mea-fps.{FIG_EXTENSION}'), dpi=DPI)
+    plt.legend(['100ms', '200ms', '1s'])
+    plt.savefig(os.path.join(output_dir, f'mea-fps-encoded.{FIG_EXTENSION}'), dpi=DPI)
+
+    plt.close()
+    for duration in [.1, .5, 1]:
+        bucks = int((frames_decoded[-1].decoded_at - context.start_ts) / duration + 1)
+        data = np.zeros(bucks)
+        for f in frames_decoded:
+            data[int((f.decoded_at - context.start_ts) / duration)] += 1
+        plt.plot(np.arange(bucks) * duration, data / duration, '-x')
+    plt.xlabel('Timestamp (s)')
+    plt.ylabel('FPS')
+    plt.legend(['100ms', '200ms', '1s'])
+    plt.savefig(os.path.join(output_dir, f'mea-fps-decoded.{FIG_EXTENSION}'), dpi=DPI)
 
 
 def analyze_packet(context: StreamingContext, output_dir: str) -> None:
@@ -346,8 +371,8 @@ def analyze_packet(context: StreamingContext, output_dir: str) -> None:
 def analyze_network(context: StreamingContext, output_dir: str) -> None:
     data = context.networking.pacing_rate_data
     x = [d[0] - context.start_ts for d in data]
-    y = [d[1] / 1024 for d in data]
-    yy = [d[2] / 1024 for d in data]
+    y = [d[1] / M for d in data]
+    yy = [d[2] / M for d in data]
     if len(data) == 0:
         print('ERROR: No network data.')
         return

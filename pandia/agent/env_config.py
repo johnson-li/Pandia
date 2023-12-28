@@ -54,17 +54,17 @@ BOUNDARY = {
 }
 
 NETWORK_SETTING = {
-    'bandwidth': [1 * M, 100 * M],
-    'delay': [0, .1],
+    'bandwidth': [MIN_BW, 200 * M],
+    'delay': [0, .02],
     'loss': [0, 0],
 }
 
 ACTION_LIMIT = {
-    'bitrate': [1 * M, 10 * M],
+    'bitrate': [MIN_BW, 200 * M],
 }
 
 VIDEO_SOURCE = {
-    'resolution': 2160,
+    'resolution': 1080,
     'fps': 30,
 }
 

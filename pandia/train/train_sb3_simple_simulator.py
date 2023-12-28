@@ -261,7 +261,7 @@ def main():
     if model_pre:
         model = PPO.load(model_pre, env=envs, verbose=1,
                 tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCSimpleSimulatorEnv"),
-                device="auto", batch_size=256, n_epochs=20, learning_rate=linear_schedule(0.00003))
+                device="auto", batch_size=256, n_epochs=20, learning_rate=linear_schedule(0.00001))
     else:
         model = PPO(policy=CustomPolicy, env=envs, verbose=1, gamma=.8,
                     tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCSimpleSimulatorEnv"),

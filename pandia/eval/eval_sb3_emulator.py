@@ -8,7 +8,7 @@ from pandia.agent.env_emulator import WebRTCEmulatorEnv
 from pandia.agent.curriculum_level import CURRICULUM_LEVELS
 from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.utils import deep_update
-from pandia.analysis.stream_illustrator import illustrate_frame
+from pandia.analysis.stream_illustrator import generate_diagrams
 from pandia.constants import M
 from pandia.train.train_sb3_simple_simulator import CustomPolicy
 
@@ -23,16 +23,15 @@ def model_path():
 
 
 def main():
-    # path = model_path()
-    path = os.path.expanduser('~/sb3_logs/model_1/best_model')
+    path = os.path.expanduser("~/sb3_logs/ppo/WebRTCEmulatorEnv_12/best_model")
     bw = 10 * M
 
     config = ENV_CONFIG
+    deep_update(config, CURRICULUM_LEVELS[0])
     config['network_setting']['bandwidth'] = bw
     config['network_setting']['delay'] = .008
     config['gym_setting']['print_step'] = True
     config['gym_setting']['duration'] = 30
-    config['action_limit']['bitrate'] = [1 * M, 100 * M]
     env = WebRTCEmulatorEnv(config=config, curriculum_level=None) # type: ignore
     model = PPO.load(path, env, custom_objects={'policy_class': CustomPolicy})
     obs, _ = env.reset()
@@ -87,8 +86,7 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
     plt.savefig(os.path.join(output_dir, 'bitrate_reward.pdf'))
 
-    illustrate_frame(output_dir, env.context)
-
+    generate_diagrams(output_dir, env.context)
 
 if __name__ == "__main__":
     main()

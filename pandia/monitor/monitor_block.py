@@ -18,10 +18,10 @@ class MonitorBlock(object):
         self.frame_height_data = MonitorBlockData(lambda f: f.encoding_at, lambda f: f.height, duration=duration)
         self.frame_encoded_height_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.encoded_shape[1], duration=duration)
         self.frame_encoding_delay_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.encoding_delay(), duration=duration)
-        self.frame_egress_delay_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.pacing_delay(), duration=duration)
-        self.frame_recv_delay_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.assemble_delay(self.utc_offset), duration=duration)
-        self.frame_decoding_delay_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.decoding_queue_delay(self.utc_offset), duration=duration)
-        self.frame_decoded_delay_data = MonitorBlockData(lambda f: f.encoded_at, lambda f: f.decoding_delay(self.utc_offset), duration=duration)
+        self.frame_egress_delay_data = MonitorBlockData(lambda f: f.last_rtp_send_ts(), lambda f: f.pacing_delay(), duration=duration)
+        self.frame_recv_delay_data = MonitorBlockData(lambda f: f.assembled_at, lambda f: f.assemble_delay(self.utc_offset), duration=duration)
+        self.frame_decoding_delay_data = MonitorBlockData(lambda f: f.decoding_at, lambda f: f.decoding_queue_delay(self.utc_offset), duration=duration)
+        self.frame_decoded_delay_data = MonitorBlockData(lambda f: f.decoded_at, lambda f: f.decoding_delay(self.utc_offset), duration=duration)
         self.frame_key_counter = MonitorBlockData(lambda f: f.encoded_at, lambda f: 1 if f.is_key_frame else 0, duration=duration)
         # Packet statistics
         self.pkts_sent_size = MonitorBlockData(lambda p: p.sent_at, lambda p: p.size, duration=duration)
@@ -182,6 +182,7 @@ class MonitorBlock(object):
         self.frame_recv_delay_data.append(frame, ts)
         self.frame_decoding_delay_data.append(frame, ts)
         self.frame_decoded_delay_data.append(frame, ts)
+        # print(f'new decoded delay: {frame.decoding_delay()}, {self.frame_decoded_delay_data.num}, {self.frame_decoded_delay_data.duration}')
 
     def on_pacing_rate_set(self, ts: float, rate: float):
         self.pacing_rate_data.append((ts, rate), ts)

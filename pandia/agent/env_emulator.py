@@ -138,6 +138,7 @@ class WebRTCEmulatorEnv(WebRTCEnv):
                 print(f"WebRTC start timeout. Startover.", flush=True)
                 self.reset()
                 return self.step(action)
+            time.sleep(.1)
         ts = time.time()
         if self.step_count == 0:
             self.start_ts = ts
@@ -150,7 +151,8 @@ class WebRTCEmulatorEnv(WebRTCEnv):
 
         if self.print_step and time.time() - self.last_print_ts > self.print_period:
             self.last_print_ts = time.time()
-            self.log(f'#{self.step_count}@{int((time.time() - self.start_ts))}s '
+            self.log(f'#{self.step_count}@{int((time.time() - self.start_ts))}s, '
+                    f'bw.: {self.net_sample["bw"] / M:.02f} Mbps, '
                     f'R.w.: {r:.02f}, Act.: {act}, Obs.: {self.observation}')
         self.step_count += 1
         return self.observation.array(), r, False, truncated, {}

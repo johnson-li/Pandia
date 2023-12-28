@@ -136,7 +136,7 @@ class ObservationThread(threading.Thread):
             ts /= 1000
             rtt /= 1000
             context.rtt_data.append((ts, rtt))
-        elif msg_type == 8:  # Frame decoding ack 
+        elif msg_type == 8:  # Frame decoding ack
             ts, rtp_sequence, received_ts_utc, decoding_ts_utc, decoded_ts_utc = unpack('QQQQQ', data)
             ts /= 1000
             received_ts_utc /= 1000
@@ -156,7 +156,7 @@ class ObservationThread(threading.Thread):
                     context.last_decoded_frame_id = \
                             max(frame.frame_id, context.last_decoded_frame_id)
                     [mb.on_frame_decoding_updated(frame, ts) for mb in context.monitor_blocks.values()]
-                    # log(f'Frame decoded: {frame_id}')
+                    # print(f'Frame decoded: {frame_id}, ts: {ts}')
         elif msg_type == 9:  # Send video
             pass
         elif msg_type == 10:  # Apply bitrate 

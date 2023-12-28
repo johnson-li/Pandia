@@ -5,11 +5,11 @@ from pandia.constants import K, M
 CURRICULUM_LEVELS = [
     {
         'network_setting': {
-            'bandwidth': [MIN_BW, 10 * M],
+            'bandwidth': [1 * M, 10 * M],
             'delay': [0, .01],
         },
         'action_limit': {
-            'bitrate': [MIN_BW, 10 * M],
+            'bitrate': [1 * M, 10 * M],
         }
     },
     {

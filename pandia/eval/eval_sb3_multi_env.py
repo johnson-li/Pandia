@@ -41,7 +41,7 @@ def main():
         config['network_setting']['delay'] = .002
         config['gym_setting']['duration'] = 50
         env = WebRTCSimpleSimulatorEnv(config=config, curriculum_level=None) # type: ignore
-        path = '/Users/johnson/sb3_logs/ppo/WebRTCSimpleSimulatorEnv_37/best_model'
+        path = os.path.expanduser('~/sb3_logs/ppo/WebRTCSimpleSimulatorEnv_17/best_model')
         model = PPO.load(path, env)
         obs, _ = env.reset()
         rewards0 = []
