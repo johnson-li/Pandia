@@ -21,7 +21,7 @@ def main():
     data = []
     config = ENV_CONFIG
     deep_update(config, CURRICULUM_LEVELS[2])
-    config['network_setting']['bandwidth'] = 3 * M
+    config['network_setting']['bandwidth'] = 8 * M
     config['network_setting']['delay'] = .008
     # config['action_limit']['bitrate'] = br
     env = gymnasium.make("WebRTCSimpleSimulatorEnv", config=config, curriculum_level=None)

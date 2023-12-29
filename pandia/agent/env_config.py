@@ -84,19 +84,19 @@ GYM_SETTING = {
 ENV_CONFIG = {
     'action_keys' : list(sorted(['bitrate'])),
     'observation_keys' : list(sorted([
-        # 'frame_encoding_delay',
-        # 'frame_egress_delay', 'frame_recv_delay',
-        # 'frame_decoding_delay',
+        'frame_encoding_delay',
+        'frame_egress_delay', 'frame_recv_delay',
+        'frame_decoding_delay',
         'frame_decoded_delay',
-        # 'frame_fps', 'frame_fps_decoded', 'frame_qp',
-        # 'frame_height', 'frame_encoded_height', 'frame_size',
+        'frame_fps', 'frame_fps_decoded', 'frame_qp',
+        'frame_height', 'frame_encoded_height', 'frame_size',
         'frame_bitrate',
-        # 'frame_key_count',
+        'frame_key_count',
         'bitrate',
         'pkt_egress_rate', 'pkt_ack_rate',
         'pkt_trans_delay', 'pkt_delay_interval',
-        # 'pkt_loss_rate',
-        # 'pacing_rate', 'action_gap',
+        'pkt_loss_rate',
+        'pacing_rate', 'action_gap',
 
         # Internal variable of the network.
         # Should only be used in the value function.

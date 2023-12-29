@@ -16,7 +16,7 @@ def nml(name, value: Union[np.ndarray, float], value_range, normalized_range=NOR
         unwrap = True
     if log is None:
         log = value_range[1] - value_range[0] > 200
-    if name == 'resolution':
+    if name in ['frame_height', 'frame_encoded_height']:
         v = [RESOLUTION_LIST.index(min(RESOLUTION_LIST, key=lambda x:abs(x - v))) for v in value]
         value = np.array(v, dtype=np.float32)
         value_range = [0, len(RESOLUTION_LIST)]
@@ -42,7 +42,7 @@ def dnml(name, value: Union[np.ndarray, float], value_range, normalized_range=NO
         unwrap = True
     if log is None:
         log = value_range[1] - value_range[0] > 200
-    if name == 'resolution':
+    if name in ['frame_height', 'frame_encoded_height']:
         value_range = [0, len(RESOLUTION_LIST)]
     if log:
         offset = (value - normalized_range[0]) / (normalized_range[1] - normalized_range[0]) * \
@@ -51,7 +51,7 @@ def dnml(name, value: Union[np.ndarray, float], value_range, normalized_range=NO
     else:
         res = (value - normalized_range[0]) / (normalized_range[1] - normalized_range[0]) * \
             (value_range[1] - value_range[0]) + value_range[0]
-    if name == 'resolution':
+    if name in ['frame_height', 'frame_encoded_height']:
         indexes = np.clip(res, 0, len(RESOLUTION_LIST) - 1).astype(np.int32)
         res = [RESOLUTION_LIST[i] for i in indexes]
         res = np.array(res, dtype=np.int32)
@@ -65,13 +65,13 @@ def test_resolution():
     value_range = [0, 1]
     for i in RESOLUTION_LIST:
         i = np.array([i])
-        v = nml('resolution', i, value_range)
+        v = nml('frame_encoded_height', i, value_range)
     limit = 2000
     counts = [0] * len(RESOLUTION_LIST)
     for i in range(limit):
         v = (i / limit - .5) * 2
         v = np.array([v])
-        res = dnml('resolution', v, value_range)
+        res = dnml('frame_encoded_height', v, value_range)
         j = RESOLUTION_LIST.index(res[0])
         counts[j] += 1
     counts = np.array(counts)

@@ -62,7 +62,7 @@ class WebRTCEmulatorEnv(WebRTCEnv):
                 break
             except FileNotFoundError:
                 time.sleep(0.1)
-        if time.time() - ts > 3:
+        if time.time() - ts > 5:
             raise Exception(f'Cannot connect to {self.ctrl_socket_path}')
 
     def stop_container(self):

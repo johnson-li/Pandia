@@ -32,7 +32,7 @@ def main():
     config = ENV_CONFIG
     config['gym_setting']['print_step'] = True
     config['gym_setting']['print_period'] = 1
-    config['gym_setting']['duration'] = 15
+    config['gym_setting']['duration'] = 10
     config['gym_setting']['skip_slow_start'] = 0
     with open(os.path.join(log_dir, 'config.json'), 'w') as f:
         json.dump({'curriculum_level': CURRICULUM_LEVELS[curriculum_level] if curriculum_level is not None else None,
@@ -50,11 +50,11 @@ def main():
     if model_pre:
         model = PPO.load(model_pre, env=envs, verbose=1, custom_objects={'policy_class': CustomPolicy},
                          tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCEmulatorEnv/"),
-                         device="auto", batch_size=256, n_epochs=4, learning_rate=linear_schedule(0.00003))
+                         device="auto", batch_size=32, n_epochs=4, learning_rate=linear_schedule(0.00003))
     else:
         model = PPO(policy=CustomPolicy, env=envs, verbose=1, gamma=.8, n_steps=100,
                     tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCEmulatorEnv/"),
-                    device="auto", batch_size=256, n_epochs=4, learning_rate=linear_schedule(0.0003))
+                    device="auto", batch_size=32, n_epochs=4, learning_rate=linear_schedule(0.0003))
     model.learn(total_timesteps=20_000_000, 
                 callback=[checkpoint_callback, startup_callback,
                           best_model_callback])
