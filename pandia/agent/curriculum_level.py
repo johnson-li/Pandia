@@ -16,6 +16,24 @@ CURRICULUM_LEVELS = [
     },
     {
         'network_setting': {
+            'bandwidth': [4 * M, 5 * M],
+            'delay': [0, .01],
+        },
+        'action_limit': {
+            'bitrate': [MIN_BR, 10 * M],
+        }
+    },
+    {
+        'network_setting': {
+            'bandwidth': [1 * M, 5 * M],
+            'delay': [0, .01],
+        },
+        'action_limit': {
+            'bitrate': [MIN_BR, 10 * M],
+        }
+    },
+    {
+        'network_setting': {
             'bandwidth': [MIN_NW_BW, 20 * M],
             'delay': [0, .01],
         },

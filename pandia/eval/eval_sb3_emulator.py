@@ -23,8 +23,8 @@ def model_path():
 
 
 def main():
-    path = os.path.expanduser("~/sb3_logs/ppo/WebRTCEmulatorEnv_14/best_model")
-    bw = 5 * M
+    path = os.path.expanduser("~/sb3_logs/ppo/WebRTCEmulatorEnv_22/best_model")
+    bw = 2 * M
 
     config = ENV_CONFIG
     deep_update(config, CURRICULUM_LEVELS[0])

@@ -14,9 +14,9 @@ from stable_baselines3.common.vec_env import VecMonitor
 
 
 def main():
-    # model_pre = os.path.expanduser('~/sb3_logs/ppo/WebRTCEmulatorEnv_9/best_model')
-    model_pre = None
-    curriculum_level = 0
+    model_pre = os.path.expanduser('~/sb3_logs/ppo/WebRTCEmulatorEnv_20/best_model')
+    # model_pre = None
+    curriculum_level = 2
     algo = 'ppo'
     log_dir = os.path.expanduser(f'~/sb3_logs/{algo}')
     note = f'Train with variable bandwidth and delay. Curriculum level: {curriculum_level}. model_pre: {model_pre}'
@@ -52,7 +52,7 @@ def main():
     if model_pre:
         model = PPO.load(model_pre, env=envs, verbose=1, custom_objects={'policy_class': CustomPolicy},
                          tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCEmulatorEnv/"),
-                         device="auto", batch_size=24, n_epochs=4, learning_rate=linear_schedule(0.00003))
+                         device="auto", batch_size=24, n_epochs=4, learning_rate=linear_schedule(0.0001))
     else:
         model = PPO(policy=CustomPolicy, env=envs, verbose=1, gamma=.8, n_steps=100,
                     tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCEmulatorEnv/"),
