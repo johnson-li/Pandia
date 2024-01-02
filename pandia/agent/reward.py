@@ -19,7 +19,7 @@ def reward(context: StreamingContext, net_sample, terminated=False, actions=list
     for delay in [mb.frame_decoded_delay]:
         delay = max(0, delay) * 1000
         delay_score += - (delay / 100) ** 2
-    quality_score = 10 * np.clip(mb.frame_bitrate / net_sample['bw'], 0, 1)
+    quality_score = 2 * max(mb.frame_bitrate / M, 0)
     res_score = 0
     # if penalty == 0:
     #     self.termination_ts = 0
