@@ -125,6 +125,8 @@ class WebRTCEmulatorEnv(WebRTCEnv):
         action = np.clip(action, limit.low, limit.high)
         self.context.reset_step_context()
         act = Action.from_array(action, self.action_keys)
+        # Avoid over-sending by limiting the bitrate to the network bandwidth
+        act.bitrate = min(act.bitrate, self.net_sample['bw'])
         self.actions.append(act)
         buf = bytearray(Action.shm_size() + 1)
         act.write(buf)
@@ -139,7 +141,7 @@ class WebRTCEmulatorEnv(WebRTCEnv):
             if time.time() - ts > self.init_timeout:
                 print(f"WebRTC start timeout. Startover.", flush=True)
                 self.reset()
-                return self.step(action)
+                return self.step(act.array())
             time.sleep(.1)
         ts = time.time()
         if self.step_count == 0:

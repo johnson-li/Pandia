@@ -23,8 +23,8 @@ def model_path():
 
 
 def main():
-    path = os.path.expanduser("~/sb3_logs/ppo/WebRTCEmulatorEnv_22/best_model")
-    bw = 2 * M
+    path = os.path.expanduser("~/sb3_logs/ppo/WebRTCEmulatorEnv_28/best_model")
+    bw = 5 * M
 
     config = ENV_CONFIG
     deep_update(config, CURRICULUM_LEVELS[0])
@@ -41,7 +41,7 @@ def main():
     rewards = []
     delays = []
     actions = []
-    for i in range(300):
+    for i in range(100):
         action, _ = model.predict(obs, deterministic=True)
         obs, reward, terminated, truncated, info = env.step(action)
         obs_obj = env.observation
