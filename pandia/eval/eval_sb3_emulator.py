@@ -23,15 +23,17 @@ def model_path():
 
 
 def main():
-    path = os.path.expanduser("~/sb3_logs/ppo/WebRTCEmulatorEnv_12/best_model")
-    bw = 10 * M
+    path = os.path.expanduser("~/sb3_logs/ppo/WebRTCEmulatorEnv_14/best_model")
+    bw = 5 * M
 
     config = ENV_CONFIG
     deep_update(config, CURRICULUM_LEVELS[0])
     config['network_setting']['bandwidth'] = bw
     config['network_setting']['delay'] = .008
     config['gym_setting']['print_step'] = True
-    config['gym_setting']['duration'] = 30
+    config['gym_setting']['print_period'] = 1
+    config['gym_setting']['duration'] = 1000
+    config['gym_setting']['skip_slow_start'] = 1
     env = WebRTCEmulatorEnv(config=config, curriculum_level=None) # type: ignore
     model = PPO.load(path, env, custom_objects={'policy_class': CustomPolicy})
     obs, _ = env.reset()
@@ -39,7 +41,7 @@ def main():
     rewards = []
     delays = []
     actions = []
-    while True:
+    for i in range(300):
         action, _ = model.predict(obs, deterministic=True)
         obs, reward, terminated, truncated, info = env.step(action)
         obs_obj = env.observation

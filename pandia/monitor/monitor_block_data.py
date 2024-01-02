@@ -9,7 +9,6 @@ class MonitorBlockData(object):
     def __init__(self, ts_fn, val_fn, duration=1, val_checker=lambda v: v >= 0, ts_offset=0) -> None:
         self.duration = duration
         self.data = deque()
-        self.num = 0
         self.sum = 0
         self.ts_fn = ts_fn
         self.val_fn = val_fn
@@ -22,12 +21,17 @@ class MonitorBlockData(object):
     def append(self, val: Union[FrameContext, PacketContext, Tuple], ts):
         if self.val_checker(self.val_fn(val)):
             self.data.append(val)
-            self.num += 1
             self.sum += self.val_fn(val) 
-        while self.num > 0 and self.ts(self.data[0]) < ts - self.duration:
-            val = self.data.popleft()
-            self.num -= 1
-            self.sum -= self.val_fn(val)
+        self.update_ts(ts)
+
+    @property
+    def num(self):
+        return len(self.data)
 
     def avg(self):
-        return self.sum / self.num if self.num > 0 else 0
+        return self.sum / len(self.data) if len(self.data) > 0 else 0
+
+    def update_ts(self, ts):
+        while len(self.data) > 0 and self.ts(self.data[0]) < ts - self.duration:
+            val = self.data.popleft()
+            self.sum -= self.val_fn(val)

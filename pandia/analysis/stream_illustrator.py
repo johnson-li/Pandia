@@ -369,6 +369,9 @@ def analyze_packet(context: StreamingContext, output_dir: str) -> None:
 
 
 def analyze_network(context: StreamingContext, output_dir: str) -> None:
+    if len(context.packets) == 0:
+        print('ERROR: No packet sent.')
+        return
     data = context.networking.pacing_rate_data
     x = [d[0] - context.start_ts for d in data]
     y = [d[1] / M for d in data]
@@ -416,10 +419,14 @@ def analyze_network(context: StreamingContext, output_dir: str) -> None:
     plt.savefig(os.path.join(output_dir, f'mea-pacing-queue.{FIG_EXTENSION}'), dpi=DPI)
 
 
-def generate_diagrams(path, context):
+def setup_diagrams_path(path):
     os.makedirs(path, exist_ok=True)
     for f in os.listdir(path):
         os.remove(os.path.join(path, f))
+
+
+def generate_diagrams(path, context):
+    setup_diagrams_path(path)
     # illustrate_frame_ts(path, context)
     # illustrate_frame_spec(path, context)
     # illustrate_frame_bitrate(path, context)

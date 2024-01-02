@@ -35,6 +35,7 @@ class WebRTCEnv(gymnasium.Env):
         # RL settings
         self.step_duration = config['gym_setting']['step_duration']
         self.hisory_size = config['gym_setting']['history_size']
+        self.step_limit = int(self.duration / self.step_duration)
         # RL state
         self.step_count = 0
         self.context: StreamingContext
@@ -85,6 +86,7 @@ class WebRTCEnv(gymnasium.Env):
     #     return self.observation.array(), r, False, truncated, {}
 
     def reset(self, seed=None, options=None):
+        print(f'Reset env, last step count: {self.step_count}')
         if seed is None:
             seed = np.random.randint(0xffffff)
         set_random_seed(seed, True)

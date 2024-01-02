@@ -33,6 +33,7 @@ class WebRTCEmulatorEnv(WebRTCEnv):
         # RL settings
         self.init_timeout = 10
         # Tracking
+        self.bad_reward_count = 0
         self.docker_client = docker.from_env()
         self.control_socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         self.obs_socket = self.create_observer()
@@ -41,7 +42,7 @@ class WebRTCEmulatorEnv(WebRTCEnv):
         self.start_container()
 
     def start_container(self):
-        cmd = f'docker run -d --rm --network sb3_net --name {self.container_name} '\
+        cmd = f'docker run -d --rm --name {self.container_name} '\
               f'--hostname {self.container_name} '\
               f'--cap-add=NET_ADMIN --env NVIDIA_DRIVER_CAPABILITIES=all '\
               f'--runtime=nvidia --gpus all '\
@@ -109,6 +110,7 @@ class WebRTCEmulatorEnv(WebRTCEnv):
         self.stop_webrtc()
         self.obs_thread.context = self.context
         self.last_print_ts = 0
+        self.bad_reward_count = 0
         self.start_ts = time.time()
         return ans
 
@@ -144,9 +146,12 @@ class WebRTCEmulatorEnv(WebRTCEnv):
             self.start_ts = ts
             print(f'WebRTC is running.', flush=True)
         time.sleep(self.step_duration)
+        if self.step_count == 0:
+            time.sleep(self.skip_slow_start)
 
+        for mb in self.context.monitor_blocks.values():
+            mb.update_ts(time.time() - self.obs_thread.ts_offset)
         self.observation.append(self.context.monitor_blocks, act)
-        truncated = time.time() - self.start_ts > self.duration
         r = reward(self.context, self.net_sample)
 
         if self.print_step and time.time() - self.last_print_ts > self.print_period:
@@ -155,7 +160,13 @@ class WebRTCEmulatorEnv(WebRTCEnv):
                     f'bw.: {self.net_sample["bw"] / M:.02f} Mbps, '
                     f'R.w.: {r:.02f}, Act.: {act}, Obs.: {self.observation}')
         self.step_count += 1
-        return self.observation.array(), r, False, truncated, {}
+        if r <= -10:
+            self.bad_reward_count += 1
+        else:
+            self.bad_reward_count = 0
+        terminated = self.bad_reward_count > 1000
+        truncated = self.step_count > self.step_limit
+        return self.observation.array(), r, terminated, truncated, {}
 
 
 gymnasium.register('WebRTCEmulatorEnv', entry_point='pandia.agent.env_emulator:WebRTCEmulatorEnv', 
@@ -163,24 +174,28 @@ gymnasium.register('WebRTCEmulatorEnv', entry_point='pandia.agent.env_emulator:W
 
 
 def test_single():
-    episodes = 1
+    bw = 3 * M
     config = ENV_CONFIG
-    config['network_setting']['bandwidth'] = 10 * M
+    config['network_setting']['bandwidth'] = bw
     config['gym_setting']['print_step'] = True
     config['gym_setting']['print_period'] = 1
-    config['gym_setting']['duration'] = 30
+    config['gym_setting']['duration'] = 1000
     config['gym_setting']['step_duration'] = .1
     config['gym_setting']['logging_path'] = '/tmp/pandia.log'
-    env: WebRTCEmulatorEnv = gymnasium.make("WebRTCEmulatorEnv", config=config) # type: ignore
+    config['gym_setting']['skip_slow_start'] = 1
+    env: WebRTCEmulatorEnv = gymnasium.make("WebRTCEmulatorEnv", config=config, curriculum_level=None) # type: ignore
     action = Action(config['action_keys'])
-    action.bitrate = 8 * M
     try:
-        for _ in range(episodes):
-            env.reset()
-            while True:
-                _, _, terminated, truncated, _ = env.step(action.array())
-                if np.any(terminated) or np.any(truncated):
-                    break
+        env.reset()
+        action.bitrate = 1 * M
+        for i in range(20):
+            _, _, terminated, truncated, _ = env.step(action.array())
+        action.bitrate = 10 * M
+        for i in range(50):
+            _, _, terminated, truncated, _ = env.step(action.array())
+        action.bitrate = 1 * M
+        for i in range(50):
+            _, _, terminated, truncated, _ = env.step(action.array())
     except KeyboardInterrupt:
         pass
     env.close()

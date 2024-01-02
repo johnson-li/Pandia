@@ -42,6 +42,27 @@ class MonitorBlock(object):
     def update_utc_offset(self, offset):
         self.utc_offset = offset
 
+    def update_ts(self, now):
+        self.frame_encoded_size.update_ts(now)
+        self.frame_acked_size.update_ts(now)
+        self.frame_qp_data.update_ts(now)
+        self.frame_height_data.update_ts(now)
+        self.frame_encoded_height_data.update_ts(now)
+        self.frame_encoding_delay_data.update_ts(now)
+        self.frame_egress_delay_data.update_ts(now)
+        self.frame_recv_delay_data.update_ts(now)
+        self.frame_decoding_delay_data.update_ts(now)
+        self.frame_decoded_delay_data.update_ts(now)
+        self.frame_key_counter.update_ts(now)
+        self.pkts_sent_size.update_ts(now)
+        self.pkts_acked_size.update_ts(now)
+        self.pkts_trans_delay_data.update_ts(now)
+        self.pkts_lost_count.update_ts(now)
+        self.pkts_delay_interval_data.update_ts(now)
+        self.pacing_rate_data.update_ts(now)
+        self.bitrate_data.update_ts(now)
+        self.bandwidth_data.update_ts(now)
+
     @property
     def action_gap(self):
         return self.bitrate - self.pacing_rate
@@ -179,9 +200,11 @@ class MonitorBlock(object):
         self.frame_key_counter.append(frame, ts)
 
     def on_frame_decoding_updated(self, frame: FrameContext, ts: float):
+        # print('on_frame_decoding_updated')
         self.frame_recv_delay_data.append(frame, ts)
         self.frame_decoding_delay_data.append(frame, ts)
         self.frame_decoded_delay_data.append(frame, ts)
+        # print('asdfasdf3', self.frame_decoded_delay_data.num)
 
     def on_pacing_rate_set(self, ts: float, rate: float):
         self.pacing_rate_data.append((ts, rate), ts)

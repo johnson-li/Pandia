@@ -3,18 +3,19 @@ import os
 import socket
 from struct import unpack
 import threading
+import numpy as np
 import time
 from typing import Optional
 from pandia.context.frame_context import FrameContext
 from pandia.context.packet_context import PacketContext
 from pandia.context.streaming_context import StreamingContext
-
 from pandia.log_analyzer_sender import PACKET_TYPES, kTimeWrapPeriod
 
 
 class ObservationThread(threading.Thread):
     def __init__(self, sock, logging_path=None) -> None:
         super().__init__()
+        self.ts_offset = 0
         self.sock: socket.socket = sock
         self.context: Optional[StreamingContext] = None
         self.stop_event = threading.Event()
@@ -57,6 +58,14 @@ class ObservationThread(threading.Thread):
             print(f'ERROR: context is not initialized yet.')
             return
         context: StreamingContext = self.context
+        try:
+            ts = unpack('Q', data[:8])[0] / 1000
+            offset = time.time() - ts
+            if self.ts_offset == 0:
+                self.ts_offset = offset
+            self.ts_offset = max(self.ts_offset, offset)
+        except Exception as e:
+            pass
         if msg_type == 1:  # Frame captured
             ts, frame_id, width, height, frame_ts, frame_utc_ts = unpack('QQQQQQ', data)
             ts /= 1000

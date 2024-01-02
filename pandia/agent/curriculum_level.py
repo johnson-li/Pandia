@@ -7,7 +7,7 @@ MIN_BR = 200 * K
 CURRICULUM_LEVELS = [
     {
         'network_setting': {
-            'bandwidth': [MIN_NW_BW, 10 * M],
+            'bandwidth': [5 * M, 5 * M],
             'delay': [0, .01],
         },
         'action_limit': {

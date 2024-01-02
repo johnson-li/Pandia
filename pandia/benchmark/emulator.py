@@ -8,7 +8,7 @@ from pandia.agent.action import Action
 from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.env_emulator import WebRTCEmulatorEnv
 from pandia.agent.observation import Observation
-from pandia.analysis.stream_illustrator import DPI, FIG_EXTENSION, generate_diagrams
+from pandia.analysis.stream_illustrator import DPI, FIG_EXTENSION, generate_diagrams, setup_diagrams_path
 from pandia.constants import K, M
 from pandia.context.frame_context import FrameContext
 
@@ -37,6 +37,7 @@ def run(env, br, config, bw):
 
 def draw_diagrams(env: WebRTCEmulatorEnv, data, draw_ctx=False):
     path = os.path.join(RESULTS_PATH, "benchmark_emulator")
+    setup_diagrams_path(path)
     if draw_ctx:
         generate_diagrams(path, env.context)
 
@@ -63,21 +64,21 @@ def draw_diagrams(env: WebRTCEmulatorEnv, data, draw_ctx=False):
 
 
 def main():
-    bw = 500 * K
+    bw = 5 * M
     config = ENV_CONFIG
     config['network_setting']['bandwidth'] = bw
     config['network_setting']['delay'] = .001
     config['gym_setting']['print_step'] = True
     config['gym_setting']['print_period'] = 1
     config['gym_setting']['duration'] = 10
-    config['gym_setting']['skip_slow_start'] = 0
+    config['gym_setting']['skip_slow_start'] = 1
     config['gym_setting']['step_duration'] = .1
     # config['gym_setting']['logging_path'] = '/tmp/pandia.log'
     config['gym_setting']['sb3_logging_path'] = '/tmp/pandia.log'
     env = WebRTCEmulatorEnv(config=config, curriculum_level=None) # type: ignore
     data = []
-    # br_list = list(range(100 * K, 1000 * K, 100 * K)) + list(range(1 * M, 10 * M, 1 * M))
-    br_list = list(range(100 * K, 1000 * K, 100 * K)) 
+    br_list = list(range(100 * K, 1000 * K, 200 * K)) + list(range(1 * M, 10 * M, 2 * M))
+    # br_list = list(range(100 * K, 1000 * K, 100 * K)) 
     try:
         for br in br_list:
             rewards = run(env, br, config, bw)
