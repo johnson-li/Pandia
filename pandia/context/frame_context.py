@@ -71,6 +71,9 @@ class FrameContext(object):
     def encoding_delay(self):
         return self.encoded_at - self.captured_at if self.encoded_at > 0 else -1
 
+    def encoding_delay0(self):
+        return self.encoded_at - self.encoding_at if self.encoded_at > 0 else -1
+
     def assemble_delay(self, utc_offset=.0):
         # return self.assembled0_at - self.captured_at if self.assembled0_at > 0 else -1
         if self.assembled_at_utc > 0:
@@ -90,6 +93,9 @@ class FrameContext(object):
             return self.decoding_at_utc - self.captured_at_utc - utc_offset
         else:
             return -1
+
+    def decoding_delay0(self, utc_offset=.0):
+        return self.decoded_at - self.decoding_at if self.decoded_at > 0 else -1
 
     def decoding_delay(self, utc_offset=.0):
         # return self.decoded_at - self.captured_at if self.decoded_at > 0 else -1
