@@ -225,9 +225,9 @@ def main_zoo():
 
 
 def main():
-    model_pre = os.path.expanduser("~/sb3_logs/ppo/WebRTCSimpleSimulatorEnv_36/best_model")
-    # model_pre = None
-    curriculum_level = 4
+    model_pre = None
+    # model_pre = os.path.expanduser("~/sb3_logs/ppo/WebRTCSimpleSimulatorEnv_36/best_model")
+    curriculum_level = 1
     algo = 'ppo'
     note = f'Train with variable bandwidth and delay. Curriculum level: {curriculum_level}. model_pre: {model_pre}'
     env_num = 12
@@ -244,7 +244,7 @@ def main():
     config = ENV_CONFIG
     config['gym_setting']['print_step'] = True
     config['gym_setting']['print_period'] = 10
-    config['gym_setting']['duration'] = 100
+    config['gym_setting']['duration'] = 10
     with open(os.path.join(log_dir, 'config.json'), 'w') as f:
         json.dump({'curriculum_level': CURRICULUM_LEVELS[curriculum_level] if curriculum_level is not None else None,
                    'config': config}, f)

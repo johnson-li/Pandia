@@ -1,3 +1,4 @@
+import random
 import time
 import gymnasium
 import numpy as np
@@ -12,7 +13,8 @@ from pandia.constants import M
 from pandia.log_analyzer_sender import FrameContext, PacketContext
 
 
-MTU = 1400
+MTU = 1500
+MTU_RTP = 1500 - 40 # 40 = 20 (IP) + 12 (RTP) + 8 (UDP)
 
 
 class FrameInfo:
@@ -40,10 +42,10 @@ class StreamingSimulator:
         return self.startup_delay + self.frame_id / self.fps
 
     def encoding_delay(self):
-        return .01
+        return max(0, .002 + (random.random() - .5) * 2 * .001)
 
     def decoding_delay(self):
-        return .001
+        return random.random() * .001
 
     def encoded_size(self):
         return int(self.bitrate / 8 / self.fps)
@@ -56,8 +58,8 @@ class StreamingSimulator:
         frame.rtp_id_base = self.rtp_id
         frame.capture_ts = self.next_frame_ts()
         frame.encoded_size = self.encoded_size()
-        frame.rtp_packet_count = frame.encoded_size // MTU
-        if frame.encoded_size % MTU > 0:
+        frame.rtp_packet_count = frame.encoded_size // MTU_RTP 
+        if frame.encoded_size % MTU_RTP > 0:
             frame.rtp_packet_count += 1
         self.rtp_id += frame.rtp_packet_count
         self.frame_id += 1
@@ -134,9 +136,9 @@ class WebRTCSimpleSimulatorEnv(WebRTCEnv):
             packet.last_packet_in_frame = i == fi.rtp_packet_count - 1
             packet.allow_retrans = True
             packet.retrans_ref = None
-            packet.size = min(MTU, frame_size_left)
+            packet.size = min(MTU, frame_size_left + MTU - MTU_RTP)
             assert packet.size > 0
-            frame_size_left -= packet.size
+            frame_size_left -= packet.size - (MTU - MTU_RTP)
             self.context.packets[rtp_id] = packet
             self.context.packet_id_map[packet.seq_num] = rtp_id
             [mb.on_packet_added(packet, send_ts) for mb in self.context.monitor_blocks.values()]
@@ -156,6 +158,7 @@ class WebRTCSimpleSimulatorEnv(WebRTCEnv):
             lost = self.network_simulator.queue_delay > self.network_simulator.buffer_size
             any_packet_lost |= lost
             transmission_delay = self.network_simulator.rtt + self.network_simulator.queue_delay
+            transmission_delay += random.random() * .01
             rtp_id = fi.rtp_id_base + i
             packet = self.context.packets[rtp_id]
             packet.received_at_utc = transmission_delay + packet.sent_at_utc
@@ -225,7 +228,7 @@ def test_running():
     env = gymnasium.make("WebRTCSimpleSimulatorEnv", config=config)
     action = Action(ENV_CONFIG['action_keys'], boundary=config['boundary'])
     action.bitrate = int(4 * M)
-    action.pacing_rate = 1000 * M 
+    action.pacing_rate = 1000 * M
     episodes = 1
     try:
         for _ in range(episodes):

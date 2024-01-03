@@ -15,7 +15,7 @@ from stable_baselines3.common.vec_env import VecMonitor
 
 def main():
     model_pre = None
-    model_pre = os.path.expanduser('~/sb3_logs/ppo/WebRTCEmulatorEnv_28/best_model')
+    # model_pre = os.path.expanduser('~/sb3_logs/ppo/WebRTCEmulatorEnv_28/best_model')
     # model_pre = os.path.expanduser('~/sb3_logs/ppo/WebRTCSimpleSimulatorEnv_1/best_model')
     curriculum_level = 1
     algo = 'ppo'
