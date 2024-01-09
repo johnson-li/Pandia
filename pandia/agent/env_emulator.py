@@ -5,6 +5,7 @@ import docker
 import time
 import uuid
 import gymnasium
+from matplotlib import pyplot as plt
 import numpy as np
 from pandia import BIN_PATH, RESULTS_PATH
 from pandia.agent.action import Action
@@ -12,7 +13,7 @@ from pandia.agent.env import WebRTCEnv
 from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.observation_thread import ObservationThread
 from pandia.agent.reward import reward
-from pandia.analysis.stream_illustrator import generate_diagrams
+from pandia.analysis.stream_illustrator import DPI, FIG_EXTENSION, generate_diagrams
 from pandia.constants import M
 
 
@@ -125,8 +126,9 @@ class WebRTCEmulatorEnv(WebRTCEnv):
         action = np.clip(action, limit.low, limit.high)
         self.context.reset_step_context()
         act = Action.from_array(action, self.action_keys)
-        # Avoid over-sending by limiting the bitrate to the network bandwidth
-        act.bitrate = min(act.bitrate, self.net_sample['bw'])
+        if self.action_cap:
+            # Avoid over-sending by limiting the bitrate to the network bandwidth
+            act.bitrate = min(act.bitrate, self.net_sample['bw'] * .9)
         self.actions.append(act)
         buf = bytearray(Action.shm_size() + 1)
         act.write(buf)
@@ -153,7 +155,7 @@ class WebRTCEmulatorEnv(WebRTCEnv):
 
         for mb in self.context.monitor_blocks.values():
             mb.update_ts(time.time() - self.obs_thread.ts_offset)
-        self.observation.append(self.context.monitor_blocks, act)
+        self.observation.append(self.context.monitor_blocks)
         r = reward(self.context, self.net_sample)
 
         if self.print_step and time.time() - self.last_print_ts > self.print_period:
@@ -187,22 +189,38 @@ def test_single():
     config['gym_setting']['skip_slow_start'] = 1
     env: WebRTCEmulatorEnv = gymnasium.make("WebRTCEmulatorEnv", config=config, curriculum_level=None) # type: ignore
     action = Action(config['action_keys'])
+    actions = []
+    rewards = []
     try:
         env.reset()
-        action.bitrate = 1 * M
-        for i in range(20):
-            _, _, terminated, truncated, _ = env.step(action.array())
-        action.bitrate = 10 * M
-        for i in range(50):
-            _, _, terminated, truncated, _ = env.step(action.array())
-        action.bitrate = 1 * M
-        for i in range(50):
-            _, _, terminated, truncated, _ = env.step(action.array())
+        pd = 50
+        bitrates = [1 * M] * pd + [2 * M] * pd + [3 * M] * pd + [2 * M] * pd + [1 * M] * pd 
+        for bitrate in bitrates:
+            action.bitrate = bitrate 
+            actions.append(action.bitrate / M)
+            _, reward, terminated, truncated, _ = env.step(action.array())
+            rewards.append(reward)
     except KeyboardInterrupt:
         pass
     env.close()
     fig_path = os.path.join(RESULTS_PATH, 'env_emulator_test')
     generate_diagrams(fig_path, env.context)
+
+    plt.close()
+    fig, ax1 = plt.subplots()
+    ax1.plot(np.arange(len(actions)), actions, 'r')
+    ax1.set_ylabel('Bitrate (Mbps)')
+    ax1.set_xlabel('Step')
+    ax1.spines['left'].set_color('r')
+    ax1.yaxis.label.set_color('r')
+    ax1.tick_params(axis='y', colors='r')
+    ax2 = ax1.twinx()
+    ax2.plot(np.arange(len(rewards)), rewards, 'b')
+    ax2.set_ylabel('Reward')
+    ax2.spines['right'].set_color('b')
+    ax2.yaxis.label.set_color('b')
+    ax2.tick_params(axis='y', colors='b')
+    plt.savefig(os.path.join(fig_path, f'bitrate_reward.{FIG_EXTENSION}'), dpi=DPI)
 
 
 if __name__ == '__main__':

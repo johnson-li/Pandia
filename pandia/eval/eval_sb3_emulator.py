@@ -1,3 +1,4 @@
+import argparse
 import os
 from matplotlib import pyplot as plt
 import numpy as np
@@ -22,26 +23,29 @@ def model_path():
     return os.path.join(path, 'best_model')
 
 
-def main():
-    path = os.path.expanduser("~/sb3_logs/ppo/WebRTCEmulatorEnv_32/best_model")
-    bw = 3 * M
-
+def main(model_id=None, bw=7 * M):
+    if model_id is None:
+        log_dir = os.path.expanduser(f'~/sb3_logs/ppo')
+        models = [int(d[18:]) for d in os.listdir(log_dir) if d.startswith('WebRTCEmulatorEnv_')]
+        model_id = max(models)
     config = ENV_CONFIG
     deep_update(config, CURRICULUM_LEVELS[0])
     config['network_setting']['bandwidth'] = bw
     config['network_setting']['delay'] = .008
     config['gym_setting']['print_step'] = True
+    config['gym_setting']['action_cap'] = False
     config['gym_setting']['print_period'] = 1
     config['gym_setting']['duration'] = 1000
     config['gym_setting']['skip_slow_start'] = 1
     env = WebRTCEmulatorEnv(config=config, curriculum_level=None) # type: ignore
+    path = os.path.expanduser(f"~/sb3_logs/ppo/WebRTCEmulatorEnv_{model_id}/best_model")
     model = PPO.load(path, env, custom_objects={'policy_class': CustomPolicy})
     obs, _ = env.reset()
     print(f'Eval with bw: {env.net_sample["bw"] / M:.02f} Mbps')
     rewards = []
     delays = []
     actions = []
-    for i in range(100):
+    for i in range(200):
         action, _ = model.predict(obs, deterministic=True)
         obs, reward, terminated, truncated, info = env.step(action)
         obs_obj = env.observation
@@ -91,4 +95,8 @@ def main():
     generate_diagrams(output_dir, env.context)
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-m', '--model_id', type=int, default=None, help='model id')
+    parser.add_argument('-b', '--bandwidth', type=float, default=7, help='bandwidth in mbps')
+    args = parser.parse_args()
+    main(model_id=args.model_id, bw=args.bandwidth * M)

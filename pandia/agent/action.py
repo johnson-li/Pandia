@@ -11,9 +11,9 @@ class Action():
                  log=ENV_CONFIG['gym_setting']['log_nml']) -> None:
         self.action_keys = list(sorted(action_keys))
         # Initiation values are invalid values so that WebRTC will not use DRL actions 
-        self.bitrate = 0
-        self.pacing_rate = 0 
-        self.resolution = 0
+        self.bitrate = .0
+        self.pacing_rate = .0 
+        self.resolution = .0
         self.fps = 0
         self.padding_rate = 0
         self.fec_rate_key = 256

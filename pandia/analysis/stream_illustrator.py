@@ -151,11 +151,12 @@ def analyze_frame(context: StreamingContext, output_dir: str) -> None:
     plt.ylabel('Delay (ms)')
     plt.savefig(os.path.join(output_dir, f'mea-delay-codec.{FIG_EXTENSION}'), dpi=DPI)
 
+    plt.close()
     plt.xlabel('Timestamp (s)')
     plt.ylabel('Delay (ms)')
-    plt.plot(frames_captured_ts[assemble_delay >= 0], assemble_delay[assemble_delay >= 0])
-    plt.plot(frames_captured_ts[pacing_delay >= 0], pacing_rtx_delay[pacing_rtx_delay >= 0])
-    plt.plot(frames_captured_ts[pacing_delay >= 0], pacing_delay[pacing_delay >= 0])
+    plt.plot(frames_captured_ts[assemble_delay >= 0], assemble_delay[assemble_delay >= 0], 'r')
+    plt.plot(frames_captured_ts[pacing_delay >= 0], pacing_rtx_delay[pacing_rtx_delay >= 0], '-.g')
+    plt.plot(frames_captured_ts[pacing_delay >= 0], pacing_delay[pacing_delay >= 0], '-b')
     plt.legend(['Transmission', 'Paced (RTX)', 'Paced'])
     plt.savefig(os.path.join(output_dir, f'mea-delay-trans.{FIG_EXTENSION}'), dpi=DPI)
 
@@ -186,11 +187,6 @@ def analyze_frame(context: StreamingContext, output_dir: str) -> None:
     ax1.set_xlabel('Timestamp (s)')
     ax1.set_ylabel('Encoded size (KB)')
     ax1.legend(['Encoded size', 'Dropped frames', 'Key frames'])
-    ax2 = ax1.twinx()
-    ax2.plot([f.captured_at - context.start_ts for f in frames_encoded], [f.bitrate for f in frames_encoded], 'r.')
-    ax2.set_ylabel('Bitrate (Kbps)')
-    ax2.tick_params(axis='y', labelcolor='r')
-    # plt.xlim([0, frames_encoded[-1].captured_at - context.start_ts])
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, f'mea-size-frame.{FIG_EXTENSION}'), dpi=DPI)
 

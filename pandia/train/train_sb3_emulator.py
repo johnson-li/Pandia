@@ -15,9 +15,9 @@ from stable_baselines3.common.vec_env import VecMonitor
 
 def main():
     model_pre = None
-    # model_pre = os.path.expanduser('~/sb3_logs/ppo/WebRTCEmulatorEnv_28/best_model')
-    # model_pre = os.path.expanduser('~/sb3_logs/ppo/WebRTCSimpleSimulatorEnv_1/best_model')
-    curriculum_level = 1
+    # model_pre = os.path.expanduser(f'~/sb3_logs/ppo/WebRTCEmulatorEnv_38/best_model')
+    # model_pre = os.path.expanduser('~/sb3_logs/ppo/WebRTCSimpleSimulatorEnv_2/best_model')
+    curriculum_level = 2
     algo = 'ppo'
     log_dir = os.path.expanduser(f'~/sb3_logs/{algo}')
     note = f'Train with variable bandwidth and delay. Curriculum level: {curriculum_level}. model_pre: {model_pre}'
@@ -53,12 +53,12 @@ def main():
     if model_pre:
         model = PPO.load(model_pre, env=envs, verbose=1, custom_objects={'policy_class': CustomPolicy},
                          tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCEmulatorEnv/"),
-                         device="auto", batch_size=24, n_epochs=4, learning_rate=linear_schedule(0.0001))
+                         device="auto", batch_size=24, n_epochs=4, learning_rate=linear_schedule(0.00003))
     else:
         model = PPO(policy=CustomPolicy, env=envs, verbose=1, gamma=.8, n_steps=100,
                     tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCEmulatorEnv/"),
                     device="auto", batch_size=24, n_epochs=4, learning_rate=linear_schedule(0.0003))
-    model.learn(total_timesteps=20_000_000, 
+    model.learn(total_timesteps=2_000_000, 
                 callback=[checkpoint_callback, startup_callback,
                           best_model_callback])
 

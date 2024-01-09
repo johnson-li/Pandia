@@ -28,9 +28,14 @@ class Observation(object):
         self.boundary = boundary
 
     def roll(self):
-        np.roll(self.data, 1, axis=0)
+        # np.roll(self.data, 1, axis=0)
+        self.data[1:] = self.data[:-1]
 
     def get_data(self, data, key, numeric=False):
+        if type(key) == list:
+            data_list = [self.get_data(data, k, False) for k in key]
+            data_list = [d for d in data_list if d != '?']
+            return ', '.join(data_list)  # type: ignore
         res = dnml(key, data[self.obs_keys_map[key]], self.boundary[key], log=False) \
             if key in self.obs_keys else '?'
         if numeric:
@@ -55,20 +60,39 @@ class Observation(object):
         duration_index = 0
         obs_str_list = []
         get_data = self.get_data
-        for duration_index in range(len(self.data[0])):
-            data = self.data[0][duration_index]
-            obs_str = f'Dly.f (ms): [{get_data(data, "frame_encoding_delay")}, {get_data(data, "frame_egress_delay")}, '\
-                    f'{get_data(data, "frame_recv_delay")}, {get_data(data, "frame_decoding_delay")}, {get_data(data, "frame_decoded_delay")}]' \
-                    f', FPS: {get_data(data, "frame_fps")}/{get_data(data, "frame_fps_decoded")}' \
-                    f', size (bytes): {get_data(data, "frame_size")} ({get_data(data, "frame_height")}/{get_data(data, "frame_encoded_height")}, {get_data(data, "frame_key_count")})' \
-                    f', rates (mbps): [{get_data(data, "bitrate")}, {get_data(data, "frame_bitrate")}, {get_data(data, "pkt_egress_rate")}, {get_data(data, "pkt_ack_rate")}, {get_data(data, "pacing_rate")}]' \
-                    f', bw (mbps): {get_data(data, "bandwidth")}' \
-                    f', QP: {get_data(data, "frame_qp")}' \
-                    f', Dly.p (ms): [{get_data(data, "pkt_trans_delay")}, {get_data(data, "pkt_delay_interval")}] ({get_data(data, "pkt_loss_rate")}%)'
-            obs_str_list.append(obs_str)
+        for history_index in range(len(self.data)):
+            for duration_index in range(len(self.data[history_index])):
+                data = self.data[history_index][duration_index]
+                res = []
+                ss = get_data(data, ["frame_encoding_delay", "frame_egress_delay", "frame_recv_delay", "frame_decoding_delay", "frame_decoded_delay"])
+                if ss:
+                    res.append(f'Dly.f (ms): [{ss}]')
+                ss = get_data(data, ["frame_fps", "frame_fps_decoded"])
+                if ss:
+                    res.append(f'FPS: {ss}')
+                ss = get_data(data, ["frame_size", "frame_height", "frame_encoded_height", "frame_key_count"])
+                if ss:
+                    res.append(f'size (bytes): [{ss}]')
+                ss = get_data(data, ["bitrate", "frame_bitrate", "pkt_egress_rate", "pkt_ack_rate", "pacing_rate"])
+                if ss:
+                    res.append(f'rates (mbps): [{ss}]')
+                ss = get_data(data, "bandwidth")
+                if ss and ss != '?':
+                    res.append(f'BW (mbps): {ss}')
+                ss = get_data(data, "frame_qp")
+                if ss and ss != '?':
+                    res.append(f'QP: {ss}')
+                ss = get_data(data, ["pkt_trans_delay", "pkt_delay_interval", "pkt_loss_rate"])
+                if ss:
+                    res.append(f'Dly.p (ms): [{ss}]')
+                obs_str_list.append(', '.join(res))
         return f'[{", ".join(obs_str_list)}]'
 
-    def append(self, monitor_blocks: Dict[int, 'MonitorBlock'], action: 'Action'):
+    def reset(self, monitor_blocks: Dict[int, 'MonitorBlock']):
+        for i in range(len(self.monitor_durations)):
+            self.append(monitor_blocks)
+
+    def append(self, monitor_blocks: Dict[int, 'MonitorBlock']):
         self.roll()
         for i, dur in enumerate(self.monitor_durations):
             block = monitor_blocks[dur]

@@ -19,6 +19,7 @@ class WebRTCEnv(gymnasium.Env):
         self.duration = config['gym_setting']['duration']
         self.startup_delay = config['gym_setting']['startup_delay']
         self.skip_slow_start = config['gym_setting']['skip_slow_start']
+        self.action_cap = config['gym_setting']['action_cap']
         # Source settings
         self.resolution = config['video_source']['resolution']
         self.fps = config['video_source']['fps']
@@ -51,9 +52,7 @@ class WebRTCEnv(gymnasium.Env):
         self.action_space = Action(self.action_keys, boundary=config['boundary']).action_space()
         self.action_limit = config.get('action_limit', {})
         print(f'action limit: {self.action_limit}')
-        self.observation_space = \
-            Observation(self.obs_keys, self.monitor_durations, self.hisory_size)\
-                .observation_space()
+        self.observation_space = self.observation.observation_space()
 
     def sample_net_params(self):
         self.net_sample = {'bw': sample(self.bw0),
@@ -86,7 +85,7 @@ class WebRTCEnv(gymnasium.Env):
     #     return self.observation.array(), r, False, truncated, {}
 
     def reset(self, seed=None, options=None):
-        print(f'Reset env, last step count: {self.step_count}')
+        last_step_count = self.step_count
         if seed is None:
             seed = np.random.randint(0xffffff)
         set_random_seed(seed, True)
@@ -94,5 +93,6 @@ class WebRTCEnv(gymnasium.Env):
         self.actions.clear()
         self.step_count = 0
         self.sample_net_params()
-        self.observation = Observation(self.obs_keys, self.monitor_durations, self.hisory_size)
+        self.observation.reset(self.context.monitor_blocks)
+        print(f'Reset env, last step count: {last_step_count}, new Obs.: {self.observation}')
         return self.observation.array(), {}

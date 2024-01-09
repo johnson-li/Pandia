@@ -95,9 +95,8 @@ class MonitorBlock(object):
 
     @property
     def frame_encoding_delay(self):
-        return self.frame_encoding_delay_data.avg() if \
-            self.frame_encoding_delay_data.num > 0 else \
-                self.boundary['frame_encoding_delay'][1]
+        return self.frame_encoding_delay_data.avg(self.boundary['frame_encoding_delay'][1])
+                
 
     @property
     def frame_fps_decoded(self):
@@ -105,15 +104,12 @@ class MonitorBlock(object):
 
     @property
     def frame_decoded_delay(self):
-        return self.frame_decoded_delay_data.avg() if \
-            self.frame_decoded_delay_data.num > 0 else \
-                self.boundary['frame_decoded_delay'][1]
+        return self.frame_decoded_delay_data.avg(self.boundary['frame_decoded_delay'][1])
+                
 
     @property
     def frame_decoding_delay(self):
-        return self.frame_decoding_delay_data.avg() if \
-            self.frame_decoding_delay_data.num > 0 else \
-                self.boundary['frame_decoding_delay'][1]
+        return self.frame_decoding_delay_data.avg(self.boundary['frame_decoding_delay'][1])
 
     @property
     def frame_encoded_height(self):
@@ -129,15 +125,11 @@ class MonitorBlock(object):
 
     @property
     def frame_recv_delay(self):
-        return self.frame_recv_delay_data.avg() if \
-            self.frame_recv_delay_data.num > 0 else \
-                self.boundary['frame_recv_delay'][1]
+        return self.frame_recv_delay_data.avg(self.boundary['frame_recv_delay'][1])
 
     @property
     def frame_egress_delay(self):
-        return self.frame_egress_delay_data.avg() if \
-            self.frame_egress_delay_data.num > 0 else \
-                self.boundary['frame_egress_delay'][1]
+        return self.frame_egress_delay_data.avg(self.boundary['frame_egress_delay'][1])
 
     @property
     def frame_size(self):
@@ -149,7 +141,7 @@ class MonitorBlock(object):
 
     @property
     def pkt_trans_delay(self):
-        return self.pkts_trans_delay_data.avg()
+        return self.pkts_trans_delay_data.avg(self.boundary['pkt_trans_delay'][1])
 
     @property
     def pkt_ack_rate(self):
@@ -157,7 +149,8 @@ class MonitorBlock(object):
 
     @property
     def pkt_loss_rate(self):
-        return self.pkts_lost_count.sum / self.pkts_sent_size.num if self.pkts_sent_size.num > 0 else 0
+        return self.pkts_lost_count.sum / self.pkts_sent_size.num if \
+            self.pkts_sent_size.num > 0 else 0
 
     @property
     def pkt_delay_interval(self):

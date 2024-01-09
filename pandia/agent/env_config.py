@@ -71,6 +71,7 @@ VIDEO_SOURCE = {
 GYM_SETTING = {
     'step_duration': .1,
     'startup_delay': 1,
+    'action_cap': True,
     'duration': 10,
     'observation_durations' : [.1],
     'history_size' : 5,

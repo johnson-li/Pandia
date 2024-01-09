@@ -24,12 +24,17 @@ class MonitorBlockData(object):
             self.sum += self.val_fn(val) 
         self.update_ts(ts)
 
+    def non_empty(self):
+        return len(self.data) > 0
+
     @property
     def num(self):
         return len(self.data)
 
-    def avg(self):
-        return self.sum / len(self.data) if len(self.data) > 0 else 0
+    def avg(self, default_value=0):
+        if self.non_empty():
+            return self.sum / len(self.data) if len(self.data) > 0 else 0
+        return default_value
 
     def update_ts(self, ts):
         while len(self.data) > 0 and self.ts(self.data[0]) < ts - self.duration:
