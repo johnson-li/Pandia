@@ -6,6 +6,7 @@ from pandia.agent.env_config import ENV_CONFIG
 from pandia.agent.env_emulator import WebRTCEmulatorEnv
 from pandia.agent.utils import deep_update
 from pandia.model.policies import CustomPolicy
+from pandia.model.ppo_pandia import PandiaPPO
 from pandia.model.schedules import linear_schedule
 from pandia.train.callbacks import SaveOnBestTrainingRewardCallback, StartupCallback
 from stable_baselines3.common.vec_env import SubprocVecEnv
@@ -15,7 +16,7 @@ from stable_baselines3.common.vec_env import VecMonitor
 
 def main():
     model_pre = None
-    # model_pre = os.path.expanduser(f'~/sb3_logs/ppo/WebRTCEmulatorEnv_38/best_model')
+    model_pre = os.path.expanduser(f'~/sb3_logs/ppo/WebRTCEmulatorEnv_41/best_model')
     # model_pre = os.path.expanduser('~/sb3_logs/ppo/WebRTCSimpleSimulatorEnv_2/best_model')
     curriculum_level = 2
     algo = 'ppo'
@@ -35,6 +36,7 @@ def main():
     deep_update(config, CURRICULUM_LEVELS[curriculum_level])
     config['gym_setting']['print_step'] = True
     config['gym_setting']['print_period'] = 1
+    config['gym_setting']['action_cap'] = .9
     config['gym_setting']['duration'] = 10
     config['gym_setting']['skip_slow_start'] = 1
     with open(os.path.join(log_dir, 'config.json'), 'w') as f:
@@ -51,11 +53,11 @@ def main():
     best_model_callback = SaveOnBestTrainingRewardCallback(check_freq=2_000, log_dir=log_dir)
     startup_callback = StartupCallback(log_dir=log_dir)
     if model_pre:
-        model = PPO.load(model_pre, env=envs, verbose=1, custom_objects={'policy_class': CustomPolicy},
+        model = PandiaPPO.load(model_pre, env=envs, verbose=1, custom_objects={'policy_class': CustomPolicy},
                          tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCEmulatorEnv/"),
                          device="auto", batch_size=24, n_epochs=4, learning_rate=linear_schedule(0.00003))
     else:
-        model = PPO(policy=CustomPolicy, env=envs, verbose=1, gamma=.8, n_steps=100,
+        model = PandiaPPO(policy=CustomPolicy, env=envs, verbose=1, gamma=.8, n_steps=100,
                     tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCEmulatorEnv/"),
                     device="auto", batch_size=24, n_epochs=4, learning_rate=linear_schedule(0.0003))
     model.learn(total_timesteps=2_000_000, 

@@ -95,4 +95,4 @@ class WebRTCEnv(gymnasium.Env):
         self.sample_net_params()
         self.observation.reset(self.context.monitor_blocks)
         print(f'Reset env, last step count: {last_step_count}, new Obs.: {self.observation}')
-        return self.observation.array(), {}
+        return self.observation.array(), {'net_sample': self.net_sample}

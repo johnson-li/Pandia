@@ -128,7 +128,7 @@ class WebRTCEmulatorEnv(WebRTCEnv):
         act = Action.from_array(action, self.action_keys)
         if self.action_cap:
             # Avoid over-sending by limiting the bitrate to the network bandwidth
-            act.bitrate = min(act.bitrate, self.net_sample['bw'] * .9)
+            act.bitrate = min(act.bitrate, self.net_sample['bw'] * self.action_cap)
         self.actions.append(act)
         buf = bytearray(Action.shm_size() + 1)
         act.write(buf)
@@ -170,7 +170,7 @@ class WebRTCEmulatorEnv(WebRTCEnv):
             self.bad_reward_count = 0
         terminated = self.bad_reward_count > 1000
         truncated = self.step_count > self.step_limit
-        return self.observation.array(), r, terminated, truncated, {}
+        return self.observation.array(), r, terminated, truncated, {'action': act.array()}
 
 
 gymnasium.register('WebRTCEmulatorEnv', entry_point='pandia.agent.env_emulator:WebRTCEmulatorEnv', 

@@ -71,7 +71,7 @@ VIDEO_SOURCE = {
 GYM_SETTING = {
     'step_duration': .1,
     'startup_delay': 1,
-    'action_cap': True,
+    'action_cap': 1, # Cap the bitrate action by the bandwidth
     'duration': 10,
     'observation_durations' : [.1],
     'history_size' : 5,
