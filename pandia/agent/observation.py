@@ -60,7 +60,8 @@ class Observation(object):
         duration_index = 0
         obs_str_list = []
         get_data = self.get_data
-        for history_index in range(len(self.data)):
+        # Print observation of the latest step
+        for history_index in range(len(self.data[:1])):
             for duration_index in range(len(self.data[history_index])):
                 data = self.data[history_index][duration_index]
                 res = []

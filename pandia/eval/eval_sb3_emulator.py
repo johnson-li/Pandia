@@ -14,15 +14,6 @@ from pandia.constants import M
 from pandia.train.train_sb3_simple_simulator import CustomPolicy
 
 
-def model_path():
-    path = os.path.expanduser('~/sb3_logs')
-    models = [int(d[6:]) for d in os.listdir(path) if d.startswith('model_')]
-    model_id = max(models) 
-    path = os.path.join(path, f'model_{model_id}')
-    print(f'Loading model from {path}')
-    return os.path.join(path, 'best_model')
-
-
 def main(model_id=None, bw=7 * M):
     if model_id is None:
         log_dir = os.path.expanduser(f'~/sb3_logs/ppo')
@@ -39,6 +30,7 @@ def main(model_id=None, bw=7 * M):
     config['gym_setting']['skip_slow_start'] = 1
     env = WebRTCEmulatorEnv(config=config, curriculum_level=None) # type: ignore
     path = os.path.expanduser(f"~/sb3_logs/ppo/WebRTCEmulatorEnv_{model_id}/best_model")
+    print(f'Loading model from {path}')
     model = PPO.load(path, env, custom_objects={'policy_class': CustomPolicy})
     obs, _ = env.reset()
     print(f'Eval with bw: {env.net_sample["bw"] / M:.02f} Mbps')
