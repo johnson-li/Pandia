@@ -16,7 +16,7 @@ from stable_baselines3.common.vec_env import VecMonitor
 
 def main():
     model_pre = None
-    model_pre = os.path.expanduser(f'~/sb3_logs/ppo/WebRTCEmulatorEnv_41/best_model')
+    model_pre = os.path.expanduser(f'~/sb3_logs/ppo/WebRTCEmulatorEnv_80/best_model')
     # model_pre = os.path.expanduser('~/sb3_logs/ppo/WebRTCSimpleSimulatorEnv_2/best_model')
     curriculum_level = 2
     algo = 'ppo'
@@ -36,7 +36,7 @@ def main():
     deep_update(config, CURRICULUM_LEVELS[curriculum_level])
     config['gym_setting']['print_step'] = True
     config['gym_setting']['print_period'] = 1
-    config['gym_setting']['action_cap'] = .9
+    config['gym_setting']['action_cap'] = False
     config['gym_setting']['duration'] = 10
     config['gym_setting']['skip_slow_start'] = 1
     with open(os.path.join(log_dir, 'config.json'), 'w') as f:

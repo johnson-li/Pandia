@@ -135,6 +135,12 @@ def analyze_frame(context: StreamingContext, output_dir: str) -> None:
     plt.savefig(os.path.join(output_dir, f'mea-delay-frame.{FIG_EXTENSION}'), dpi=DPI)
 
     plt.close()
+    plt.plot(frames_captured_ts[decoding_delay >= 0], decoding_delay[decoding_delay >= 0], 'b')
+    plt.xlabel('Timestamp (s)')
+    plt.ylabel('G2G Delay (ms)')
+    plt.savefig(os.path.join(output_dir, f'mea-delay-g2g.{FIG_EXTENSION}'), dpi=DPI)
+
+    plt.close()
     plt.plot(frames_captured_ts[encoding_delay0 >= 0], encoding_delay0[encoding_delay0 >= 0])
     plt.plot(frames_captured_ts[decoding_delay0 >= 0], decoding_delay0[decoding_delay0 >= 0])
     plt.legend(['Encoding', 'Decoding'])

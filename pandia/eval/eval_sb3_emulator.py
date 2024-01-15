@@ -24,13 +24,12 @@ def main(model_id=None, bw=7 * M):
     config['network_setting']['bandwidth'] = bw
     config['network_setting']['delay'] = .008
     config['gym_setting']['print_step'] = True
-    config['gym_setting']['action_cap'] = .9
+    config['gym_setting']['action_cap'] = False
     config['gym_setting']['print_period'] = 0
     config['gym_setting']['duration'] = 1000
-    config['gym_setting']['skip_slow_start'] = 1
+    config['gym_setting']['skip_slow_start'] = 0
     env = WebRTCEmulatorEnv(config=config, curriculum_level=None) # type: ignore
     path = os.path.expanduser(f"~/sb3_logs/ppo/WebRTCEmulatorEnv_{model_id}/best_model")
-    # path = os.path.expanduser(f"~/sb3_logs/ppo/WebRTCEmulatorEnv_41/WebRTCEmulatorEnv_1600000_steps.zip")
     print(f'Loading model from {path}')
     model = PPO.load(path, env, custom_objects={'policy_class': CustomPolicy})
     obs, _ = env.reset()

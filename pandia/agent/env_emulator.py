@@ -126,9 +126,12 @@ class WebRTCEmulatorEnv(WebRTCEnv):
         action = np.clip(action, limit.low, limit.high)
         self.context.reset_step_context()
         act = Action.from_array(action, self.action_keys)
+        action_capped = False
         if self.action_cap:
             # Avoid over-sending by limiting the bitrate to the network bandwidth
-            act.bitrate = min(act.bitrate, self.net_sample['bw'] * self.action_cap)
+            if act.bitrate > self.net_sample['bw'] * self.action_cap:
+                act.bitrate = self.net_sample['bw'] * self.action_cap
+                action_capped = True  
         self.actions.append(act)
         buf = bytearray(Action.shm_size() + 1)
         act.write(buf)
@@ -161,8 +164,10 @@ class WebRTCEmulatorEnv(WebRTCEnv):
         if self.print_step and time.time() - self.last_print_ts > self.print_period:
             self.last_print_ts = time.time()
             self.log(f'#{self.step_count}@{int((time.time() - self.start_ts))}s, '
+                    f'R.w.: {r:.02f}, '
                     f'bw.: {self.net_sample["bw"] / M:.02f} Mbps, '
-                    f'R.w.: {r:.02f}, Act.: {act}, Obs.: {self.observation}')
+                    f'Act.: {act}{"(C)" if action_capped else ""}, '
+                    f'Obs.: {self.observation}')
         self.step_count += 1
         if r <= -10:
             self.bad_reward_count += 1
