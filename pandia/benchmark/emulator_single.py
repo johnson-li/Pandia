@@ -13,34 +13,6 @@ from pandia.constants import K, M
 from pandia.context.frame_context import FrameContext
 
 
-def draw_diagrams(env: WebRTCEmulatorEnv, data, draw_ctx=False):
-    path = os.path.join(RESULTS_PATH, "benchmark_emulator")
-    setup_diagrams_path(path)
-    if draw_ctx:
-        generate_diagrams(path, env.context)
-
-    plt.close()
-    plt.plot([d[0] / M for d in data], [d[1] * 100 for d in data])
-    plt.xlabel('Bitrate (Mbps)')
-    plt.ylabel('Frame loss rate (%)')
-    plt.title(f'Bandwidth: {env.net_sample["bw"] / M:.02f} Mbps')
-    plt.savefig(os.path.join(path, f'bitrate_vs_frame_loss_rate.{FIG_EXTENSION}'), dpi=DPI)
-
-    plt.close()
-    plt.plot([d[0] / M for d in data], [d[2] * 1000 for d in data])
-    plt.xlabel('Bitrate (Mbps)')
-    plt.ylabel('G2G delay (ms)')
-    plt.title(f'Bandwidth: {env.net_sample["bw"] / M:.02f} Mbps')
-    plt.savefig(os.path.join(path, f'bitrate_vs_g2g_delay.{FIG_EXTENSION}'), dpi=DPI)
-
-    plt.close()
-    plt.plot([d[0] / M for d in data], [d[3] for d in data])
-    plt.xlabel('Bitrate (Mbps)')
-    plt.ylabel('Reward')
-    plt.title(f'Bandwidth: {env.net_sample["bw"] / M:.02f} Mbps')
-    plt.savefig(os.path.join(path, f'bitrate_vs_reward.{FIG_EXTENSION}'), dpi=DPI)
-
-
 def main():
     bw = 3 * M
     config = ENV_CONFIG
@@ -51,6 +23,7 @@ def main():
     config['gym_setting']['duration'] = 10000
     config['gym_setting']['skip_slow_start'] = 1
     config['gym_setting']['step_duration'] = .1
+    config['gym_setting']['action_cap'] = False
     # config['gym_setting']['logging_path'] = '/tmp/pandia.log'
     config['gym_setting']['sb3_logging_path'] = '/tmp/pandia.log'
     env = WebRTCEmulatorEnv(config=config, curriculum_level=None) # type: ignore
@@ -59,7 +32,8 @@ def main():
     delays = []
     actions = []
     pd = 50
-    br_list = [bw / 3] * pd + [bw / 3 * 2] * pd + [bw] * pd + [bw / 3 * 2] * pd + [bw / 3] * pd 
+    # br_list = [bw / 3] * pd + [bw / 3 * 2] * pd + [bw] * pd + [bw / 3 * 2] * pd + [bw / 3] * pd 
+    br_list = [2 * M] * 20 + [5 * M] * 2 + [2 * M] * 30
     try:
         env.reset()
         for br in br_list:
@@ -86,11 +60,13 @@ def main():
 
     plt.close()
     fig, ax1 = plt.subplots()
+    fig.set_size_inches(4, 1.5)
     color = 'r'
     ax1.plot(np.arange(len(actions)), actions / M, color)
-    ax1.set_ylabel('Action Bitrate (Mbps)')
+    ax1.set_ylabel('Action Bitrate\n(Mbps)')
     ax1.set_xlabel('Step')
     ax1.spines['left'].set_color(color)
+    ax1.set_ylim(0, 10)
     ax1.yaxis.label.set_color(color)
     ax1.tick_params(axis='y', colors=color)
     ax2 = ax1.twinx()
@@ -98,10 +74,11 @@ def main():
     ax2.plot(np.arange(len(rewards)), rewards, color)
     ax2.set_ylabel('Reward')
     ax2.spines['right'].set_color(color)
+    ax2.set_ylim(-20, 12)
     ax2.yaxis.label.set_color(color)
     ax2.tick_params(axis='y', colors=color)
-    plt.title(f'Bandwidth: {env.net_sample["bw"] / M:.02f} Mbps')
-    plt.tight_layout()
+    # plt.title(f'Bandwidth: {env.net_sample["bw"] / M:.02f} Mbps')
+    plt.tight_layout(pad=.1)
     plt.savefig(os.path.join(path, f'bitrate_vs_reward.{FIG_EXTENSION}'), dpi=DPI)
 
     plt.close()

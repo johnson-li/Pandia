@@ -48,7 +48,7 @@ class WebRTCEnv(gymnasium.Env):
         self.actions = []
         # ENV state
         self.termination_ts = 0
-        self.action_keys = list(sorted(ENV_CONFIG['action_keys']))
+        self.action_keys = list(sorted(config['action_keys']))
         self.action_space = Action(self.action_keys, boundary=config['boundary']).action_space()
         self.action_limit = config.get('action_limit', {})
         print(f'action limit: {self.action_limit}')

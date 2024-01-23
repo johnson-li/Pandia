@@ -14,53 +14,45 @@ from pandia.constants import M
 from pandia.train.train_sb3_simple_simulator import CustomPolicy
 
 
-def main(model_id=None, bw=7 * M):
-    if model_id is None:
-        log_dir = os.path.expanduser(f'~/sb3_logs/ppo')
-        models = [int(d[18:]) for d in os.listdir(log_dir) if d.startswith('WebRTCEmulatorEnv_')]
-        model_id = max(models)
+def main(bw=7 * M):
     config = ENV_CONFIG
     deep_update(config, CURRICULUM_LEVELS[2])
     config['network_setting']['bandwidth'] = bw
     config['network_setting']['delay'] = .008
     config['gym_setting']['print_step'] = True
-    config['gym_setting']['step_duration'] = .02 
     config['gym_setting']['action_cap'] = False
     config['gym_setting']['print_period'] = 0
-    config['gym_setting']['duration'] = 10
+    config['gym_setting']['duration'] = 1000
     config['gym_setting']['skip_slow_start'] = 0
+    config['action_keys'] = ['fake']
     env = WebRTCEmulatorEnv(config=config, curriculum_level=None) # type: ignore
-    path = os.path.expanduser(f"~/sb3_logs/ppo/WebRTCEmulatorEnv_{model_id}/best_model")
-    print(f'Loading model from {path}')
-    model = PPO.load(path, env, custom_objects={'policy_class': CustomPolicy})
     obs, _ = env.reset()
     print(f'Eval with bw: {env.net_sample["bw"] / M:.02f} Mbps')
     rewards = []
     delays = []
-    actions = []
-    while True:
-        action, _ = model.predict(obs, deterministic=True)
+    bitrates = []
+    for i in range(100):
+        action = env.action_space.sample() 
         obs, reward, terminated, truncated, info = env.step(action)
         obs_obj = env.observation
-        act_obj = Action.from_array(action, env.action_keys)
-        actions.append(act_obj.bitrate / M)
-        delays.append(obs_obj.get_data(obs_obj.data[0][0], 'frame_decoded_delay', True))
+        delays.append(float(obs_obj.get_data(obs_obj.data[0][0], 'frame_decoded_delay', True)))
+        bitrates.append(float(obs_obj.get_data(obs_obj.data[0][0], 'bitrate', True)))
         rewards.append(reward)
         if terminated or truncated:
             break
     bw = env.net_sample['bw']
-    print(f'bw: {bw / M:.02f}Mbps, bitrate: {np.mean(actions):.02f}Mbps, '
+    print(f'bw: {bw / M:.02f}Mbps, bitrate: {np.mean(bitrates):.02f}Mbps, '
             f'delay: {np.mean(delays) * 1000:.02f}ms, reward: {np.mean(rewards):.02f}')
     env.close()
 
     # Plot evaluation results
-    output_dir = os.path.join(RESULTS_PATH, 'eval_sb3_emulator')
+    output_dir = os.path.join(RESULTS_PATH, 'eval_gcc')
     os.makedirs(output_dir, exist_ok=True)
 
-    x = np.arange(len(actions)) 
+    x = np.arange(len(bitrates)) 
     plt.close()
     fig, ax1 = plt.subplots()
-    ax1.plot(x, actions, '.r')
+    ax1.plot(x, bitrates, '.r')
     ax1.tick_params(axis='y', labelcolor='r')
     ax1.set_xlabel('Step')
     ax1.set_ylabel('Bitrate action (Mbps)')
@@ -73,7 +65,7 @@ def main(model_id=None, bw=7 * M):
 
     plt.close()
     fig, ax1 = plt.subplots()
-    ax1.plot(x, actions, '.r')
+    ax1.plot(x, bitrates, '.r')
     ax1.tick_params(axis='y', labelcolor='r')
     ax1.set_xlabel('Step')
     ax1.set_ylabel('Bitrate action (Mbps)')
@@ -89,7 +81,6 @@ def main(model_id=None, bw=7 * M):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-m', '--model_id', type=int, default=None, help='model id')
     parser.add_argument('-b', '--bandwidth', type=float, default=7, help='bandwidth in mbps')
     args = parser.parse_args()
-    main(model_id=args.model_id, bw=args.bandwidth * M)
+    main(bw=args.bandwidth * M)

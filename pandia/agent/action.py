@@ -24,7 +24,7 @@ class Action():
 
     def __str__(self) -> str:
         if self.fake:
-            return 'Fake, '
+            return 'Fake'
         res = ''
         if 'resolution' in self.action_keys:
             res += f'Res.: {self.resolution}p, '
@@ -76,7 +76,8 @@ class Action():
         keys = list(sorted(keys))
         action = Action(keys, boundary=boundary)
         for i, k in enumerate(keys):
-            setattr(action, k, dnml(k, array[i], boundary[k], log=log))
+            if k != 'fake':
+                setattr(action, k, dnml(k, array[i], boundary[k], log=log))
         parameters = ['bitrate', 'pacing_rate', 'fps', 'fec_rate_key', 
                       'fec_rate_delta', 'padding_rate', 'resolution']
         for p in parameters:
