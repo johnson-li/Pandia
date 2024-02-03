@@ -1,5 +1,6 @@
 Pandia: Open-source Framework for DRL-based Real-time Video Streaming Control
 ===
+**NOTE: Please switch to the [mmsys24 branch](https://github.com/johnson-li/Pandia/tree/mmsys24) to check the submission code.**
 
 Pandia uses DRL to improve the video streaming performance of WebRTC. This repo implements the DRL model and the training/evaluation framework. The customized WebRTC is implemented in [another repo](https://github.com/johnson-li/webrtc/tree/pandia). This repo invokes WebRTC via containers. So, there is no need to compile WebRTC by yourself for ordinary use.
 
