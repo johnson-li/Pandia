@@ -192,7 +192,7 @@ def test_single():
     config['gym_setting']['duration'] = 1000
     config['gym_setting']['step_duration'] = .1
     config['gym_setting']['logging_path'] = '/tmp/pandia.log'
-    config['gym_setting']['skip_slow_start'] = 1
+    config['gym_setting']['skip_slow_start'] = 0
     env: WebRTCEmulatorEnv = gymnasium.make("WebRTCEmulatorEnv", config=config, curriculum_level=None) # type: ignore
     action = Action(config['action_keys'])
     actions = []

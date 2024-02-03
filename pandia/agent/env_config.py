@@ -83,21 +83,36 @@ GYM_SETTING = {
 }
 
 ENV_CONFIG = {
-    'action_keys' : list(sorted(['bitrate'])),
+    'action_keys' : list(sorted(['bitrate',
+                                #  'pacing_rate',
+                                #  'resolution',
+                                #  'fps',
+                                #  'padding_rate',
+                                #  'fec_rate_key',
+                                #  'fec_rate_delta',
+                                 ])),
     'observation_keys' : list(sorted([
         # 'frame_encoding_delay',
-        # 'frame_egress_delay', 'frame_recv_delay',
+        # 'frame_egress_delay', 
+        # 'frame_recv_delay',
         # 'frame_decoding_delay',
         'frame_decoded_delay',
-        # 'frame_fps', 'frame_fps_decoded', 'frame_qp',
-        # 'frame_height', 'frame_encoded_height', 'frame_size',
+        # 'frame_fps', 
+        # 'frame_fps_decoded', 
+        # 'frame_qp',
+        # 'frame_height', 
+        # 'frame_encoded_height', 
+        # 'frame_size',
         'frame_bitrate',
         # 'frame_key_count',
         'bitrate',
-        # 'pkt_egress_rate', 'pkt_ack_rate',
-        'pkt_trans_delay', 'pkt_delay_interval',
+        # 'pkt_egress_rate', 
+        # 'pkt_ack_rate',
+        'pkt_trans_delay', 
+        'pkt_delay_interval',
         'pkt_loss_rate',
-        # 'pacing_rate', 'action_gap',
+        # 'pacing_rate', 
+        # 'action_gap',
 
         # Internal variable of the network.
         # Should only be used in the value function.
@@ -118,7 +133,7 @@ ENV_CONFIG = {
         'fps': 0,
         'fec_rate_key': 256,
         'fec_rate_delta': 256,
-        'padding_rate': 0,  # TODO: 0 is still valid
+        'padding_rate': 0,  # TODO: 0 is still a valid value
         'resolution': 0,
     },
     'boundary': BOUNDARY,

@@ -37,8 +37,7 @@ Pandia
 |--results  # The default place of the output diagrams
 ```
 
-
-Environment Setup
+Running Environment Setup
 ===
 The code is verified on Ubuntu 22.04.3 LTS and Python 3.8.17. It is recommended to use conda to manage the Python envs. Use the following command to install essential packets.
 
@@ -46,7 +45,9 @@ The code is verified on Ubuntu 22.04.3 LTS and Python 3.8.17. It is recommended 
 pip install -r requirements.txt
 ```
 
-
+Containers
+===
+The containers are configured via environment variables, which are set during `docker run`. Please check [CONTAINER.md](CONTAINER.md) for the configuration options.
 
 User Case 1: Emulator
 ===
