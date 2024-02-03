@@ -49,6 +49,7 @@ class WebRTCEmulatorEnv(WebRTCEnv):
               f'--runtime=nvidia --gpus all '\
               f'-v /tmp:/tmp '\
               f'--env PRINT_STEP=True -e SENDER_LOG=/tmp/sender.log --env BANDWIDTH=1000-3000 '\
+              f'--env NVENC=1 --env NVDEC=1 '\
               f'--env OBS_SOCKET_PATH={self.obs_socket_path} '\
               f'--env LOGGING_PATH={self.logging_path} '\
               f'--env SB3_LOGGING_PATH={self.sb3_logging_path} '\

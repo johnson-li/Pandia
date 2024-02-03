@@ -16,7 +16,7 @@ from stable_baselines3.common.vec_env import VecMonitor
 
 def main():
     model_pre = None
-    model_pre = os.path.expanduser(f'~/sb3_logs/ppo/WebRTCEmulatorEnv_80/best_model')
+    # model_pre = os.path.expanduser(f'~/sb3_logs/ppo/WebRTCEmulatorEnv_80/best_model')
     # model_pre = os.path.expanduser('~/sb3_logs/ppo/WebRTCSimpleSimulatorEnv_2/best_model')
     curriculum_level = 2
     algo = 'ppo'
@@ -59,8 +59,8 @@ def main():
     else:
         model = PandiaPPO(policy=CustomPolicy, env=envs, verbose=1, gamma=.8, n_steps=100,
                     tensorboard_log=os.path.expanduser("~/sb3_tensorboard/WebRTCEmulatorEnv/"),
-                    device="auto", batch_size=24, n_epochs=4, learning_rate=linear_schedule(0.0003))
-    model.learn(total_timesteps=2_000_000, 
+                    device="auto", batch_size=24, n_epochs=4, learning_rate=linear_schedule(0.00003))
+    model.learn(total_timesteps=2_000_000,
                 callback=[checkpoint_callback, startup_callback,
                           best_model_callback])
 

@@ -1,11 +1,4 @@
 services:
-  stun:
-    image: ich777/stun-turn-server
-    ports:
-      - "3478:3478"
-      - "3478:3478/udp"
-      - "5349:5349"
-      - "5349:5349/udp"
   sender_base:
     build: containers/sender_base
     image: johnson163/pandia_sender_base
@@ -14,58 +7,26 @@ services:
     image: johnson163/pandia_emulator
     depends_on:
       - sender_base
-    cap_add:
-      - NET_ADMIN
     environment:
       - NVIDIA_DRIVER_CAPABILITIES=all
     restart: always
-  receiver1: &receiver1
+  receiver:
     build: containers/receiver
     image: johnson163/pandia_receiver
-    hostname: receiver1
-    depends_on:
-      - stun
-    cap_add:
-      - NET_ADMIN
     environment:
       - NVIDIA_DRIVER_CAPABILITIES=all
     restart: always
     expose:
       - "9998-9999:9998-9999"
       - "1-65535/udp"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-  sender1: &sender1
+  sender:
     build: containers/sender
     image: johnson163/pandia_sender
-    hostname: sender1
-    volumes:
-      - /tmp/pandia:/tmp
     depends_on:
-      - stun
-      - receiver1
+      - receiver
       - sender_base
-    cap_add:
-      - NET_ADMIN
     environment:
       - NVIDIA_DRIVER_CAPABILITIES=all
-      - RL_SERVER=195.148.124.151
-      - PRINT_STEP=True
-      # - PRINT_SENDER_LOG=True
-      - SENDER_LOG=/tmp/sender.log
-      - BANDWIDTH=1000-3000
     restart: always
     expose:
       - "1-65535/udp"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
