@@ -49,7 +49,8 @@ class WebRTCEmulatorEnv(WebRTCEnv):
               f'--runtime=nvidia --gpus all '\
               f'-v /tmp:/tmp '\
               f'--env PRINT_STEP=True -e SENDER_LOG=/tmp/sender.log --env BANDWIDTH=1000-3000 '\
-              f'--env NVENC=1 --env NVDEC=1 '\
+              f'{"--env NVENC=1" if self.enable_nvenc else ""} '\
+              f'{"--env NVDEC=1" if self.enable_nvdec else ""} '\
               f'--env OBS_SOCKET_PATH={self.obs_socket_path} '\
               f'--env LOGGING_PATH={self.logging_path} '\
               f'--env SB3_LOGGING_PATH={self.sb3_logging_path} '\
@@ -193,14 +194,17 @@ def test_single():
     config['gym_setting']['step_duration'] = .1
     config['gym_setting']['logging_path'] = '/tmp/pandia.log'
     config['gym_setting']['skip_slow_start'] = 0
+    config['gym_setting']['enable_nvenc'] = True
+    config['gym_setting']['enable_nvdec'] = True
     env: WebRTCEmulatorEnv = gymnasium.make("WebRTCEmulatorEnv", config=config, curriculum_level=None) # type: ignore
     action = Action(config['action_keys'])
     actions = []
     rewards = []
     try:
         env.reset()
-        pd = 50
-        bitrates = [1 * M] * pd + [2 * M] * pd + [3 * M] * pd + [2 * M] * pd + [1 * M] * pd 
+        pd = 100
+        # bitrates = [1 * M] * pd + [2 * M] * pd + [3 * M] * pd + [2 * M] * pd + [1 * M] * pd 
+        bitrates = [1 * M] * pd
         for bitrate in bitrates:
             action.bitrate = bitrate 
             actions.append(action.bitrate / M)

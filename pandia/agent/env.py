@@ -20,6 +20,8 @@ class WebRTCEnv(gymnasium.Env):
         self.startup_delay = config['gym_setting']['startup_delay']
         self.skip_slow_start = config['gym_setting']['skip_slow_start']
         self.action_cap = config['gym_setting']['action_cap']
+        self.enable_nvdec = config['gym_setting']['enable_nvdec']
+        self.enable_nvenc = config['gym_setting']['enable_nvenc']
         # Source settings
         self.resolution = config['video_source']['resolution']
         self.fps = config['video_source']['fps']
