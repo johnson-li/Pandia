@@ -1,5 +1,6 @@
 Pandia: Deep Reinforcement Learning for Real-time Video Streaming
 ===
+**NOTE: Please switch to the [mmsys24 branch](https://github.com/johnson-li/Pandia/tree/mmsys24) to check the submission code.**
 
 Pandia uses DRL to improve the video streaming performance of WebRTC. This repo implements the DRL model and the training/evaluation framework. The customized WebRTC is implemented in [another repo](https://github.com/johnson-li/webrtc/tree/pandia).
 
